@@ -74,8 +74,102 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum * > SHA256SUMS
+        run: cd dist && sha256sum -- * > SHA256SUMS
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+
+  # The package-manager jobs skip themselves until their secret exists, so a release never fails on them.
+
+  homebrew:
+    # brew install kimvais/tap/vjuu: rewrites Formula/vjuu.rb in github.com/kimvais/homebrew-tap.
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - id: check
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: if [ -n "$TOKEN" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::HOMEBREW_TAP_TOKEN not set; skipping Homebrew"; fi
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v5
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: kimvais/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - if: steps.check.outputs.ok == 'true'
+        name: Update the formula
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          arm=$(sha256sum "dist/vjuu-${GITHUB_REF_NAME}-aarch64-apple-darwin.tar.gz" | cut -d' ' -f1)
+          intel=$(sha256sum "dist/vjuu-${GITHUB_REF_NAME}-x86_64-apple-darwin.tar.gz" | cut -d' ' -f1)
+          mkdir -p tap/Formula
+          sed -e "s/@VERSION@/${version}/g" -e "s/@SHA_ARM@/${arm}/" -e "s/@SHA_INTEL@/${intel}/" packaging/homebrew/vjuu.rb > tap/Formula/vjuu.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/vjuu.rb
+          git commit -m "vjuu ${version}"
+          git push
+
+  apt:
+    # apt install vjuu: a signed apt repository on this repo's GitHub Pages (Settings > Pages > Source: GitHub Actions).
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - id: check
+        env:
+          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::APT_GPG_PRIVATE_KEY not set; skipping apt"; fi
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v5
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - if: steps.check.outputs.ok == 'true'
+        name: Build and sign the repository
+        env:
+          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: packaging/apt/build-repo.sh dist site/apt
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/deploy-pages@v4
+
+  winget:
+    # winget install vjuu: opens a pull request to microsoft/winget-pkgs. Works once the first version has been
+    # merged there (see packaging/winget/README.md).
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - id: check
+        env:
+          TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: if [ -n "$TOKEN" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::WINGET_TOKEN not set; skipping winget"; fi
+      - if: steps.check.outputs.ok == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      - if: steps.check.outputs.ok == 'true'
+        name: Submit the update
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          cargo install --locked komac
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          komac update kimvais.vjuu --version "${GITHUB_REF_NAME#v}" --submit \
+            --urls "${base}/vjuu-${GITHUB_REF_NAME}-x86_64-pc-windows-msvc.zip" "${base}/vjuu-${GITHUB_REF_NAME}-aarch64-pc-windows-msvc.zip"
