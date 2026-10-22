@@ -111,8 +111,10 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           arm=$(sha256sum "dist/vjuu-${GITHUB_REF_NAME}-aarch64-apple-darwin.tar.gz" | cut -d' ' -f1)
           intel=$(sha256sum "dist/vjuu-${GITHUB_REF_NAME}-x86_64-apple-darwin.tar.gz" | cut -d' ' -f1)
+          linux_arm=$(sha256sum "dist/vjuu-${GITHUB_REF_NAME}-aarch64-unknown-linux-gnu.tar.gz" | cut -d' ' -f1)
+          linux_intel=$(sha256sum "dist/vjuu-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu.tar.gz" | cut -d' ' -f1)
           mkdir -p tap/Formula
-          sed -e "s/@VERSION@/${version}/g" -e "s/@SHA_ARM@/${arm}/" -e "s/@SHA_INTEL@/${intel}/" packaging/homebrew/vjuu.rb > tap/Formula/vjuu.rb
+          sed -e "s/@VERSION@/${version}/g" -e "s/@SHA_ARM@/${arm}/" -e "s/@SHA_INTEL@/${intel}/" -e "s/@SHA_LINUX_ARM@/${linux_arm}/" -e "s/@SHA_LINUX_INTEL@/${linux_intel}/" packaging/homebrew/vjuu.rb > tap/Formula/vjuu.rb
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
