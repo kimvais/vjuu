@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <title>revu</title>
+<!-- Fetch fonts alongside the scripts; otherwise first paint waits for them after layout. -->
+<link rel="preload" href="vendor/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="vendor/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="vendor/diff2html.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -10,6 +13,12 @@
 <header>
   <span id="name"></span>
   <span id="count"></span>
+  <select id="theme" title="Theme (t)">
+    <option value="auto">Auto</option>
+    <option value="light">Light</option>
+    <option value="monokai">Monokai</option>
+    <option value="graphite">Graphite</option>
+  </select>
   <button id="view" hidden title="Toggle unified / side-by-side (v)">Side-by-side</button>
   <button id="done" title="Ctrl+Shift+Enter">Done</button>
 </header>

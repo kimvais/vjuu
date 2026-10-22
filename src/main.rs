@@ -23,7 +23,7 @@ use review::Review;
 
 const USAGE: &str = "usage: revu <file.md|file.diff> | revu - | revu --git [git diff args] | revu last | revu stop";
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
-const SPARE_DELAY: Duration = Duration::from_secs(2);
+const SPARE_DELAY: Duration = Duration::from_millis(500);
 const DETACHED_PROCESS: u32 = 0x8;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x200;
 
@@ -347,7 +347,8 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/app.js" => (Cow::Borrowed(include_bytes!("../ui/app.js")), "text/javascript"),
         "/style.css" => (Cow::Borrowed(include_bytes!("../ui/style.css")), "text/css"),
         "/vendor/markdown-it.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/markdown-it.min.js")), "text/javascript"),
-        "/vendor/diff2html-ui.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html-ui.min.js")), "text/javascript"),
+        "/vendor/diff2html-ui-base.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html-ui-base.min.js")), "text/javascript"),
+        "/vendor/highlight.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/highlight.min.js")), "text/javascript"),
         "/vendor/diff2html.min.css" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html.min.css")), "text/css"),
         "/vendor/inter.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/inter.woff2")), "font/woff2"),
         "/vendor/jetbrains-mono.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2"),

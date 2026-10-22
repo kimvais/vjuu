@@ -109,6 +109,26 @@ def test_markdown(page, url, work):
     assert loaded == ['"Inter"', '"JetBrains Mono"'] or loaded == ['Inter', 'JetBrains Mono'], loaded
 
 
+def test_highlighting_and_themes(page, url, work):
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD, 'autoclose': False})
+    # Fenced ```py block is highlighted; `print` is a built-in.
+    assert page.locator('pre code .hljs-built_in').inner_text() == 'print'
+    theme = lambda: page.evaluate('[document.documentElement.dataset.theme, localStorage.getItem("revu-theme")]')
+    assert theme() == ['light', 'auto']  # headless Edge reports a light OS
+    page.keyboard.press('t')
+    assert theme() == ['light', 'light']
+    page.keyboard.press('t')
+    assert theme() == ['monokai', 'monokai']
+    assert page.evaluate('getComputedStyle(document.body).backgroundColor') == 'rgb(39, 40, 34)'
+    page.select_option('#theme', 'graphite')
+    assert theme() == ['graphite', 'graphite']
+    # The choice survives into the next window.
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF, 'autoclose': False})
+    assert theme() == ['graphite', 'graphite']
+    page.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
+    page.evaluate('localStorage.removeItem("revu-theme")')
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
     _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n', 'autoclose': False})
     assert page.locator('#content img').count() == 0
@@ -122,7 +142,7 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_markdown_html_is_not_rendered):
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_markdown_html_is_not_rendered):
             page = browser.new_page()
             page.add_init_script(_STUB)
             page.on('pageerror', lambda e: errors.append(e))

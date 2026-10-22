@@ -15,32 +15,40 @@ const comments = new Map();
 const keyOf = (a) => `${a.file}\n${a.start}-${a.end}${a.old ? 'o' : ''}`;
 const post = (msg) => window.ipc.postMessage(JSON.stringify(msg));
 
+const scripts = new Map();
+
 function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.append(s);
-  });
+  if (!scripts.has(src)) {
+    scripts.set(src, new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.append(s);
+    }));
+  }
+  return scripts.get(src);
 }
+
+const RENDERERS = ['vendor/highlight.min.js', 'vendor/markdown-it.min.js', 'vendor/diff2html-ui-base.min.js'];
 
 /** Loads the document; a pre-warmed spare window gets 404 until revu hands it one and calls this again. */
 async function load() {
   if (doc) return;
   // Resident windows share one browser profile; never reuse an earlier document.
   const r = await fetch('doc.json', { cache: 'no-store' });
-  if (!r.ok) return;
+  if (!r.ok) {
+    // Spare window: compile every renderer now so the first real document doesn't wait for it.
+    RENDERERS.forEach(loadScript);
+    return;
+  }
   const d = await r.json();
   if (doc) return;
   doc = d;
   $('#name').textContent = doc.name;
-  if (doc.kind === 'diff') {
-    $('#view').hidden = false;
-    await loadScript('vendor/diff2html-ui.min.js');
-  } else {
-    await loadScript('vendor/markdown-it.min.js');
-  }
+  $('#view').hidden = doc.kind !== 'diff';
+  const renderer = doc.kind === 'diff' ? 'vendor/diff2html-ui-base.min.js' : 'vendor/markdown-it.min.js';
+  await Promise.all([loadScript('vendor/highlight.min.js'), loadScript(renderer)]);
   render();
   if (doc.autoclose) requestAnimationFrame(() => post({ type: 'rendered' }));
 }
@@ -59,7 +67,10 @@ function anchor(el, a) {
 
 function renderMarkdown() {
   // html off: the document is agent output and must not run script next to window.ipc.
-  const md = window.markdownit({ linkify: true });
+  // Only fences with a known language; auto-detection is slow and often wrong.
+  const highlight = (code, lang) =>
+    lang && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value : '';
+  const md = window.markdownit({ linkify: true, highlight });
   const lines = doc.text.split(/\r?\n/);
   const tokens = md.parse(doc.text, {});
   for (const t of tokens) {
@@ -79,10 +90,12 @@ function renderDiff() {
     outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
     drawFileList: false,
     matching: 'lines',
-    highlight: true,
+    // draw() would highlight synchronously; it is done after paint below.
+    highlight: false,
     fileContentToggle: false,
-    colorScheme: 'auto',
-  });
+    // Themes recolour the light scheme through its CSS variables.
+    colorScheme: 'light',
+  }, hljs);
   ui.draw();
   // Highlighting a large diff takes hundreds of ms; paint first, colour after.
   requestAnimationFrame(() => setTimeout(() => ui.highlightCode()));
@@ -279,6 +292,9 @@ document.addEventListener('keydown', (e) => {
     startComment(focused);
   } else if (e.key === 'v' && doc.kind === 'diff') {
     toggleView();
+  } else if (e.key === 't') {
+    const names = [...$('#theme').options].map((o) => o.value);
+    setTheme(names[(names.indexOf(theme) + 1) % names.length]);
   } else {
     return;
   }
@@ -291,6 +307,21 @@ function toggleView() {
   render();
 }
 
+const osDark = matchMedia('(prefers-color-scheme: dark)');
+let theme = 'auto';
+
+function setTheme(name) {
+  theme = name;
+  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'monokai' : 'light') : name;
+  $('#theme').value = name;
+  // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
+  try { localStorage.setItem('revu-theme', name); } catch {}
+}
+
+try { theme = localStorage.getItem('revu-theme') ?? 'auto'; } catch {}
+setTheme(theme);
+osDark.addEventListener('change', () => { if (theme === 'auto') setTheme('auto'); });
+$('#theme').onchange = (e) => { setTheme(e.target.value); e.target.blur(); };
 $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));

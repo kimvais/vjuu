@@ -22,14 +22,14 @@ revu stop                    # stop the resident instance (before upgrading the 
 
 The first `revu` opens its window itself (~400 ms, mostly WebView2 starting) and starts a hidden
 resident instance that keeps a pre-warmed window. Later calls hand the document to it over a named
-pipe and the window appears in ~40 ms. The resident instance costs roughly 300 MB working set across
+pipe and the window appears almost at once. The spare window preloads fonts and renderers. The resident instance costs roughly 300 MB working set across
 its WebView2 processes; `revu stop` ends it. `REVU_COLD=1` skips it.
 
 | Case | First paint |
 |------|-------------|
-| Markdown, cold | ~400 ms |
-| Markdown, resident | 15-45 ms |
-| 6,600-line diff, resident | ~270 ms (diff2html rendering; highlighting runs after paint) |
+| Markdown or diff, cold | ~400-450 ms |
+| Markdown, resident | ~15 ms |
+| 6,600-line diff, resident | ~100-130 ms (highlighting runs after paint) |
 
 ## Keys
 
@@ -40,9 +40,13 @@ its WebView2 processes; `revu stop` ends it. `REVU_COLD=1` skips it.
 | `c` or `Enter` | Comment on the focused line or block |
 | `Ctrl+Enter` / `Esc` | Save / cancel the comment being written |
 | `v` | Toggle unified / side-by-side diff |
+| `t` | Next theme: Auto, Light, Monokai, Graphite |
 | `Ctrl+Shift+Enter` | Done |
 
 You can also click the `+` next to a line or block, or click a diff line number.
+
+Themes: **Light** (GitHub), **Monokai** (its own warm dark grey), **Graphite** (Monokai code colours on
+neutral grey). **Auto** picks Light or Monokai from the Windows setting. The choice is remembered.
 
 ## Output
 
@@ -79,5 +83,5 @@ asking you to open files.
 - `REVU_AUTOCLOSE=1 revu <file>` exits as soon as the page has rendered and prints the time to
   stderr, for startup measurements.
 
-UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56) and embedded in the
-exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to revu.
+UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56 base bundle, highlight.js
+11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to revu.
