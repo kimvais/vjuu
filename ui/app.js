@@ -17,8 +17,9 @@ let filesHidden = false;
 /** key -> {doc, file, start, end, old, quote, text, editing}. Survives re-renders. */
 const comments = new Map();
 
-// The doc index keeps two documents with the same name apart.
-const keyOf = (a) => `${a.doc}\n${a.file}\n${a.start}-${a.end}${a.old ? 'o' : ''}`;
+// The doc index keeps two documents with the same name apart, and part (the file's position in a diff) the same
+// file shown twice in one diff, as in `git log -p`.
+const keyOf = (a) => `${a.doc}\n${a.part ?? ''}\n${a.file}\n${a.start}-${a.end}${a.old ? 'o' : ''}`;
 const post = (msg) => window.ipc.postMessage(JSON.stringify(msg));
 
 const scripts = new Map();
@@ -203,7 +204,7 @@ function renderDiff(section, doc, i) {
   ui.draw();
   // Highlighting a large diff takes hundreds of ms; paint first, colour after.
   requestAnimationFrame(() => setTimeout(() => ui.highlightCode()));
-  for (const wrapper of section.querySelectorAll('.d2h-file-wrapper')) {
+  for (const [part, wrapper] of section.querySelectorAll('.d2h-file-wrapper').entries()) {
     const file = wrapper.querySelector('.d2h-file-name').textContent.split(' → ').pop().trim();
     // Side-by-side shows added lines on the right only and deleted ones on the left only.
     const count = (cls) => wrapper.querySelectorAll(`.d2h-code-linenumber.${cls}, .d2h-code-side-linenumber.${cls}`).length;
@@ -219,7 +220,7 @@ function renderDiff(section, doc, i) {
         const n1 = num.querySelector('.line-num1')?.textContent.trim();
         if (!n1 && !n2) continue;
         const line = Number(n2 || n1);
-        anchor(tr, { doc: i, file, start: line, end: line, old: !n2, quote: lineText(tr) });
+        anchor(tr, { doc: i, part, file, start: line, end: line, old: !n2, quote: lineText(tr) });
       }
       continue;
     }
@@ -229,7 +230,7 @@ function renderDiff(section, doc, i) {
         const n = tr.querySelector('.d2h-code-side-linenumber')?.textContent.trim();
         // Left side: only deleted lines; unchanged lines are commented on the right.
         if (!n || (sideIdx === 0 && !tr.cells[1].classList.contains('d2h-del'))) return;
-        anchor(tr, { doc: i, file, start: Number(n), end: Number(n), old: sideIdx === 0, quote: lineText(tr) });
+        anchor(tr, { doc: i, part, file, start: Number(n), end: Number(n), old: sideIdx === 0, quote: lineText(tr) });
       });
     });
   }
@@ -365,18 +366,25 @@ function commentBox(key, c) {
     return box;
   }
   const ta = document.createElement('textarea');
-  ta.value = c.text;
+  ta.value = c.draft ?? c.text;
   ta.rows = 3;
   ta.placeholder = `Comment on ${c.file}:${c.start}${c.end !== c.start ? `-${c.end}` : ''} (Ctrl+Enter to save, Esc to cancel)`;
+  // Text still being typed counts too: Done or closing the window must not drop it.
+  ta.oninput = () => {
+    c.draft = ta.value;
+    post({ type: 'state', review: review() });
+  };
   const save = () => {
     c.text = ta.value.trim();
     c.editing = false;
+    delete c.draft;
     if (!c.text) comments.delete(key);
     changed();
   };
   const cancel = () => {
+    delete c.draft;
     if (!c.text) comments.delete(key); else c.editing = false;
-    renderComments();
+    changed();
   };
   ta.onkeydown = (e) => {
     if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) { e.preventDefault(); save(); }
@@ -392,8 +400,10 @@ function commentBox(key, c) {
   return box;
 }
 
+/** Returns the review as sent to vjuu: saved comments, plus what is typed in any comment still open. */
 function review() {
-  return { comments: [...comments.values()].filter((c) => c.text.trim()), overall: overall.value };
+  const sent = [...comments.values()].map(({ draft, ...c }) => ({ ...c, text: (c.editing ? draft ?? c.text : c.text).trim() }));
+  return { comments: sent.filter((c) => c.text), overall: overall.value };
 }
 
 function changed() {
@@ -430,7 +440,7 @@ function selectionAnchor() {
   const head = anchors.get(first.dataset.key).a;
   const span = all.slice(all.indexOf(first), all.indexOf(last) + 1)
     .map((el) => ({ el, a: anchors.get(el.dataset.key).a }))
-    .filter((x) => x.a.doc === head.doc && x.a.file === head.file);
+    .filter((x) => x.a.doc === head.doc && x.a.part === head.part && x.a.file === head.file);
   if (!span.length) return null;
   const doc = req.docs[head.doc];
   if (doc.kind !== 'diff') {

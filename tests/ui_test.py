@@ -3,6 +3,7 @@
 Run: uv run --no-project --with playwright python tests/ui_test.py
 """
 import json
+import sys
 import shutil
 import tempfile
 import threading
@@ -49,6 +50,7 @@ def _review(page):
     review = states[-1]['review']
     for c in review['comments']:
         del c['editing'], c['doc'], c['anchorKey']
+        c.pop('part', None)
     return review
 
 
@@ -221,7 +223,7 @@ def test_clicks_that_do_not_comment(page, url, work):
 
 def test_keyboard_navigation(page, url, work):
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD}, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
-    focused = lambda: page.evaluate("document.querySelector('.focused')?.dataset.key.split('\\n').slice(1).join(' ')")
+    focused = lambda: page.evaluate("document.querySelector('.focused')?.dataset.key.split('\\n').slice(2).join(' ')")
     page.keyboard.press('ArrowDown')  # nothing focused yet: the first line on screen
     assert focused() == 'a.md 1-1', focused()
     page.keyboard.press('ArrowDown')
@@ -243,6 +245,34 @@ def test_keyboard_navigation(page, url, work):
     assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done'}
 
 
+def test_unsaved_comment_is_kept(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    page.get_by_text('First paragraph').click()
+    page.keyboard.type('half-written')
+    # Done (or closing the window) while still typing must not drop the text.
+    page.keyboard.press('Control+Shift+Enter')
+    assert [c['text'] for c in _review(page)['comments']] == ['half-written']
+    # Editing a saved comment and finishing without saving sends the edited text.
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    page.get_by_text('First paragraph').click()
+    _comment(page, 'first')
+    page.locator('.comment .text', has_text='first').click()
+    page.keyboard.press('Control+a')
+    page.keyboard.type('second')
+    assert [c['text'] for c in _review(page)['comments']] == ['second']
+
+
+def test_same_file_twice_in_one_diff(page, url, work):
+    # `git log -p` shows the same file once per commit.
+    twice = _DIFF + _DIFF.replace('def new', 'def newer')
+    _open(page, url, work, {'name': 'git log -p', 'kind': 'diff', 'text': twice})
+    for n in (0, 1):
+        page.locator('.d2h-file-wrapper').nth(n).locator('tr', has=page.locator('.d2h-ins')).first.click()
+        _comment(page, f'commit {n}')
+    assert sorted(c['text'] for c in _review(page)['comments']) == ['commit 0', 'commit 1']
+    assert page.locator('#orphans').count() == 0
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
     _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n'})
     assert page.locator('#content img').count() == 0
@@ -256,8 +286,12 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation,
+        only = sys.argv[1:]
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
+                     test_same_file_twice_in_one_diff,
                      test_markdown_html_is_not_rendered):
+            if only and test.__name__ not in only:
+                continue
             page = browser.new_page()
             page.add_init_script(_STUB)
             page.on('pageerror', lambda e: errors.append(e))
