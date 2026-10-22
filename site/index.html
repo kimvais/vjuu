@@ -136,6 +136,8 @@
     }
     .hero h1 span { display: block; font-weight: 300; color: var(--ink-dim); }
     .hero p { max-width: 34em; margin: 0 0 40px; text-wrap: pretty; }
+    .hero .say { margin: 0 0 20px; color: var(--ink-dim); font-size: 16px; }
+    .hero .say b { color: var(--ink); font-weight: 400; }
 
     .button {
       display: inline-block;
@@ -232,6 +234,8 @@
     <section class="hero">
       <div class="column">
         <p class="eyebrow">Review for agent handoffs</p>
+        <!-- Finnish: "rallienglanti", English as Finnish rally drivers speak it. -->
+        <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Your agent asks for a review. <span>You comment on the lines.</span></h1>
         <p>When an agent would say "open this and review it", it runs <code>vjuu</code> instead. A window opens with the markdown, diff or source. You comment on lines, click Done, and your comments go back to the agent as markdown, anchored to <code>file:line</code>.</p>
         <a class="button" href="#install">Install</a>
