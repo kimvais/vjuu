@@ -41,3 +41,7 @@ jobs:
         with:
           path: site
       - uses: actions/deploy-pages@v4
+        env:
+          # deploy-pages names the deployment after GITHUB_SHA, and Pages keeps the first deployment of a name.
+          # A release tags a commit main has already deployed, so its new apt packages were never served.
+          GITHUB_SHA: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
