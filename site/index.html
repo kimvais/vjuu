@@ -30,6 +30,11 @@
       --ink-body: rgba(255, 255, 255, 0.82);
       --ink-dim: rgba(255, 255, 255, 0.64);
       --line: rgba(255, 255, 255, 0.18);
+      /* Shell colours from vjuu's Graphite theme (Monokai). */
+      --tok-cmd: #a6e22e;
+      --tok-flag: #fd971f;
+      --tok-str: #e6db74;
+      --tok-op: #f92672;
       /* vjuu's brand colour (Monokai green), as in the app's wordmark and Done button. */
       --brand: #a6e22e;
 
@@ -208,6 +213,10 @@
     .install pre { background: var(--black); }
     /* minmax(0, ...): long commands scroll inside their box instead of widening the page. */
     .platforms { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin: 0; }
+    .tok-cmd { color: var(--tok-cmd); }
+    .tok-flag { color: var(--tok-flag); }
+    .tok-str { color: var(--tok-str); }
+    .tok-op { color: var(--tok-op); }
     .copyable { position: relative; }
     .copyable pre { padding-right: 84px; }
     .copy {
@@ -398,8 +407,40 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
     </div>
   </footer>
   <script>
+    /** Colours a block of shell commands: command names, flags, strings and operators. Text is unchanged. */
+    function highlight(pre) {
+      const text = pre.textContent;
+      pre.textContent = '';
+      let command = true; // the next word is a command: at a line start, after | or &&, and after sudo
+      for (const [token] of text.matchAll(/"[^"]*"|&&|[|>]|--?[A-Za-z][\w-]*|\s+|[^\s|&>"]+|./g)) {
+        let kind = null;
+        if (!token.trim()) {
+          if (token.includes('\n')) command = true;
+        } else if (token.startsWith('"')) {
+          kind = 'str';
+        } else if (token === '&&' || token === '|' || token === '>') {
+          kind = 'op';
+          command = token !== '>';
+        } else if (command) {
+          kind = 'cmd';
+          command = token === 'sudo';
+        } else if (token.startsWith('-')) {
+          kind = 'flag';
+        }
+        if (!kind) {
+          pre.append(token);
+          continue;
+        }
+        const span = document.createElement('span');
+        span.className = `tok-${kind}`;
+        span.textContent = token;
+        pre.append(span);
+      }
+    }
+
     // A Copy button on every install command. Added here so the markup stays plain <pre> blocks.
     for (const pre of document.querySelectorAll('.install pre')) {
+      highlight(pre);
       const box = document.createElement('div');
       box.className = 'copyable';
       pre.before(box);
