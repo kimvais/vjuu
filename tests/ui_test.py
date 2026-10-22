@@ -48,7 +48,7 @@ def _review(page):
     states = [m for m in page.evaluate('window.__msgs') if m['type'] == 'state']
     review = states[-1]['review']
     for c in review['comments']:
-        del c['editing'], c['doc']
+        del c['editing'], c['doc'], c['anchorKey']
     return review
 
 
@@ -142,15 +142,59 @@ def test_multiple_documents(page, url, work):
     page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
     _comment(page, 'in the diff')
     files = page.locator('#files a')
-    assert files.all_inner_texts() == ['a.md', 'app.py\nsrc\n+1\n−1\n1', 'a.md\n1'] or \
-        [t.replace('\n', ' ') for t in files.all_inner_texts()] == ['a.md 1', 'app.py src +1 −1 1', 'a.md 1'], files.all_inner_texts()
-    files.nth(2).click()
-    page.wait_for_function("document.querySelectorAll('#files a')[2].classList.contains('active')")
+    rows = [' '.join(t.split()) for t in files.all_inner_texts()]
+    # Markdown files list their headings under them.
+    assert rows == ['a.md 1', 'Title', 'app.py src +1 −1 1', 'a.md 1', 'Title'], rows
+    files.nth(4).click()
+    page.wait_for_function("document.querySelectorAll('#files a')[4].classList.contains('active')")
     page.keyboard.press('f')
     assert page.locator('#files').is_hidden()
     states = [m for m in page.evaluate('window.__msgs') if m['type'] == 'state']
     got = sorted((c['doc'], c['file'], c['start'], c['text']) for c in states[-1]['review']['comments'])
     assert got == [(0, 'a.md', 3, 'first copy'), (1, 'src/app.py', 2, 'in the diff'), (2, 'a.md', 3, 'second copy')], got
+
+
+def _select(page, start, end):
+    """Selects from the start of the first element matching `start` to the end of the one matching `end`."""
+    page.evaluate("""([s, e]) => {
+        const r = document.createRange();
+        r.setStart(document.querySelector(s), 0);
+        const last = document.querySelector(e);
+        r.setEnd(last, last.childNodes.length);
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        document.dispatchEvent(new MouseEvent('mouseup'));
+    }""", [start, end])
+
+
+def test_selection_comments(page, url, work):
+    text = '# One\n\nFirst para.\n\nSecond\npara.\n\n## Two\n\n```\ncargo install --path .   # build it\nrevu last\n```\n\n```\nimport os\ndef f(x):\n    return os.sep  # sep\n```\n\n```\n# Review: a.md (1 comment)\n> quoted\n```\n'
+    _open(page, url, work, {'name': 'n.md', 'kind': 'md', 'text': text})
+    # A single markdown file with two or more headings gets a table of contents.
+    assert [' '.join(t.split()) for t in page.locator('#files a.toc').all_inner_texts()] == ['One', 'Two']
+    # Unlabelled fences: command lines are highlighted as shell, example output stays plain.
+    assert page.locator('pre code').nth(0).locator('[class^=hljs-]').count() > 0
+    assert page.locator('pre code').nth(0).locator('.hljs-title').all_inner_texts() == ['cargo', 'revu']
+    assert page.locator('pre code').nth(1).locator('.hljs-keyword').count() > 0  # python, not shell
+    assert page.locator('pre code').nth(2).locator('[class^=hljs-]').count() == 0
+    # Selecting across two paragraphs comments on both, as one range.
+    _select(page, '.markdown p', '.markdown p:nth-of-type(2)')
+    page.keyboard.press('c')
+    _comment(page, 'merge these')
+    review = _review(page)
+    assert review['comments'] == [{'file': 'n.md', 'start': 3, 'end': 6, 'old': False,
+                                   'quote': 'First para.\n\nSecond\npara.', 'text': 'merge these'}], review
+
+    # Diff: select the deleted and the added line; numbered by the new file, quoting both.
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
+    _select(page, 'tr:has(.d2h-del) .d2h-code-line-ctn', 'tr:has(.d2h-ins) .d2h-code-line-ctn')
+    page.locator('#sel-comment').click()
+    _comment(page, 'rename?')
+    page.keyboard.press('v')  # the range comment survives a re-render
+    assert page.locator('#orphans').count() == 0
+    review = _review(page)
+    assert review['comments'] == [{'file': 'src/app.py', 'start': 2, 'end': 2, 'old': False, 'quote': '-def old():\n+def new():',
+                                   'text': 'rename?'}], review
 
 
 def test_markdown_html_is_not_rendered(page, url, work):
@@ -166,7 +210,7 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents,
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments,
                      test_markdown_html_is_not_rendered):
             page = browser.new_page()
             page.add_init_script(_STUB)

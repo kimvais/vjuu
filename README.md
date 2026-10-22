@@ -42,10 +42,12 @@ its WebView2 processes; `revu stop` ends it. `REVU_COLD=1` skips it.
 | `Ctrl+Enter` / `Esc` | Save / cancel the comment being written |
 | `v` | Toggle unified / side-by-side diff |
 | `t` | Next theme: Auto, Light, Monokai, Graphite |
-| `f` | Hide / show the file list (multi-file reviews) |
+| `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+Shift+Enter` | Done |
 
-You can also click the `+` next to a line or block, or click a diff line number.
+Fastest: select text (a word, a paragraph, several diff lines) and click **Comment** or press `c`; the
+comment covers every line the selection touches. You can also click the `+` that appears on hover, or a diff
+line number.
 
 Themes: **Light** (GitHub), **Monokai** (its own warm dark grey), **Graphite** (Monokai code colours on
 neutral grey). **Auto** picks Light or Monokai from the Windows setting. The choice is remembered.

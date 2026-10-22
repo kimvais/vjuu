@@ -36,6 +36,8 @@ function loadScript(src) {
 }
 
 const RENDERERS = ['vendor/highlight.min.js', 'vendor/markdown-it.min.js', 'vendor/diff2html-ui-base.min.js'];
+/** highlight.js plus grammars its common bundle lacks; they register on the global hljs. */
+const loadHighlight = () => loadScript(RENDERERS[0]).then(() => loadScript('vendor/hljs-languages.min.js'));
 
 /** Loads the documents; a pre-warmed spare window gets 404 until revu hands it some and calls this again. */
 async function load() {
@@ -44,7 +46,8 @@ async function load() {
   const r = await fetch('doc.json', { cache: 'no-store' });
   if (!r.ok) {
     // Spare window: compile every renderer now so the first real document doesn't wait for it.
-    RENDERERS.forEach(loadScript);
+    loadHighlight();
+    RENDERERS.slice(1).forEach(loadScript);
     return;
   }
   const d = await r.json();
@@ -53,7 +56,7 @@ async function load() {
   $('#name').textContent = req.docs.map((x) => x.name).join(', ');
   $('#view').hidden = !hasDiff();
   const renderers = new Set(req.docs.map((x) => (x.kind === 'diff' ? RENDERERS[2] : RENDERERS[1])));
-  await Promise.all([RENDERERS[0], ...renderers].map(loadScript));
+  await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
   if (req.autoclose) requestAnimationFrame(() => post({ type: 'rendered' }));
 }
@@ -75,8 +78,8 @@ function render() {
       // Diffs carry their own per-file headers; markdown gets one when there is more than one document.
       if (req.docs.length > 1) section.innerHTML = `<div class="doc-header"></div>`;
       section.querySelector('.doc-header')?.append(doc.name);
+      if (req.docs.length > 1) targets.push({ el: section, doc: i, file: doc.name });
       renderMarkdown(section, doc, i);
-      targets.push({ el: section, doc: i, file: doc.name });
     }
   });
   renderComments();
@@ -87,11 +90,33 @@ function anchor(el, a) {
   anchors.set(el.dataset.key, { el, a });
 }
 
+// SQL and INI are left out: they claim plain prose and command lines.
+const AUTO_LANGUAGES = ['bash', 'powershell', 'python', 'json', 'yaml', 'rust', 'typescript', 'javascript', 'dockerfile', 'xml', 'diff'];
+const SHELLS = ['bash', 'powershell'];
+/** Lines starting like source code, not a command. */
+const CODE_KEYWORDS = /^(def|class|import|from|return|if|for|while|with|const|let|var|function|fn|use|pub|impl|struct|SELECT|INSERT|UPDATE)\b/;
+
 function renderMarkdown(section, doc, i) {
   // html off: the document is agent output and must not run script next to window.ipc.
-  // Only fences with a known language; auto-detection is slow and often wrong.
-  const highlight = (code, lang) =>
-    lang && hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value : '';
+  const highlight = (code, lang) => {
+    if (lang) return hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value : '';
+    // Unlabelled fences: highlight.js guesses short snippets badly (`cargo install .` scores as SQL), and in
+    // agent-written docs they are mostly shell. A confident non-shell guess wins; command-like lines are shell;
+    // anything else (example output) stays plain.
+    // Command lines are checked first: `# comments` alone make highlight.js call them Python.
+    const lines = code.split('\n').filter((l) => l.trim());
+    const isCommand = (l) => /^(\$ )?[\w.\\/:~-]+(\s|$)/.test(l) && !/[:{;]\s*$/.test(l) && !CODE_KEYWORDS.test(l);
+    if (!lines.length || !lines.every(isCommand)) {
+      const guess = hljs.highlightAuto(code, AUTO_LANGUAGES);
+      return guess.relevance >= 3 && !SHELLS.includes(guess.language) ? guess.value : '';
+    }
+    if (/\b[A-Z][a-z]+-[A-Z][A-Za-z]+\b/.test(code)) return hljs.highlight(code, { language: 'powershell', ignoreIllegals: true }).value;
+    // The bash grammar only knows builtins; colour each line's command and its flags like a shell does.
+    return hljs.highlight(code, { language: 'bash', ignoreIllegals: true }).value.split('\n').map((line) => line
+      .replace(/^(\s*(?:\$ )?)([\w.\\/:~-]+)/, '$1<span class="hljs-title">$2</span>')
+      .replace(/(^|>)([^<]*)/g, (_, tag, text) => tag + text.replace(/(\s)(--?\w[\w-]*)/g, '$1<span class="hljs-attr">$2</span>')))
+      .join('\n');
+  };
   const md = window.markdownit({ linkify: true, highlight });
   const lines = doc.text.split(/\r?\n/);
   const tokens = md.parse(doc.text, {});
@@ -106,6 +131,9 @@ function renderMarkdown(section, doc, i) {
   for (const img of article.querySelectorAll('img[src]')) {
     const src = img.getAttribute('src');
     if (!/^([a-z]+:|\/)/i.test(src)) img.src = `files/${i}/${src}`;
+  }
+  for (const h of article.querySelectorAll('h1, h2, h3')) {
+    targets.push({ el: h, doc: i, file: doc.name, heading: h.textContent, level: Number(h.tagName[1]) });
   }
   for (const el of article.querySelectorAll('[data-map]')) {
     const [from, to] = el.dataset.map.split(',').map(Number);
@@ -167,7 +195,7 @@ function renderComments() {
   const orphans = [];
   for (const [key, c] of comments) {
     const box = commentBox(key, c);
-    const entry = anchors.get(key);
+    const entry = anchors.get(key) ?? anchors.get(c.anchorKey);
     if (entry) place(entry.el, box); else orphans.push(box);
   }
   if (orphans.length) {
@@ -199,15 +227,24 @@ function renderFileList() {
     s.textContent = text;
     return s;
   };
+  const indent = req.docs.length > 1 ? 1 : 0;
   nav.replaceChildren(...targets.map((t) => {
     const a = document.createElement('a');
+    a.onclick = () => t.el.scrollIntoView({ block: 'start' });
+    if (t.heading) {
+      // Markdown: a table of contents, indented by heading level.
+      a.className = 'toc';
+      a.title = t.heading;
+      a.style.paddingLeft = `${12 + (t.level - 1 + indent) * 14}px`;
+      a.append(span('heading', t.heading));
+      return a;
+    }
     a.title = t.file;
     const parts = t.file.split(/[\\/]/);
     a.append(span('base', parts.pop()), span('dir', parts.join('/')));
     if (t.add !== undefined) a.append(span('add', `+${t.add}`), span('del', `−${t.del}`));
     const n = perFile.get(`${t.doc}\n${t.file}`);
     if (n) a.append(span('badge', n));
-    a.onclick = () => t.el.scrollIntoView({ block: 'start' });
     return a;
   }));
   markActiveFile();
@@ -313,13 +350,66 @@ function changed() {
 }
 
 function startComment(el) {
-  const key = el.dataset.key;
-  const c = comments.get(key) ?? { ...anchors.get(key).a, text: '' };
+  commentOn(el, anchors.get(el.dataset.key).a);
+}
+
+/** Opens the comment box for anchor `a`, shown under `el`. */
+function commentOn(el, a) {
+  const key = keyOf(a);
+  const c = comments.get(key) ?? { ...a, text: '', anchorKey: el.dataset.key };
   c.editing = true;
   comments.set(key, c);
+  getSelection().removeAllRanges();
+  selBtn.hidden = true;
   setFocus(el);
   renderComments();
 }
+
+/** Returns {el, a} for the lines the selection covers in one file, or null. */
+function selectionAnchor() {
+  const sel = getSelection();
+  if (sel.isCollapsed || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const keyed = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('#content [data-key]');
+  const first = keyed(range.startContainer);
+  const last = keyed(range.endContainer);
+  if (!first || !last || first.closest('.revu-c') || last.closest('.revu-c')) return null;
+  const all = [...content.querySelectorAll('[data-key]')];
+  const head = anchors.get(first.dataset.key).a;
+  const span = all.slice(all.indexOf(first), all.indexOf(last) + 1)
+    .map((el) => ({ el, a: anchors.get(el.dataset.key).a }))
+    .filter((x) => x.a.doc === head.doc && x.a.file === head.file);
+  if (!span.length) return null;
+  const doc = req.docs[head.doc];
+  if (doc.kind !== 'diff') {
+    const start = Math.min(...span.map((x) => x.a.start));
+    const end = Math.max(...span.map((x) => x.a.end));
+    const quote = doc.text.split(/\r?\n/).slice(start - 1, end).join('\n');
+    return { el: span.at(-1).el, a: { ...head, start, end, quote } };
+  }
+  // Diff: number by the new file unless only deleted lines are selected.
+  const added = span.filter((x) => !x.a.old);
+  const numbered = added.length ? added : span;
+  const lines = numbered.map((x) => x.a.start);
+  const a = { ...head, start: Math.min(...lines), end: Math.max(...lines), old: !added.length, quote: span.map((x) => x.a.quote).join('\n') };
+  return { el: span.at(-1).el, a };
+}
+
+const selBtn = $('#sel-comment');
+selBtn.addEventListener('mousedown', (e) => e.preventDefault()); // keep the selection
+selBtn.onclick = () => {
+  const s = selectionAnchor();
+  if (s) commentOn(s.el, s.a);
+};
+document.addEventListener('mouseup', () => setTimeout(() => {
+  const s = selectionAnchor();
+  selBtn.hidden = !s;
+  if (!s) return;
+  const r = getSelection().getRangeAt(0).getBoundingClientRect();
+  selBtn.style.top = `${r.bottom + window.scrollY + 6}px`;
+  selBtn.style.left = `${Math.max(r.left + window.scrollX, 8)}px`;
+}));
+document.addEventListener('selectionchange', () => { if (getSelection().isCollapsed) selBtn.hidden = true; });
 
 function setFocus(el) {
   focused?.classList.remove('focused');
@@ -343,10 +433,17 @@ function done() {
 content.addEventListener('mouseover', (e) => {
   const el = e.target.closest('[data-key]');
   if (!el) return;
+  const num = el.querySelector('.d2h-code-linenumber, .d2h-code-side-linenumber');
   const r = el.getBoundingClientRect();
   addBtn.hidden = false;
-  addBtn.style.top = `${r.top + window.scrollY}px`;
-  addBtn.style.left = `${Math.max(r.left - 26, 0)}px`;
+  if (num) {
+    const n = num.getBoundingClientRect();
+    addBtn.style.top = `${n.top + window.scrollY + (n.height - 22) / 2}px`;
+    addBtn.style.left = `${n.right - 11}px`;
+  } else {
+    addBtn.style.top = `${r.top + window.scrollY + 2}px`;
+    addBtn.style.left = `${Math.max(r.left - 28, 0)}px`;
+  }
   addBtn.onclick = () => startComment(el);
 });
 
@@ -372,8 +469,10 @@ document.addEventListener('keydown', (e) => {
     const top = (el) => el.getBoundingClientRect().top;
     const target = e.key === 'n' ? sections.find((s) => top(s) > 2) : sections.findLast((s) => top(s) < -2);
     target?.scrollIntoView({ block: 'start' });
+  } else if (e.key === 'c' && selectionAnchor()) {
+    const s = selectionAnchor();
+    commentOn(s.el, s.a);
   } else if ((e.key === 'c' || e.key === 'Enter') && focused) {
-    e.preventDefault();
     startComment(focused);
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
