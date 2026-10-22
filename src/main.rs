@@ -57,6 +57,9 @@ enum Msg {
     State { review: Review },
     Done,
     Rendered,
+    /// The page has drawn its documents. Finishing WebView2's start-up can hand focus back to the previous
+    /// window (via Explorer's ForegroundStaging), so the window is brought to the front again here.
+    Ready,
     // The window is frameless; the page draws the title bar and asks for these.
     Drag,
     Resize { dir: String },
@@ -258,6 +261,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             s.window.set_title(&title);
             s.reply = Some(Reply::Stdout);
             s.started = started;
+            bring_to_front(&s.window, &s.webview);
             sessions.insert(s.window.id(), s);
         }
         None => {
@@ -276,7 +280,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 s.window.set_title(&title);
                 let _ = s.webview.evaluate_script("window.vjuuLoad && vjuuLoad()");
                 s.window.set_visible(true);
-                s.window.set_focus();
+                bring_to_front(&s.window, &s.webview);
                 sessions.insert(s.window.id(), s);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }
@@ -286,6 +290,11 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
+            Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
+                if let Some(s) = sessions.get(&id) {
+                    bring_to_front(&s.window, &s.webview);
+                }
+            }
             Event::UserEvent(AppEvent::Ui(id, Msg::Rendered)) => {
                 if let Some(s) = sessions.get(&id)
                     && matches!(s.reply, Some(Reply::Stdout))
@@ -296,6 +305,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Close))
             | Event::WindowEvent { window_id: id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, id, true),
+            // Activation focuses the native window, not the webview inside it; pass keyboard focus on, or keys
+            // go nowhere until the page is clicked (seen with resident windows and after alt-tab).
+            Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } => {
+                if let Some(s) = sessions.get(&window_id) {
+                    let _ = s.webview.focus();
+                }
+            }
             Event::UserEvent(AppEvent::Ui(id, msg)) => {
                 if let Some(s) = sessions.get(&id) {
                     window_command(&s.window, msg);
@@ -337,7 +353,7 @@ fn window_command(window: &Window, msg: Msg) {
         }
         Msg::Minimize => window.set_minimized(true),
         Msg::Maximize => window.set_maximized(!window.is_maximized()),
-        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Close => {}
+        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Close => {}
     }
 }
 
@@ -358,6 +374,38 @@ fn style_frame(window: &Window) {
     set(DWMWA_BORDER_COLOR, BRAND_COLORREF);
 }
 
+/// Brings the window to the front with keyboard focus.
+///
+/// Windows' foreground lock stops a process that has not had recent user input (the resident instance, or a
+/// client started by an agent) from taking focus: `set_focus` alone just flashes the taskbar button. Sharing the
+/// input queue of the window that has focus for a moment is the accepted workaround.
+fn bring_to_front(window: &Window, webview: &WebView) {
+    use tao::platform::windows::WindowExtWindows;
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_KEYUP, VK_MENU, keybd_event};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+    let hwnd = window.hwnd() as _;
+    unsafe {
+        let ours = GetCurrentThreadId();
+        let theirs = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let attached = theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, 1) != 0;
+        BringWindowToTop(hwnd);
+        // Console windows (cmd, pwsh) refuse the attach; a synthetic Alt tap counts as user input and lifts the lock.
+        if SetForegroundWindow(hwnd) == 0 {
+            keybd_event(VK_MENU as u8, 0, 0, 0);
+            keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+            SetForegroundWindow(hwnd);
+        }
+        if attached {
+            AttachThreadInput(ours, theirs, 0);
+        }
+    }
+    window.set_focus();
+    let _ = webview.focus();
+}
+
 /// Creates a window and webview; without a request it stays hidden until a client hands one over.
 fn new_session(
     target: &EventLoopWindowTarget<AppEvent>,
@@ -365,9 +413,13 @@ fn new_session(
     context: &mut WebContext,
     request: Option<Request>,
 ) -> Session {
+    // A spare window is built while the user is reading another one: it must not take focus, or their keys
+    // go to the hidden spare.
+    let shown = request.is_some();
     let window = WindowBuilder::new()
         .with_title("vjuu")
-        .with_visible(request.is_some())
+        .with_visible(shown)
+        .with_focused(shown)
         .with_inner_size(LogicalSize::new(1100.0, 900.0))
         // Frameless like Windows Terminal: ui/ draws the title bar.
         .with_decorations(false)
@@ -380,6 +432,7 @@ fn new_session(
     let id = window.id();
     let serve_slot = slot.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
+        .with_focused(shown)
         .with_custom_protocol("vjuu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
         .with_url("vjuu://localhost/")
         .with_navigation_handler(|url| {

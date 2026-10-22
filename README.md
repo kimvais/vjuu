@@ -84,6 +84,8 @@ asking you to open files.
 - `cargo test`: review formatter and diff detection.
 - `uv run --no-project --with playwright python tests/ui_test.py`: drives `ui/` in headless Edge with a
   stubbed `window.ipc` and checks the review the page reports.
+- `tests/keyboard_focus.ps1 -HomeHwnd <hwnd>`: manual check that a freshly opened window takes keyboard focus from
+  another app (cold and resident). It types real keys, so run it by hand.
 - `VJUU_AUTOCLOSE=1 vjuu <file>` exits as soon as the page has rendered and prints the time to
   stderr, for startup measurements.
 

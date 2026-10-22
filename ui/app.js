@@ -59,7 +59,7 @@ async function load() {
   const renderers = new Set(req.docs.map((x) => ({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind]).filter(Boolean));
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
-  if (req.autoclose) requestAnimationFrame(() => post({ type: 'rendered' }));
+  requestAnimationFrame(() => post({ type: req.autoclose ? 'rendered' : 'ready' }));
 }
 
 const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
