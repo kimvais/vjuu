@@ -619,15 +619,7 @@ mod tests {
             (vec![renamed, quoted], Some("Mine")),
             (vec![quoted, "not json customTitle"], None),
         ] {
-            assert_eq!(
-                transcript_title(&lines.join(
-                    "
-"
-                ))
-                .as_deref(),
-                title,
-                "{lines:?}"
-            );
+            assert_eq!(transcript_title(&lines.join("\n")).as_deref(), title, "{lines:?}");
         }
     }
 
