@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds a signed apt repository from the .deb files in $1 into $2.
 # Needs the armoured private signing key in $KEY. Users add it with:
-#   curl -fsSL https://kimvais.github.io/vjuu/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
-#   echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://kimvais.github.io/vjuu/apt stable main" \
+#   curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
+#   echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" \
 #     | sudo tee /etc/apt/sources.list.d/vjuu.list
 #   sudo apt update && sudo apt install vjuu
 set -euo pipefail

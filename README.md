@@ -83,8 +83,8 @@ compiled and tested in CI but not by hand, and are not signed or notarised.
 | Anything else | a `.zip`, `.tar.gz` or `.deb` from [GitHub Releases](https://github.com/kimvais/vjuu/releases) |
 
 ```
-curl -fsSL https://kimvais.github.io/vjuu/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://kimvais.github.io/vjuu/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
+curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
 sudo apt update && sudo apt install vjuu
 ```
 
@@ -107,6 +107,8 @@ asking you to open files.
   stubbed `window.ipc` and checks the review the page reports.
 - `tests/keyboard_focus.ps1 -HomeHwnd <hwnd>`: manual check that a freshly opened window takes keyboard focus from
   another app (cold and resident). It types real keys, so run it by hand.
+- `site/` is vjuu.it, deployed with the apt repository by `.github/workflows/pages.yml`.
+  `uv run --no-project --with playwright python tests/screenshots.py` re-renders its screenshots.
 - `VJUU_AUTOCLOSE=1 vjuu <file>` exits as soon as the page has rendered and prints the time to
   stderr, for startup measurements.
 
