@@ -280,6 +280,23 @@ def test_same_file_twice_in_one_diff(page, url, work):
     assert page.locator('#orphans').count() == 0
 
 
+def test_comment_box_wraps_within_view(page, url, work):
+    # A line wider than the view makes the comment row as wide as the table; the box must stay visible.
+    long = _DIFF.replace('+def new():', '+def new(): ' + 'pass; ' * 80)
+    for view in ('unified', 'side-by-side'):
+        _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': long})
+        if view == 'side-by-side':
+            page.keyboard.press('v')  # the view is not remembered, so each _open starts unified
+        page.locator('tr', has=page.locator('.d2h-ins')).first.click()
+        page.keyboard.type('a comment long enough to wrap ' * 10)
+        box, pane = page.evaluate('''() => {
+            const ta = document.querySelector('.vjuu-c textarea');
+            return [ta, ta.closest('.d2h-file-diff, .d2h-file-side-diff')]
+                .map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; });
+        }''')
+        assert pane[0] <= box[0] and box[1] <= pane[1], (view, box, pane)
+
+
 def test_markdown_file_in_a_diff_uses_code_size(page, url, work):
     # diff2html puts a `markdown` class on highlighted lines of .md files; document styles must not apply to them.
     md_diff = _DIFF.replace('src/app.py', 'README.md')
@@ -306,7 +323,8 @@ def main():
         errors = []
         only = sys.argv[1:]
         for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
-                     test_same_file_twice_in_one_diff, test_markdown_file_in_a_diff_uses_code_size,
+                     test_same_file_twice_in_one_diff, test_comment_box_wraps_within_view,
+                     test_markdown_file_in_a_diff_uses_code_size,
                      test_markdown_html_is_not_rendered):
             if only and test.__name__ not in only:
                 continue

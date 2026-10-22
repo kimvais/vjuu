@@ -242,6 +242,10 @@ a { color: var(--accent); }
 .comment .text { flex: 1; white-space: pre-wrap; cursor: text; }
 .comment textarea { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
 tr.vjuu-c td { padding: 0 8px; }
+/* A comment row spans the whole table, which long lines make wider than the view: keep the box the visible
+   width and pinned to the left, so it wraps instead of scrolling the diff sideways while you type. */
+.d2h-file-diff, .d2h-file-side-diff, .code-scroll { container-type: inline-size; }
+tr.vjuu-c .comment { position: sticky; left: 8px; box-sizing: border-box; width: calc(100cqw - 16px); }
 
 #overall-box { padding: 0 16px 24px 40px; max-width: 940px; }
 #overall-box label { display: block; font-weight: 600; margin-bottom: 4px; }
