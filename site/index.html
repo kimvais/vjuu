@@ -175,6 +175,36 @@
       border-radius: var(--radius-card);
     }
     .shot figcaption { margin-top: 16px; color: var(--ink-dim); font-size: 15px; }
+    /* With script, the screenshots take turns in one spot; without it they stay stacked. */
+    .carousel { display: grid; }
+    .carousel .shot {
+      grid-area: 1 / 1;
+      margin: 0;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--dur-wipe) var(--glide), visibility var(--dur-wipe);
+    }
+    .carousel .shot.current { opacity: 1; visibility: visible; }
+    /* The first dot lines up with the caption; the buttons are bigger than the dots for easy tapping. */
+    .dots { display: flex; gap: 4px; margin: 8px 0 0 -10px; }
+    .dots button {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: pointer;
+    }
+    .dots button::before {
+      content: "";
+      display: block;
+      width: 8px;
+      height: 8px;
+      margin: auto;
+      border-radius: 50%;
+      background: var(--line);
+    }
+    .dots button[aria-current="true"]::before { background: var(--ink); }
 
     /* How it works */
     .how { padding: var(--section-y) 0; }
@@ -436,6 +466,41 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
         span.className = `tok-${kind}`;
         span.textContent = token;
         pre.append(span);
+      }
+    }
+
+    // Screenshots rotate every few seconds; hovering or focusing them holds the current one.
+    {
+      const box = document.querySelector('.shots .column');
+      const shots = [...box.querySelectorAll('.shot')];
+      const dots = document.createElement('div');
+      dots.className = 'dots';
+      let current = 0;
+      let held = false;
+      const show = (i) => {
+        current = i;
+        shots.forEach((shot, k) => shot.classList.toggle('current', k === i));
+        [...dots.children].forEach((dot, k) => dot.setAttribute('aria-current', k === i));
+      };
+      shots.forEach((shot, i) => {
+        // Hidden layers would otherwise never come into view to trigger loading.
+        shot.querySelector('img').loading = 'eager';
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.setAttribute('aria-label', `Screenshot ${i + 1} of ${shots.length}`);
+        dot.onclick = () => show(i);
+        dots.append(dot);
+      });
+      box.classList.add('carousel');
+      // Inside the column, so the dots line up with the screenshots.
+      box.append(dots);
+      show(0);
+      box.addEventListener('mouseenter', () => { held = true; });
+      box.addEventListener('mouseleave', () => { held = false; });
+      box.addEventListener('focusin', () => { held = true; });
+      box.addEventListener('focusout', () => { held = false; });
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setInterval(() => { if (!held) show((current + 1) % shots.length); }, 5000);
       }
     }
 
