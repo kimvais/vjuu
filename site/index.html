@@ -208,6 +208,22 @@
     .install pre { background: var(--black); }
     /* minmax(0, ...): long commands scroll inside their box instead of widening the page. */
     .platforms { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin: 0; }
+    .copyable { position: relative; }
+    .copyable pre { padding-right: 84px; }
+    .copy {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 4px 12px;
+      border: 1px solid var(--line);
+      border-radius: 2em;
+      background: var(--black);
+      color: var(--ink-dim);
+      font: 500 12px/1.5 var(--font);
+      cursor: pointer;
+      transition: color var(--dur-wipe) var(--glide), border-color var(--dur-wipe) var(--glide);
+    }
+    .copy:hover, .copy:focus-visible { color: var(--ink); border-color: var(--ink); }
     .platforms dt { margin: 0 0 10px; color: var(--ink); font-size: 16px; font-weight: 400; }
     .platforms dd { margin: 0; }
     .platforms dd p { margin: 10px 0 0; color: var(--ink-dim); font-size: 15px; }
@@ -381,5 +397,27 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
       <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>GitHub</a>
     </div>
   </footer>
+  <script>
+    // A Copy button on every install command. Added here so the markup stays plain <pre> blocks.
+    for (const pre of document.querySelectorAll('.install pre')) {
+      const box = document.createElement('div');
+      box.className = 'copyable';
+      pre.before(box);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'copy';
+      button.textContent = 'Copy';
+      button.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(pre.textContent);
+          button.textContent = 'Copied';
+        } catch {
+          button.textContent = 'Select and copy';
+        }
+        setTimeout(() => { button.textContent = 'Copy'; }, 1600);
+      };
+      box.append(pre, button);
+    }
+  </script>
 </body>
 </html>
