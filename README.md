@@ -109,6 +109,7 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 
 ## Development
 
+- `uvx pre-commit install` once: formats with rustfmt and ruff on every commit.
 - `cargo test`: review formatter and diff detection.
 - `uv run --no-project --with playwright python tests/ui_test.py`: drives `ui/` in headless Edge with a
   stubbed `window.ipc` and checks the review the page reports.
