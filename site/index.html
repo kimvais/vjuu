@@ -131,6 +131,7 @@
     }
     .header .textlink { font-size: 15px; font-weight: 400; }
     .sections { display: flex; gap: 24px; margin: 0 40px 0 auto; }
+    .sections .brand { color: var(--brand); }
     @media (max-width: 720px) {
       .sections { gap: 14px; margin-right: 20px; }
     }
@@ -337,13 +338,14 @@
         <a class="textlink" href="#what">What?</a>
         <a class="textlink" href="#why">Why?</a>
         <a class="textlink" href="#how">How?</a>
+        <a class="textlink brand" href="#install">Install</a>
       </nav>
       <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>GitHub</a>
     </div>
   </header>
 
   <main>
-    <section class="hero">
+    <section class="hero" id="what">
       <div class="column">
         <p class="eyebrow">Review for agent handoffs</p>
         <!-- Finnish: "rallienglanti", English as Finnish rally drivers speak it. -->
@@ -355,7 +357,7 @@
       </div>
     </section>
 
-    <section class="shots" id="what" aria-label="Screenshots">
+    <section class="shots" aria-label="Screenshots">
       <div class="column">
         <figure class="shot">
           <img src="img/diff.png" width="2560" height="1600" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
