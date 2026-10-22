@@ -15,6 +15,7 @@ vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current direct
 git show HEAD | vjuu -       # stdin; diff or markdown is detected
 vjuu last                    # print the most recent review again
 vjuu stop                    # stop the resident instance (before upgrading the exe)
+vjuu setup                   # install the skill for Claude Code and Codex
 ```
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to
@@ -93,12 +94,17 @@ A macOS binary downloaded by hand needs `xattr -d com.apple.quarantine vjuu` onc
 `libwebkit2gtk-4.1-dev` and `libgtk-3-dev`:
 ```
 cargo install --locked --git https://github.com/kimvais/vjuu
-claude plugin marketplace add kimvais/vjuu
-claude plugin install vjuu@vjuu
 ```
 
-The plugin adds the `vjuu` skill, which tells agents to run `vjuu` in the background instead of
-asking you to open files.
+Then, however you installed it:
+```
+vjuu setup
+```
+
+It installs the `vjuu` skill, which tells agents to run `vjuu` in the background instead of asking you to open
+files, for Claude Code (`~/.claude/skills`) and Codex (`~/.agents/skills`), whichever you have. Run it again after
+an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@vjuu` after
+`claude plugin marketplace add kimvais/vjuu`); use one or the other, not both.
 
 ## Development
 

@@ -22,7 +22,9 @@ use wry::{WebContext, WebView, WebViewBuilder};
 use platform::{bring_to_front, pipe_name};
 use review::Review;
 
-const USAGE: &str = "usage: vjuu <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
+const USAGE: &str = "usage: vjuu <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
+/// The skill that tells agents to run vjuu; built in, so it always matches this version.
+const SKILL: &str = include_str!("../skills/vjuu/SKILL.md");
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
 const SPARE_DELAY: Duration = Duration::from_millis(500);
 
@@ -96,6 +98,7 @@ fn main() {
     let request = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["last"] => print_last(),
         ["stop"] => stop(),
+        ["setup"] => setup(),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -482,6 +485,36 @@ fn print_last() -> ! {
     }
 }
 
+/// Installs the skill for each agent found in the home directory.
+fn setup() -> ! {
+    let home = env::home_dir().unwrap_or_else(|| fail("Cannot find the home directory."));
+    let written = install_skill(&home).unwrap_or_else(|e| fail(&format!("Cannot install the skill: {e}")));
+    if written.is_empty() {
+        fail("Found neither Claude Code (~/.claude) nor Codex (~/.codex). Install one, then run `vjuu setup` again.");
+    }
+    for path in written {
+        println!("Installed {}", path.display());
+    }
+    process::exit(0)
+}
+
+/// Writes the skill for Claude Code and Codex, where installed, and returns the files written.
+fn install_skill(home: &Path) -> std::io::Result<Vec<PathBuf>> {
+    // Codex reads user skills from ~/.agents/skills, a folder other agents share.
+    // shortcut: ignores CLAUDE_CONFIG_DIR and CODEX_HOME; honour them if someone moves their config.
+    let mut written = Vec::new();
+    for (agent, skills) in [(".claude", ".claude"), (".codex", ".agents")] {
+        if home.join(agent).is_dir() {
+            let dir = home.join(skills).join("skills").join("vjuu");
+            let path = dir.join("SKILL.md");
+            fs::create_dir_all(&dir)?;
+            fs::write(&path, SKILL)?;
+            written.push(path);
+        }
+    }
+    Ok(written)
+}
+
 fn fail(msg: &str) -> ! {
     eprintln!("{}", msg.trim_end());
     process::exit(1)
@@ -489,7 +522,8 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_diff, kind_of};
+    use super::{SKILL, install_skill, is_diff, kind_of};
+    use std::fs;
 
     #[test]
     fn file_kinds() {
@@ -516,5 +550,20 @@ mod tests {
         assert!(is_diff("--- a/x\n+++ b/x\n@@ -1 +1 @@\n"));
         assert!(!is_diff("# Title\n\n--- \n\nnot a diff\n"));
         assert!(!is_diff("- a list\n- item\n"));
+    }
+
+    #[test]
+    fn installs_the_skill_only_for_agents_present() {
+        let home = std::env::temp_dir().join(format!("vjuu-setup-{}", std::process::id()));
+        fs::create_dir_all(&home).unwrap();
+        assert!(install_skill(&home).unwrap().is_empty());
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        assert_eq!(install_skill(&home).unwrap(), [home.join(".agents").join("skills").join("vjuu").join("SKILL.md")]);
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        let written = install_skill(&home).unwrap();
+        assert_eq!(written, [home.join(".claude").join("skills").join("vjuu").join("SKILL.md"), home.join(".agents").join("skills").join("vjuu").join("SKILL.md")]);
+        // Running it again (after an upgrade) overwrites the old skill.
+        assert!(written.iter().all(|p| fs::read_to_string(p).unwrap() == SKILL));
+        fs::remove_dir_all(&home).unwrap();
     }
 }
