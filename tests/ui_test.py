@@ -197,6 +197,19 @@ def test_selection_comments(page, url, work):
                                    'text': 'rename?'}], review
 
 
+def test_code_file(page, url, work):
+    text = 'fn main() {\r\n    /* spans\r\n       lines */\r\n    let x = "s";\r\n}\r\n'
+    _open(page, url, work, {'name': 'src/main.rs', 'kind': 'code', 'text': text})
+    rows = page.locator('table.code tr')
+    assert rows.count() == 5
+    # A comment crossing a line break stays a comment on both lines.
+    assert page.locator('table.code tr').nth(2).locator('.hljs-comment').inner_text() == '       lines */'
+    assert page.locator('table.code .hljs-keyword').first.inner_text() == 'fn'
+    rows.nth(3).locator('.code-ln').click()
+    _comment(page, 'name it')
+    assert _review(page)['comments'] == [{'file': 'src/main.rs', 'start': 4, 'end': 4, 'old': False, 'quote': '    let x = "s";', 'text': 'name it'}]
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
     _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n'})
     assert page.locator('#content img').count() == 0
@@ -210,7 +223,7 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments,
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file,
                      test_markdown_html_is_not_rendered):
             page = browser.new_page()
             page.add_init_script(_STUB)

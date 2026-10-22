@@ -21,6 +21,7 @@ foreground timeout, and you are notified when it exits. Do not poll; wait for th
 | Uncommitted changes | `vjuu --git` (add `--staged`, `HEAD`, `main...HEAD`, paths: any `git diff` args) |
 | A commit | `git show <sha> \| vjuu -` |
 | A diff or patch file | `vjuu change.diff` |
+| Source files (whole files, not a diff) | `vjuu src/main.rs src/review.rs` |
 | Text you generated | write it to a `.md` file first, then `vjuu` that file |
 
 Run `--git` from inside the repository. Tell the user in one line that the review window is open.

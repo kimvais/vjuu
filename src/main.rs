@@ -121,9 +121,20 @@ fn doc(name: String, text: String, force_diff: bool, base: Option<PathBuf>) -> D
 
 fn file_doc(path: &str) -> Doc {
     let text = fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
-    let ext_diff = matches!(Path::new(path).extension().and_then(|e| e.to_str()), Some("diff" | "patch"));
     let base = Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-    doc(path.into(), text, ext_diff, base)
+    Doc { name: path.into(), kind: kind_of(path, &text).into(), text, base }
+}
+
+/// Returns how a file is shown: "diff", "md", or "code" (line-numbered source; the UI picks the language).
+fn kind_of(path: &str, text: &str) -> &'static str {
+    let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "diff" | "patch" => "diff",
+        _ if is_diff(text) => "diff",
+        // Extensionless files (README, NOTES) are usually prose.
+        "md" | "markdown" | "" => "md",
+        _ => "code",
+    }
 }
 
 fn is_diff(text: &str) -> bool {
@@ -431,7 +442,21 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::is_diff;
+    use super::{is_diff, kind_of};
+
+    #[test]
+    fn file_kinds() {
+        for (path, text, kind) in [
+            ("src/main.rs", "fn main() {}\n", "code"),
+            ("notes.TXT", "plain\n", "code"),
+            ("docs/plan.md", "# Plan\n", "md"),
+            ("README", "# Title\n", "md"),
+            ("change.patch", "", "diff"),
+            ("saved.txt", "diff --git a/x b/x\n", "diff"),
+        ] {
+            assert_eq!(kind_of(path, text), kind, "{path}");
+        }
+    }
 
     #[test]
     fn detects_diffs() {

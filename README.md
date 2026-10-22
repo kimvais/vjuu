@@ -10,6 +10,7 @@ your comments come back to the agent as markdown on stdout, anchored to `file:li
 vjuu docs/design.md          # markdown
 vjuu a.md b.md change.diff   # several files in one window, stacked
 vjuu change.diff             # diff or patch file
+vjuu src/main.rs             # any other file: line-numbered, syntax-highlighted source
 vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
 git show HEAD | vjuu -       # stdin; diff or markdown is detected
 vjuu last                    # print the most recent review again

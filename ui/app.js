@@ -55,7 +55,7 @@ async function load() {
   req = d;
   $('#name').textContent = req.docs.map((x) => x.name).join(', ');
   $('#view').hidden = !hasDiff();
-  const renderers = new Set(req.docs.map((x) => (x.kind === 'diff' ? RENDERERS[2] : RENDERERS[1])));
+  const renderers = new Set(req.docs.map((x) => ({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind]).filter(Boolean));
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
   if (req.autoclose) requestAnimationFrame(() => post({ type: 'rendered' }));
@@ -74,8 +74,10 @@ function render() {
     content.append(section);
     if (doc.kind === 'diff') {
       renderDiff(section, doc, i);
+    } else if (doc.kind === 'code') {
+      renderCode(section, doc, i);
     } else {
-      // Diffs carry their own per-file headers; markdown gets one when there is more than one document.
+      // Diffs and code carry their own headers; markdown gets one when there is more than one document.
       if (req.docs.length > 1) section.innerHTML = `<div class="doc-header"></div>`;
       section.querySelector('.doc-header')?.append(doc.name);
       if (req.docs.length > 1) targets.push({ el: section, doc: i, file: doc.name });
@@ -141,6 +143,49 @@ function renderMarkdown(section, doc, i) {
     while (end > from + 1 && !lines[end - 1].trim()) end--;
     anchor(el, { doc: i, file: doc.name, start: from + 1, end, old: false, quote: lines.slice(from, end).join('\n') });
   }
+}
+
+function renderCode(section, doc, i) {
+  const text = doc.text.replace(/\r\n/g, '\n').replace(/\n$/, '');
+  const lang = doc.name.split('.').pop().toLowerCase();
+  const html = hljs.getLanguage(lang) ? hljs.highlight(text, { language: lang, ignoreIllegals: true }).value : escapeHtml(text);
+  const raw = text.split('\n');
+  const header = document.createElement('div');
+  header.className = 'doc-header';
+  header.textContent = doc.name;
+  const table = document.createElement('table');
+  table.className = 'code';
+  splitHighlighted(html).forEach((line, idx) => {
+    const tr = table.insertRow();
+    const num = tr.insertCell();
+    num.className = 'code-ln';
+    num.textContent = idx + 1;
+    tr.insertCell().innerHTML = line;
+    anchor(tr, { doc: i, file: doc.name, start: idx + 1, end: idx + 1, old: false, quote: raw[idx] });
+  });
+  const scroller = document.createElement('div');
+  scroller.className = 'code-scroll';
+  scroller.append(table);
+  section.append(header, scroller);
+  targets.push({ el: section, doc: i, file: doc.name });
+}
+
+/** Splits highlighted HTML into lines, closing and reopening spans (comments, strings) that cross a line break. */
+function splitHighlighted(html) {
+  const open = [];
+  return html.split('\n').map((line) => {
+    const prefix = open.join('');
+    for (const [tag] of line.matchAll(/<span[^>]*>|<\/span>/g)) {
+      if (tag === '</span>') open.pop(); else open.push(tag);
+    }
+    return prefix + line + '</span>'.repeat(open.length);
+  });
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function renderDiff(section, doc, i) {
@@ -433,7 +478,7 @@ function done() {
 content.addEventListener('mouseover', (e) => {
   const el = e.target.closest('[data-key]');
   if (!el) return;
-  const num = el.querySelector('.d2h-code-linenumber, .d2h-code-side-linenumber');
+  const num = el.querySelector('.d2h-code-linenumber, .d2h-code-side-linenumber, .code-ln');
   const r = el.getBoundingClientRect();
   addBtn.hidden = false;
   if (num) {
@@ -454,7 +499,7 @@ content.addEventListener('click', (e) => {
   const el = e.target.closest('[data-key]');
   if (!el) return;
   // Clicking a diff line number comments right away, like GitLab and GitHub.
-  if (e.target.closest('.d2h-code-linenumber, .d2h-code-side-linenumber')) startComment(el); else setFocus(el);
+  if (e.target.closest('.d2h-code-linenumber, .d2h-code-side-linenumber, .code-ln')) startComment(el); else setFocus(el);
 });
 
 document.addEventListener('keydown', (e) => {
