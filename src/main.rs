@@ -22,7 +22,7 @@ use wry::{WebContext, WebView, WebViewBuilder};
 
 use review::Review;
 
-const USAGE: &str = "usage: vjuu <file.md|file.diff> | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop";
+const USAGE: &str = "usage: vjuu <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
 const SPARE_DELAY: Duration = Duration::from_millis(500);
 const DETACHED_PROCESS: u32 = 0x8;
@@ -65,7 +65,6 @@ enum Msg {
     Resize { dir: String },
     Minimize,
     Maximize,
-    Close,
 }
 
 enum AppEvent {
@@ -100,9 +99,11 @@ fn main() {
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
-            let mut text = String::new();
-            std::io::stdin().read_to_string(&mut text).unwrap_or_else(|e| fail(&format!("Cannot read stdin: {e}")));
-            request(vec![doc("stdin".into(), text, false, env::current_dir().ok())])
+            let mut bytes = Vec::new();
+            std::io::stdin().read_to_end(&mut bytes).unwrap_or_else(|e| fail(&format!("Cannot read stdin: {e}")));
+            let text = String::from_utf8_lossy(&bytes).into_owned();
+            let doc = Doc { name: "stdin".into(), kind: kind_of("", &text).into(), text, base: env::current_dir().ok() };
+            request(vec![doc])
         }
         ref paths @ [_, ..] if paths.iter().all(|p| !p.starts_with('-')) => request(paths.iter().map(|p| file_doc(p)).collect()),
         _ => {
@@ -124,25 +125,24 @@ fn request(docs: Vec<Doc>) -> Request {
     Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some() }
 }
 
-fn doc(name: String, text: String, force_diff: bool, base: Option<PathBuf>) -> Doc {
-    let kind = if force_diff || is_diff(&text) { "diff" } else { "md" };
-    Doc { name, kind: kind.into(), text, base }
-}
-
 fn file_doc(path: &str) -> Doc {
-    let text = fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
+    let bytes = fs::read(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
+    // Lenient with odd encodings (Latin-1 source, a binary byte or two): show the file rather than refuse it.
+    let text = String::from_utf8_lossy(&bytes).into_owned();
     let base = Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf));
     Doc { name: path.into(), kind: kind_of(path, &text).into(), text, base }
 }
 
 /// Returns how a file is shown: "diff", "md", or "code" (line-numbered source; the UI picks the language).
+/// The extension wins; content decides only for diff-like text in other files and for stdin (no extension).
 fn kind_of(path: &str, text: &str) -> &'static str {
     let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
         "diff" | "patch" => "diff",
+        "md" | "markdown" => "md",
         _ if is_diff(text) => "diff",
         // Extensionless files (README, NOTES) are usually prose.
-        "md" | "markdown" | "" => "md",
+        "" => "md",
         _ => "code",
     }
 }
@@ -152,7 +152,12 @@ fn is_diff(text: &str) -> bool {
 }
 
 fn git_diff(rest: &[&str]) -> Request {
-    let out = Command::new("git").arg("diff").args(rest).output().unwrap_or_else(|e| fail(&format!("Cannot run git: {e}")));
+    // color.ui=always or a configured diff.external would otherwise hand us something that isn't a plain diff.
+    let out = Command::new("git")
+        .args(["diff", "--no-color", "--no-ext-diff"])
+        .args(rest)
+        .output()
+        .unwrap_or_else(|e| fail(&format!("Cannot run git: {e}")));
     if !out.status.success() {
         fail(&String::from_utf8_lossy(&out.stderr));
     }
@@ -162,7 +167,7 @@ fn git_diff(rest: &[&str]) -> Request {
         process::exit(0);
     }
     let name = format!("git diff {}", rest.join(" ")).trim_end().to_string();
-    request(vec![doc(name, text, true, env::current_dir().ok())])
+    request(vec![Doc { name, kind: "diff".into(), text, base: env::current_dir().ok() }])
 }
 
 fn pipe_name() -> Name<'static> {
@@ -303,8 +308,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 }
                 finish(&mut sessions, id, false)
             }
-            Event::UserEvent(AppEvent::Ui(id, Msg::Close))
-            | Event::WindowEvent { window_id: id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, id, true),
+            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, window_id, true),
             // Activation focuses the native window, not the webview inside it; pass keyboard focus on, or keys
             // go nowhere until the page is clicked (seen with resident windows and after alt-tab).
             Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } => {
@@ -353,7 +357,7 @@ fn window_command(window: &Window, msg: Msg) {
         }
         Msg::Minimize => window.set_minimized(true),
         Msg::Maximize => window.set_maximized(!window.is_maximized()),
-        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Close => {}
+        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready => {}
     }
 }
 
@@ -567,6 +571,11 @@ mod tests {
             ("README", "# Title\n", "md"),
             ("change.patch", "", "diff"),
             ("saved.txt", "diff --git a/x b/x\n", "diff"),
+            // A markdown file that quotes a diff in a fenced block is still markdown.
+            ("docs/plan.md", "# Plan\n```diff\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n```\n", "md"),
+            // Stdin has no extension: detected from the content.
+            ("", "diff --git a/x b/x\n", "diff"),
+            ("", "# Notes\n", "md"),
         ] {
             assert_eq!(kind_of(path, text), kind, "{path}");
         }
