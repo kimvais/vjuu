@@ -82,6 +82,8 @@
     }
     .textlink:hover, .textlink:focus-visible { background-size: 100% 1px; }
 
+    .icon { width: 1em; height: 1em; margin-right: 0.45em; vertical-align: -0.125em; fill: currentColor; }
+
     :focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 
     h2 {
@@ -225,10 +227,14 @@
   </style>
 </head>
 <body>
+  <!-- GitHub's mark, from Octicons (MIT); defined once, used by every GitHub link. -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <symbol id="github" viewBox="0 0 16 16"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></symbol>
+  </svg>
   <header class="header">
     <div class="column">
       <span class="wordmark">vjuu</span>
-      <a class="textlink" href="https://github.com/kimvais/vjuu">GitHub</a>
+      <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>GitHub</a>
     </div>
   </header>
 
@@ -238,10 +244,10 @@
         <p class="eyebrow">Review for agent handoffs</p>
         <!-- Finnish: "rallienglanti", English as Finnish rally drivers speak it. -->
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
-        <h1>Your agent asks for a review. <span>You comment on the lines.</span></h1>
+        <h1>Don't open the file. <span>Your agent already did.</span></h1>
         <p>When an agent would say "open this and review it", it runs <code>vjuu</code> instead. A window opens with the markdown, diff or source. You comment on lines, click Done, and your comments go back to the agent as markdown, anchored to <code>file:line</code>.</p>
         <a class="button" href="#install">Install</a>
-        <a class="textlink" href="https://github.com/kimvais/vjuu">Source on GitHub</a>
+        <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>Source on GitHub</a>
       </div>
     </section>
 
@@ -340,7 +346,7 @@ claude plugin install vjuu@vjuu</pre>
   <footer class="footer">
     <div class="column">
       <span>© 2026 Kimmo Parviainen-Jalanko · MIT licence</span>
-      <a class="textlink" href="https://github.com/kimvais/vjuu">GitHub</a>
+      <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>GitHub</a>
     </div>
   </footer>
 </body>
