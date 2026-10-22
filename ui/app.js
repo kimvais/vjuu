@@ -25,8 +25,15 @@ function loadScript(src) {
   });
 }
 
-async function main() {
-  doc = await (await fetch('doc.json')).json();
+/** Loads the document; a pre-warmed spare window gets 404 until revu hands it one and calls this again. */
+async function load() {
+  if (doc) return;
+  // Resident windows share one browser profile; never reuse an earlier document.
+  const r = await fetch('doc.json', { cache: 'no-store' });
+  if (!r.ok) return;
+  const d = await r.json();
+  if (doc) return;
+  doc = d;
   $('#name').textContent = doc.name;
   if (doc.kind === 'diff') {
     $('#view').hidden = false;
@@ -81,7 +88,9 @@ function renderDiff() {
   requestAnimationFrame(() => setTimeout(() => ui.highlightCode()));
   for (const wrapper of content.querySelectorAll('.d2h-file-wrapper')) {
     const file = wrapper.querySelector('.d2h-file-name').textContent.split(' → ').pop().trim();
-    const lineText = (tr) => tr.cells[1].textContent.replace(/\s+$/, '');
+    const lineText = (tr) =>
+      (tr.querySelector('.d2h-code-line-prefix')?.textContent.trim() ?? '') +
+      (tr.querySelector('.d2h-code-line-ctn')?.textContent.trimEnd() ?? '');
     if (!sideBySide) {
       for (const tr of wrapper.querySelectorAll('tr')) {
         const num = tr.querySelector('.d2h-code-linenumber');
@@ -286,6 +295,7 @@ $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
 
-main().catch((err) => {
+window.revuLoad = () => load().catch((err) => {
   content.textContent = `revu failed to render: ${err}`;
 });
+revuLoad();

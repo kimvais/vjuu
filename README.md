@@ -12,10 +12,24 @@ revu change.diff             # diff or patch file
 revu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
 git show HEAD | revu -       # stdin; diff or markdown is detected
 revu last                    # print the most recent review again
+revu stop                    # stop the resident instance (before upgrading the exe)
 ```
 
 `revu` blocks until you click **Done** or close the window. Every review is also saved to
 `%LOCALAPPDATA%\revu\reviews\`, so a later session can pick it up with `revu last`.
+
+## Why it opens fast
+
+The first `revu` opens its window itself (~400 ms, mostly WebView2 starting) and starts a hidden
+resident instance that keeps a pre-warmed window. Later calls hand the document to it over a named
+pipe and the window appears in ~40 ms. The resident instance costs roughly 300 MB working set across
+its WebView2 processes; `revu stop` ends it. `REVU_COLD=1` skips it.
+
+| Case | First paint |
+|------|-------------|
+| Markdown, cold | ~400 ms |
+| Markdown, resident | 15-45 ms |
+| 6,600-line diff, resident | ~270 ms (diff2html rendering; highlighting runs after paint) |
 
 ## Keys
 
@@ -59,5 +73,11 @@ asking you to open files.
 
 ## Development
 
-`cargo test` runs the formatter tests. `REVU_AUTOCLOSE=1 revu <file>` exits as soon as the page has
-rendered and prints the time to stderr, for startup measurements.
+- `cargo test`: review formatter and diff detection.
+- `uv run --no-project --with playwright python tests/ui_test.py`: drives `ui/` in headless Edge with a
+  stubbed `window.ipc` and checks the review the page reports.
+- `REVU_AUTOCLOSE=1 revu <file>` exits as soon as the page has rendered and prints the time to
+  stderr, for startup measurements.
+
+UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56) and embedded in the
+exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to revu.

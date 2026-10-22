@@ -1,30 +1,45 @@
 mod review;
 
 use std::borrow::Cow;
-use std::io::Read;
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{self, Command};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use std::{env, fs};
+use std::process::{self, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::{env, fs, thread};
 
+use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Stream, prelude::*};
 use serde::{Deserialize, Serialize};
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tao::window::WindowBuilder;
-use wry::WebViewBuilder;
+use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowBuilder, WindowId};
 use wry::http::Response;
+use wry::{WebContext, WebView, WebViewBuilder};
 
 use review::Review;
 
-const USAGE: &str = "usage: revu <file.md|file.diff> | revu - | revu --git [git diff args] | revu last";
+const USAGE: &str = "usage: revu <file.md|file.diff> | revu - | revu --git [git diff args] | revu last | revu stop";
+/// Wait before warming the next spare window, so it does not compete with the one just shown.
+const SPARE_DELAY: Duration = Duration::from_secs(2);
+const DETACHED_PROCESS: u32 = 0x8;
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x200;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Doc {
     name: String,
-    kind: &'static str,
+    kind: String,
     text: String,
     autoclose: bool,
+}
+
+/// What a client sends the resident instance: the document and the directory relative images resolve against.
+#[derive(Serialize, Deserialize)]
+struct Request {
+    doc: Doc,
+    base: Option<PathBuf>,
 }
 
 /// Messages posted by ui/app.js via `window.ipc.postMessage`.
@@ -36,40 +51,74 @@ enum Msg {
     Rendered,
 }
 
+enum AppEvent {
+    Open(Request, Stream),
+    Ui(WindowId, Msg),
+}
+
+/// Where a finished review goes.
+enum Reply {
+    Stdout,
+    Client(Stream),
+}
+
+type Slot = Arc<Mutex<Option<Request>>>;
+
+struct Session {
+    // Declared before `window` so it is dropped first.
+    webview: WebView,
+    window: Window,
+    slot: Slot,
+    reply: Option<Reply>,
+    latest: Review,
+    started: Instant,
+}
+
 fn main() {
     let started = Instant::now();
     let args: Vec<String> = env::args().skip(1).collect();
-    let (doc, base) = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+    let request = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["last"] => print_last(),
+        ["stop"] => stop(),
+        ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
             let mut text = String::new();
             std::io::stdin().read_to_string(&mut text).unwrap_or_else(|e| fail(&format!("Cannot read stdin: {e}")));
-            (doc("stdin".into(), text, false), env::current_dir().ok())
+            request("stdin".into(), text, false, env::current_dir().ok())
         }
         [path] if !path.starts_with('-') => {
             let text = fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
             let ext_diff = matches!(Path::new(path).extension().and_then(|e| e.to_str()), Some("diff" | "patch"));
-            (doc(path.into(), text, ext_diff), Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf)))
+            let base = Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+            request(path.into(), text, ext_diff, base)
         }
         _ => {
             eprintln!("{USAGE}");
             process::exit(2)
         }
     };
-    run_window(doc, base, started);
+    if env::var_os("REVU_COLD").is_none() {
+        match Stream::connect(pipe_name()) {
+            Ok(conn) => client(conn, &request, started),
+            // Nobody listening: show this one ourselves and start a resident instance for next time.
+            Err(_) => spawn_server(),
+        }
+    }
+    run(Some(request), started)
 }
 
-fn doc(name: String, text: String, force_diff: bool) -> Doc {
+fn request(name: String, text: String, force_diff: bool, base: Option<PathBuf>) -> Request {
     let kind = if force_diff || is_diff(&text) { "diff" } else { "md" };
-    Doc { name, kind, text, autoclose: env::var_os("REVU_AUTOCLOSE").is_some() }
+    let doc = Doc { name, kind: kind.into(), text, autoclose: env::var_os("REVU_AUTOCLOSE").is_some() };
+    Request { doc, base }
 }
 
 fn is_diff(text: &str) -> bool {
     text.starts_with("diff ") || (text.starts_with("--- ") || text.contains("\n+++ ")) && text.contains("\n@@ ")
 }
 
-fn git_diff(rest: &[&str]) -> (Doc, Option<PathBuf>) {
+fn git_diff(rest: &[&str]) -> Request {
     let out = Command::new("git").arg("diff").args(rest).output().unwrap_or_else(|e| fail(&format!("Cannot run git: {e}")));
     if !out.status.success() {
         fail(&String::from_utf8_lossy(&out.stderr));
@@ -80,21 +129,174 @@ fn git_diff(rest: &[&str]) -> (Doc, Option<PathBuf>) {
         process::exit(0);
     }
     let name = format!("git diff {}", rest.join(" ")).trim_end().to_string();
-    (doc(name, text, true), env::current_dir().ok())
+    request(name, text, true, env::current_dir().ok())
 }
 
-fn run_window(doc: Doc, base: Option<PathBuf>, started: Instant) -> ! {
-    let event_loop = EventLoopBuilder::<Msg>::with_user_event().build();
-    let window = WindowBuilder::new()
-        .with_title(format!("revu: {}", doc.name))
-        .with_inner_size(LogicalSize::new(1100.0, 900.0))
-        .build(&event_loop)
-        .unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
+fn pipe_name() -> Name<'static> {
+    // shortcut: default pipe ACL; fine on a single-user machine, set a security descriptor if shared.
+    format!("revu-{}.sock", env::var("USERNAME").unwrap_or_default())
+        .to_ns_name::<GenericNamespaced>()
+        .expect("valid pipe name")
+}
+
+fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
+    let mut line = serde_json::to_vec(request).expect("Request serialises");
+    line.push(b'\n');
+    if let Err(e) = conn.write_all(&line).and_then(|_| conn.flush()) {
+        fail(&format!("Cannot reach the resident revu: {e}"));
+    }
+    let mut md = String::new();
+    // Windows reports the server closing the pipe as an error rather than EOF.
+    let read = conn.read_to_string(&mut md);
+    if request.doc.autoclose {
+        eprintln!("rendered in {} ms (resident)", started.elapsed().as_millis());
+        process::exit(0)
+    }
+    if md.is_empty() {
+        fail(&format!("The resident revu closed without a review ({read:?}). `revu last` may have it."));
+    }
+    print!("{md}");
+    process::exit(0)
+}
+
+/// Stops the resident instance, e.g. before replacing the exe. Open review windows close without a review.
+fn stop() -> ! {
+    if let Ok(mut conn) = Stream::connect(pipe_name()) {
+        let _ = conn.write_all(b"stop\n").and_then(|_| conn.flush());
+    }
+    process::exit(0)
+}
+
+fn spawn_server() {
+    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+    let Ok(exe) = env::current_exe() else { return };
+    // CreateProcess inherits every inheritable handle, including our stdout pipe; the caller would then
+    // wait for EOF until the resident instance exits.
+    for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        unsafe { SetHandleInformation(GetStdHandle(std_handle), HANDLE_FLAG_INHERIT, 0) };
+    }
+    let _ = Command::new(exe)
+        .arg("--serve")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        .spawn();
+}
+
+/// Accepts clients on a thread and hands each request to the event loop.
+fn listen(proxy: EventLoopProxy<AppEvent>) {
+    let listener = match ListenerOptions::new().name(pipe_name()).create_sync() {
+        Ok(listener) => listener,
+        // Another resident instance won the race.
+        Err(_) => process::exit(0),
+    };
+    thread::spawn(move || {
+        for conn in listener.incoming().filter_map(Result::ok) {
+            let mut reader = BufReader::new(conn);
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                continue;
+            }
+            if line.trim() == "stop" {
+                process::exit(0);
+            }
+            match serde_json::from_str::<Request>(&line) {
+                Ok(request) => {
+                    let _ = proxy.send_event(AppEvent::Open(request, reader.into_inner()));
+                }
+                Err(e) => eprintln!("Bad request: {e}"),
+            }
+        }
+    });
+}
+
+/// Runs the window event loop: one visible document (cold) or resident with a pre-warmed spare window.
+fn run(initial: Option<Request>, started: Instant) -> ! {
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
-    let name = doc.name.clone();
-    let doc_json = serde_json::to_vec(&doc).expect("Doc serialises");
-    let _webview = WebViewBuilder::new()
-        .with_custom_protocol("revu".into(), move |_id, request| serve(request.uri().path(), &doc_json, base.as_deref()))
+    // Keep WebView2's profile out of the exe's directory (`~/.cargo/bin` after `cargo install`).
+    let mut context = WebContext::new(Some(data_dir().join("webview")));
+    let mut sessions: HashMap<WindowId, Session> = HashMap::new();
+    let mut spare: Option<Session> = None;
+    let mut spare_due = None;
+    match initial {
+        Some(request) => {
+            let title = format!("revu: {}", request.doc.name);
+            let mut s = new_session(&event_loop, &proxy, &mut context, Some(request));
+            s.window.set_title(&title);
+            s.reply = Some(Reply::Stdout);
+            s.started = started;
+            sessions.insert(s.window.id(), s);
+        }
+        None => {
+            listen(proxy.clone());
+            spare_due = Some(Instant::now());
+        }
+    }
+    event_loop.run(move |event, target, control_flow| {
+        match event {
+            Event::UserEvent(AppEvent::Open(request, conn)) => {
+                let title = format!("revu: {}", request.doc.name);
+                let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
+                *s.slot.lock().expect("slot lock") = Some(request);
+                s.reply = Some(Reply::Client(conn));
+                s.started = Instant::now();
+                s.window.set_title(&title);
+                let _ = s.webview.evaluate_script("window.revuLoad && revuLoad()");
+                s.window.set_visible(true);
+                s.window.set_focus();
+                sessions.insert(s.window.id(), s);
+                spare_due = Some(Instant::now() + SPARE_DELAY);
+            }
+            Event::UserEvent(AppEvent::Ui(id, Msg::State { review })) => {
+                if let Some(s) = sessions.get_mut(&id) {
+                    s.latest = review;
+                }
+            }
+            Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
+            Event::UserEvent(AppEvent::Ui(id, Msg::Rendered)) => {
+                if let Some(s) = sessions.get(&id)
+                    && matches!(s.reply, Some(Reply::Stdout))
+                {
+                    eprintln!("rendered in {} ms", s.started.elapsed().as_millis());
+                }
+                finish(&mut sessions, id, false)
+            }
+            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, window_id, true),
+            _ => {}
+        }
+        if spare.is_none() && spare_due.is_some_and(|due| due <= Instant::now()) {
+            spare = Some(new_session(target, &proxy, &mut context, None));
+            spare_due = None;
+        }
+        *control_flow = match spare_due {
+            Some(due) => ControlFlow::WaitUntil(due),
+            None => ControlFlow::Wait,
+        };
+    })
+}
+
+/// Creates a window and webview; without a request it stays hidden until a client hands one over.
+fn new_session(
+    target: &EventLoopWindowTarget<AppEvent>,
+    proxy: &EventLoopProxy<AppEvent>,
+    context: &mut WebContext,
+    request: Option<Request>,
+) -> Session {
+    let window = WindowBuilder::new()
+        .with_title("revu")
+        .with_visible(request.is_some())
+        .with_inner_size(LogicalSize::new(1100.0, 900.0))
+        .build(target)
+        .unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
+    let slot: Slot = Arc::new(Mutex::new(request));
+    let proxy = proxy.clone();
+    let id = window.id();
+    let serve_slot = slot.clone();
+    let webview = WebViewBuilder::new_with_web_context(context)
+        .with_custom_protocol("revu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
         .with_url("revu://localhost/")
         .with_navigation_handler(|url| {
             // WebView2 serves custom protocols as http://<scheme>.localhost.
@@ -109,31 +311,37 @@ fn run_window(doc: Doc, base: Option<PathBuf>, started: Instant) -> ! {
         })
         .with_ipc_handler(move |request| match serde_json::from_str::<Msg>(request.body()) {
             Ok(msg) => {
-                let _ = proxy.send_event(msg);
+                let _ = proxy.send_event(AppEvent::Ui(id, msg));
             }
             Err(e) => eprintln!("Bad message from UI: {e}"),
         })
         .build(&window)
         .unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
-
-    let mut latest = Review::default();
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
-        match event {
-            Event::UserEvent(Msg::State { review }) => latest = review,
-            Event::UserEvent(Msg::Done) | Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                finish(&name, &latest)
-            }
-            Event::UserEvent(Msg::Rendered) => {
-                eprintln!("rendered in {} ms", started.elapsed().as_millis());
-                process::exit(0)
-            }
-            _ => {}
-        }
-    })
+    Session { webview, window, slot, reply: None, latest: Review::default(), started: Instant::now() }
 }
 
-fn serve(path: &str, doc_json: &[u8], base: Option<&Path>) -> Response<Cow<'static, [u8]>> {
+/// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
+fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
+    let Some(s) = sessions.remove(&id) else { return };
+    let name = s.slot.lock().expect("slot lock").as_ref().map(|r| r.doc.name.clone()).unwrap_or_default();
+    let md = if save { save_review(&name, &s.latest) } else { String::new() };
+    match s.reply {
+        Some(Reply::Stdout) => {
+            // Tear the webview down before exiting, or Chromium logs a window-class error to stderr.
+            drop(s.webview);
+            drop(s.window);
+            print!("{md}");
+            process::exit(0)
+        }
+        Some(Reply::Client(mut conn)) => {
+            let _ = conn.write_all(md.as_bytes()).and_then(|_| conn.flush());
+        }
+        None => {}
+    }
+}
+
+fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
+    let not_found = || Response::builder().status(404).body(Cow::Borrowed(&[][..])).expect("static response");
     let (body, mime): (Cow<'static, [u8]>, &str) = match path {
         "/" => (Cow::Borrowed(include_bytes!("../ui/index.html")), "text/html"),
         "/app.js" => (Cow::Borrowed(include_bytes!("../ui/app.js")), "text/javascript"),
@@ -141,33 +349,42 @@ fn serve(path: &str, doc_json: &[u8], base: Option<&Path>) -> Response<Cow<'stat
         "/vendor/markdown-it.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/markdown-it.min.js")), "text/javascript"),
         "/vendor/diff2html-ui.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html-ui.min.js")), "text/javascript"),
         "/vendor/diff2html.min.css" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html.min.css")), "text/css"),
-        "/doc.json" => (Cow::Owned(doc_json.to_vec()), "application/json"),
-        // Relative images in markdown. shortcut: no percent-decoding, so paths with spaces 404.
-        _ => match base.and_then(|b| fs::read(b.join(path.trim_start_matches('/'))).ok()) {
-            Some(bytes) => (Cow::Owned(bytes), if path.ends_with(".svg") { "image/svg+xml" } else { "application/octet-stream" }),
-            None => return Response::builder().status(404).body(Cow::Borrowed(&[][..])).expect("static response"),
+        // A spare window has no document yet; the page waits for revuLoad().
+        "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
+            Some(r) => (Cow::Owned(serde_json::to_vec(&r.doc).expect("Doc serialises")), "application/json"),
+            None => return not_found(),
         },
+        // Relative images in markdown. shortcut: no percent-decoding, so paths with spaces 404.
+        _ => {
+            let base = slot.lock().expect("slot lock").as_ref().and_then(|r| r.base.clone());
+            match base.and_then(|b| fs::read(b.join(path.trim_start_matches('/'))).ok()) {
+                Some(bytes) => (Cow::Owned(bytes), if path.ends_with(".svg") { "image/svg+xml" } else { "application/octet-stream" }),
+                None => return not_found(),
+            }
+        }
     };
     Response::builder().header("Content-Type", mime).body(body).expect("static response")
 }
 
-fn reviews_dir() -> PathBuf {
-    PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("revu").join("reviews")
+fn data_dir() -> PathBuf {
+    PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("revu")
 }
 
-fn finish(name: &str, review: &Review) -> ! {
+fn reviews_dir() -> PathBuf {
+    data_dir().join("reviews")
+}
+
+/// Returns the review as markdown after writing it to the reviews directory.
+fn save_review(name: &str, review: &Review) -> String {
     let md = review::to_markdown(name, review);
     let dir = reviews_dir();
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let slug: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' { c } else { '_' }).take(60).collect();
     let path = dir.join(format!("{secs}-{slug}.md"));
-    // Save before printing so a crashed pipe never loses the review.
-    match fs::create_dir_all(&dir).and_then(|_| fs::write(&path, &md)) {
-        Ok(()) => eprintln!("Saved to {}", path.display()),
-        Err(e) => eprintln!("Could not save review to {}: {e}", path.display()),
+    if let Err(e) = fs::create_dir_all(&dir).and_then(|_| fs::write(&path, &md)) {
+        eprintln!("Could not save review to {}: {e}", path.display());
     }
-    print!("{md}");
-    process::exit(0)
+    md
 }
 
 fn print_last() -> ! {
