@@ -1,32 +1,30 @@
+mod platform;
 mod review;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, fs, thread};
 
-use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Stream, prelude::*};
+use interprocess::local_socket::{ListenerOptions, Stream, prelude::*};
 use serde::{Deserialize, Serialize};
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
-use tao::platform::windows::WindowBuilderExtWindows;
 use tao::window::{ResizeDirection, Window, WindowBuilder, WindowId};
 use wry::http::Response;
 use wry::{WebContext, WebView, WebViewBuilder};
 
+use platform::{bring_to_front, pipe_name};
 use review::Review;
 
 const USAGE: &str = "usage: vjuu <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
 const SPARE_DELAY: Duration = Duration::from_millis(500);
-const DETACHED_PROCESS: u32 = 0x8;
-const CREATE_NEW_PROCESS_GROUP: u32 = 0x200;
 
 #[derive(Serialize, Deserialize)]
 struct Doc {
@@ -81,9 +79,11 @@ enum Reply {
 type Slot = Arc<Mutex<Option<Request>>>;
 
 struct Session {
-    // Declared before `window` so it is dropped first.
+    // Declared before `window` and `_context` so it is dropped first.
     webview: WebView,
     window: Window,
+    /// This window's own web context where the platform needs one (see `platform::CONTEXT_PER_WINDOW`).
+    _context: Option<WebContext>,
     slot: Slot,
     reply: Option<Reply>,
     latest: Review,
@@ -170,13 +170,6 @@ fn git_diff(rest: &[&str]) -> Request {
     request(vec![Doc { name, kind: "diff".into(), text, base: env::current_dir().ok() }])
 }
 
-fn pipe_name() -> Name<'static> {
-    // shortcut: default pipe ACL; fine on a single-user machine, set a security descriptor if shared.
-    format!("vjuu-{}.sock", env::var("USERNAME").unwrap_or_default())
-        .to_ns_name::<GenericNamespaced>()
-        .expect("valid pipe name")
-}
-
 fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
     let mut line = serde_json::to_vec(request).expect("Request serialises");
     line.push(b'\n');
@@ -206,26 +199,15 @@ fn stop() -> ! {
 }
 
 fn spawn_server() {
-    use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
-    let Ok(exe) = env::current_exe() else { return };
-    // CreateProcess inherits every inheritable handle, including our stdout pipe; the caller would then
-    // wait for EOF until the resident instance exits.
-    for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
-        unsafe { SetHandleInformation(GetStdHandle(std_handle), HANDLE_FLAG_INHERIT, 0) };
+    if let Ok(exe) = env::current_exe() {
+        platform::spawn_detached(Command::new(exe).arg("--serve"));
     }
-    let _ = Command::new(exe)
-        .arg("--serve")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-        .spawn();
 }
 
 /// Accepts clients on a thread and hands each request to the event loop.
 fn listen(proxy: EventLoopProxy<AppEvent>) {
-    let listener = match ListenerOptions::new().name(pipe_name()).create_sync() {
+    // A socket file left by a crashed instance would block us forever; we only get here when nobody answered it.
+    let listener = match ListenerOptions::new().name(pipe_name()).try_overwrite(platform::socket_may_be_stale()).create_sync() {
         Ok(listener) => listener,
         // Another resident instance won the race.
         Err(_) => process::exit(0),
@@ -254,8 +236,8 @@ fn listen(proxy: EventLoopProxy<AppEvent>) {
 fn run(initial: Option<Request>, started: Instant) -> ! {
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
-    // Keep WebView2's profile out of the exe's directory (`~/.cargo/bin` after `cargo install`).
-    let mut context = WebContext::new(Some(data_dir().join("webview")));
+    // Keep the webview profile out of the exe's directory (`~/.cargo/bin` after `cargo install`).
+    let mut context = WebContext::new(Some(platform::data_dir().join("webview")));
     let mut sessions: HashMap<WindowId, Session> = HashMap::new();
     let mut spare: Option<Session> = None;
     let mut spare_due = None;
@@ -361,55 +343,6 @@ fn window_command(window: &Window, msg: Msg) {
     }
 }
 
-/// vjuu's brand colour (#a6e22e, Monokai green) as a Windows COLORREF (0x00BBGGRR); ui/style.css has it as --brand.
-const BRAND_COLORREF: u32 = 0x002E_E2A6;
-
-/// Asks Windows 11 for rounded corners and a brand-coloured border, which frameless windows don't get by
-/// default; older Windows ignores both.
-fn style_frame(window: &Window) {
-    use tao::platform::windows::WindowExtWindows;
-    use windows_sys::Win32::Graphics::Dwm::{
-        DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
-    };
-    let set = |attribute: i32, value: u32| unsafe {
-        DwmSetWindowAttribute(window.hwnd() as _, attribute as u32, (&raw const value).cast(), size_of_val(&value) as u32);
-    };
-    set(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND as u32);
-    set(DWMWA_BORDER_COLOR, BRAND_COLORREF);
-}
-
-/// Brings the window to the front with keyboard focus.
-///
-/// Windows' foreground lock stops a process that has not had recent user input (the resident instance, or a
-/// client started by an agent) from taking focus: `set_focus` alone just flashes the taskbar button. Sharing the
-/// input queue of the window that has focus for a moment is the accepted workaround.
-fn bring_to_front(window: &Window, webview: &WebView) {
-    use tao::platform::windows::WindowExtWindows;
-    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_KEYUP, VK_MENU, keybd_event};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
-    };
-    let hwnd = window.hwnd() as _;
-    unsafe {
-        let ours = GetCurrentThreadId();
-        let theirs = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
-        let attached = theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, 1) != 0;
-        BringWindowToTop(hwnd);
-        // Console windows (cmd, pwsh) refuse the attach; a synthetic Alt tap counts as user input and lifts the lock.
-        if SetForegroundWindow(hwnd) == 0 {
-            keybd_event(VK_MENU as u8, 0, 0, 0);
-            keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
-            SetForegroundWindow(hwnd);
-        }
-        if attached {
-            AttachThreadInput(ours, theirs, 0);
-        }
-    }
-    window.set_focus();
-    let _ = webview.focus();
-}
-
 /// Creates a window and webview; without a request it stays hidden until a client hands one over.
 fn new_session(
     target: &EventLoopWindowTarget<AppEvent>,
@@ -420,33 +353,33 @@ fn new_session(
     // A spare window is built while the user is reading another one: it must not take focus, or their keys
     // go to the hidden spare.
     let shown = request.is_some();
-    let window = WindowBuilder::new()
+    let builder = WindowBuilder::new()
         .with_title("vjuu")
         .with_visible(shown)
         .with_focused(shown)
-        .with_inner_size(LogicalSize::new(1100.0, 900.0))
-        // Frameless like Windows Terminal: ui/ draws the title bar.
-        .with_decorations(false)
-        .with_undecorated_shadow(true)
-        .build(target)
-        .unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
-    style_frame(&window);
+        .with_inner_size(LogicalSize::new(1100.0, 900.0));
+    let window = platform::frame(builder).build(target).unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
+    platform::style_frame(&window);
     let slot: Slot = Arc::new(Mutex::new(request));
     let proxy = proxy.clone();
     let id = window.id();
     let serve_slot = slot.clone();
-    let webview = WebViewBuilder::new_with_web_context(context)
+    let mut own = platform::CONTEXT_PER_WINDOW.then(|| WebContext::new(Some(platform::data_dir().join("webview"))));
+    let context = own.as_mut().unwrap_or(context);
+    let builder = WebViewBuilder::new_with_web_context(context)
         .with_focused(shown)
+        // Tells ui/ whether to draw its own title bar and resize edges.
+        .with_initialization_script(format!("window.VJUU_FRAMELESS = {};", platform::FRAMELESS))
         .with_custom_protocol("vjuu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
         .with_url("vjuu://localhost/")
         .with_navigation_handler(|url| {
-            // WebView2 serves custom protocols as http://<scheme>.localhost.
+            // WebView2 serves custom protocols as http://<scheme>.localhost; WebKit keeps vjuu://.
             if url.starts_with("vjuu:") || url.starts_with("http://vjuu.localhost") {
                 return true;
             }
             // External links go to the default browser so the review page is never replaced.
             if url.starts_with("http://") || url.starts_with("https://") {
-                let _ = Command::new("explorer").arg(&url).spawn();
+                platform::open_url(&url);
             }
             false
         })
@@ -455,10 +388,9 @@ fn new_session(
                 let _ = proxy.send_event(AppEvent::Ui(id, msg));
             }
             Err(e) => eprintln!("Bad message from UI: {e}"),
-        })
-        .build(&window)
-        .unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
-    Session { webview, window, slot, reply: None, latest: Review::default(), started: Instant::now() }
+        });
+    let webview = platform::build_webview(builder, &window).unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
+    Session { webview, window, _context: own, slot, reply: None, latest: Review::default(), started: Instant::now() }
 }
 
 /// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
@@ -515,12 +447,8 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
     Response::builder().header("Content-Type", mime).body(body).expect("static response")
 }
 
-fn data_dir() -> PathBuf {
-    PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("vjuu")
-}
-
 fn reviews_dir() -> PathBuf {
-    data_dir().join("reviews")
+    platform::data_dir().join("reviews")
 }
 
 /// Returns the review as markdown after writing it to the reviews directory.

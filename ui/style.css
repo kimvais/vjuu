@@ -306,3 +306,7 @@ table.code tr.vjuu-c td { white-space: normal; font-family: var(--sans); }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+
+/* macOS and Linux: the OS draws the frame and window buttons. */
+body.native-frame #window-controls, body.native-frame .edge { display: none; }
+

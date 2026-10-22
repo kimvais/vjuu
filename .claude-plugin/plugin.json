@@ -1,4 +1,4 @@
 {
   "name": "vjuu",
-  "description": "Windows only. Hand markdown, diffs and source files to the user in a fast review window with inline comments; the comments come back as the command's output."
+  "description": "Hand markdown, diffs and source files to the user in a fast review window with inline comments; the comments come back as the command's output."
 }

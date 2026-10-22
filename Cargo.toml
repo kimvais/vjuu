@@ -6,10 +6,23 @@ description = "Fast review window for AI-agent handoffs: markdown, diffs and cod
 license = "MIT"
 repository = "https://github.com/kimvais/vjuu"
 
+[package.metadata.deb]
+maintainer = "Kimmo Parviainen-Jalanko <kimvais@kimva.is>"
+section = "devel"
+# $auto asks dpkg-shlibdeps for the exact library packages (WebKitGTK, GTK) the binary links against.
+depends = "$auto"
+extended-description = "A fast review window for AI-agent handoffs: markdown, diffs and source files with inline comments that go back to the agent as file:line markdown."
+assets = [
+    ["target/release/vjuu", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/vjuu/", "644"],
+]
+
 [dependencies]
 interprocess = "2.4.6"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tao = "0.37.1"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Console", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 wry = "0.57.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Console", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }

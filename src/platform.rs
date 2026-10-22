@@ -1,0 +1,169 @@
+//! Everything that differs between Windows, macOS and Linux.
+//!
+//! Windows gets a frameless window with a Windows Terminal style title bar drawn by ui/, plus workarounds for its
+//! focus rules. macOS and Linux keep the native window frame.
+
+use std::env;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
+use interprocess::local_socket::{GenericFilePath, GenericNamespaced, Name, prelude::*};
+use tao::window::{Window, WindowBuilder};
+use wry::{WebView, WebViewBuilder};
+
+/// WebKitGTK allows one handler per URI scheme per web context, so every Linux window needs its own context;
+/// WebView2 and WKWebView can share one.
+pub const CONTEXT_PER_WINDOW: bool = cfg!(all(unix, not(target_os = "macos")));
+
+/// Whether ui/ draws the title bar and resize edges (Windows) or the OS frame is kept.
+pub const FRAMELESS: bool = cfg!(windows);
+
+/// Returns where vjuu keeps saved reviews and the webview profile.
+pub fn data_dir() -> PathBuf {
+    #[cfg(windows)]
+    let base = env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    let base = env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"));
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let base = env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
+    base.unwrap_or_else(env::temp_dir).join("vjuu")
+}
+
+/// Returns the per-user socket the resident instance listens on.
+pub fn pipe_name() -> Name<'static> {
+    // shortcut: default pipe/socket permissions; fine on a single-user machine, restrict them if shared.
+    let user = env::var("USERNAME").or_else(|_| env::var("USER")).unwrap_or_default();
+    let name = format!("vjuu-{user}.sock");
+    // Windows named pipes and Linux abstract sockets have a namespace; macOS needs a socket file.
+    let name = if GenericNamespaced::is_supported() {
+        name.to_ns_name::<GenericNamespaced>()
+    } else {
+        env::temp_dir().join(name).to_fs_name::<GenericFilePath>()
+    };
+    name.expect("valid socket name")
+}
+
+/// Whether a socket left behind by a crashed instance has to be replaced (socket files only).
+pub fn socket_may_be_stale() -> bool {
+    !GenericNamespaced::is_supported()
+}
+
+/// Starts `command` detached from the caller: no shared stdio, and not killed with the caller's terminal.
+pub fn spawn_detached(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+        use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+        const DETACHED_PROCESS: u32 = 0x8;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x200;
+        // CreateProcess inherits every inheritable handle, including our stdout pipe; the caller would then
+        // wait for EOF until the resident instance exits.
+        for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            unsafe { SetHandleInformation(GetStdHandle(std_handle), HANDLE_FLAG_INHERIT, 0) };
+        }
+        command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Own process group, so Ctrl+C in the caller's terminal doesn't take the resident instance with it.
+        command.process_group(0);
+    }
+    let _ = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+}
+
+/// Opens an http(s) link in the default browser.
+pub fn open_url(url: &str) {
+    let opener = if cfg!(windows) {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let _ = Command::new(opener).arg(url).spawn();
+}
+
+/// Makes the window frameless on Windows, where ui/ draws the title bar.
+pub fn frame(builder: WindowBuilder) -> WindowBuilder {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowBuilderExtWindows;
+        builder.with_decorations(false).with_undecorated_shadow(true)
+    }
+    #[cfg(not(windows))]
+    builder
+}
+
+/// Builds the webview into the window; on Linux it goes into tao's GTK box so Wayland works too.
+pub fn build_webview(builder: WebViewBuilder, window: &Window) -> wry::Result<WebView> {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        use tao::platform::unix::WindowExtUnix;
+        use wry::WebViewBuilderExtUnix;
+        builder.build_gtk(window.default_vbox().expect("tao windows have a default GTK box"))
+    }
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    builder.build(window)
+}
+
+/// vjuu's brand colour (#a6e22e, Monokai green) as a Windows COLORREF (0x00BBGGRR); ui/style.css has it as --brand.
+#[cfg(windows)]
+const BRAND_COLORREF: u32 = 0x002E_E2A6;
+
+/// Asks Windows 11 for rounded corners and a brand-coloured border, which frameless windows don't get by
+/// default; older Windows ignores both. No-op elsewhere.
+pub fn style_frame(window: &Window) {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows_sys::Win32::Graphics::Dwm::{
+            DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
+        };
+        let set = |attribute: i32, value: u32| unsafe {
+            DwmSetWindowAttribute(window.hwnd() as _, attribute as u32, (&raw const value).cast(), size_of_val(&value) as u32);
+        };
+        set(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND as u32);
+        set(DWMWA_BORDER_COLOR, BRAND_COLORREF);
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
+/// Brings the window to the front with keyboard focus in the page.
+///
+/// Windows' foreground lock stops a process that has not had recent user input (the resident instance, or a
+/// client started by an agent) from taking focus: `set_focus` alone just flashes the taskbar button. Sharing the
+/// input queue of the window that has focus for a moment is the accepted workaround.
+pub fn bring_to_front(window: &Window, webview: &WebView) {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_KEYUP, VK_MENU, keybd_event};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+        };
+        let hwnd = window.hwnd() as _;
+        unsafe {
+            let ours = GetCurrentThreadId();
+            let theirs = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+            let attached = theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, 1) != 0;
+            BringWindowToTop(hwnd);
+            // Console windows (cmd, pwsh) refuse the attach; a synthetic Alt tap counts as user input and lifts the lock.
+            if SetForegroundWindow(hwnd) == 0 {
+                keybd_event(VK_MENU as u8, 0, 0, 0);
+                keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+                SetForegroundWindow(hwnd);
+            }
+            if attached {
+                AttachThreadInput(ours, theirs, 0);
+            }
+        }
+    }
+    window.set_focus();
+    let _ = webview.focus();
+}

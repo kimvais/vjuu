@@ -1,6 +1,6 @@
 # vjuu
 
-A fast review window for agent handoffs, for Windows. When an agent would say "open X and review it", it runs
+A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
 `vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
@@ -71,8 +71,14 @@ Deleted diff lines are marked `(old)` and use the old file's line number.
 
 ## Install
 
-Windows 10 or 11 only (it uses WebView2, Win32 named pipes and DWM). Needs a Rust toolchain.
+Runs on Windows 10/11 (WebView2), Linux (WebKitGTK 4.1: Debian 12+, Ubuntu 22.04+) and macOS (WKWebView). On
+Windows the window is frameless with its own title bar; macOS and Linux keep the native frame. macOS builds are
+compiled and tested in CI but not by hand, and are not signed or notarised.
 
+Download a build from [GitHub Releases](https://github.com/kimvais/vjuu/releases): a `.zip` for Windows, a `.deb` or
+`.tar.gz` for Linux (`sudo apt install ./vjuu_*.deb` pulls in WebKitGTK), a `.tar.gz` for macOS (run
+`xattr -d com.apple.quarantine vjuu` once, since the binary is not notarised). Or build it with a Rust toolchain
+(Linux also needs `libwebkit2gtk-4.1-dev` and `libgtk-3-dev`):
 ```
 cargo install --locked --git https://github.com/kimvais/vjuu
 claude plugin marketplace add kimvais/vjuu

@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "vjuu",
-  "description": "Fast review window with inline comments for agent handoffs (Windows).",
+  "description": "Fast review window with inline comments for agent handoffs.",
   "owner": {
     "name": "Kimmo Parviainen-Jalanko",
     "url": "https://github.com/kimvais"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "vjuu",
-      "description": "Review markdown, diffs and code with inline comments that return to the agent (Windows).",
+      "description": "Review markdown, diffs and code with inline comments that return to the agent.",
       "source": "./",
       "category": "productivity"
     }

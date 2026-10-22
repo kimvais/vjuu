@@ -594,7 +594,9 @@ $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
 
-// Window chrome: the window is frameless, so the title bar and edges ask vjuu to move, resize or close it.
+// Window chrome. On Windows the window is frameless, so the title bar and edges ask vjuu to move, resize or close it;
+// macOS and Linux keep the native frame, and these controls are hidden.
+if (!window.VJUU_FRAMELESS) document.body.classList.add('native-frame');
 const titlebar = $('#titlebar');
 const isMaximized = () => window.outerWidth >= screen.availWidth && window.outerHeight >= screen.availHeight;
 titlebar.addEventListener('mousedown', (e) => {
