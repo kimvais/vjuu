@@ -2,9 +2,10 @@
 
 Run: uv run --no-project --with playwright python tests/ui_test.py
 """
+
 import json
-import sys
 import shutil
+import sys
 import tempfile
 import threading
 from functools import partial
@@ -77,7 +78,16 @@ def test_diff(page, url, work):
     page.locator('.comment', has_text='rename is fine').locator('button', has_text='×').click()
     review = _review(page)
     assert review == {
-        'comments': [{'file': 'src/app.py', 'start': 2, 'end': 2, 'old': True, 'quote': '-def old():', 'text': 'why was old() removed?'}],
+        'comments': [
+            {
+                'file': 'src/app.py',
+                'start': 2,
+                'end': 2,
+                'old': True,
+                'quote': '-def old():',
+                'text': 'why was old() removed?',
+            }
+        ],
         'overall': '',
     }, review
     page.keyboard.press('Control+Shift+Enter')
@@ -97,14 +107,23 @@ def test_markdown(page, url, work):
     review = _review(page)
     assert review == {
         'comments': [
-            {'file': 'plan.md', 'start': 3, 'end': 4, 'old': False, 'quote': 'First paragraph\nspans two lines.', 'text': 'tighten this'},
+            {
+                'file': 'plan.md',
+                'start': 3,
+                'end': 4,
+                'old': False,
+                'quote': 'First paragraph\nspans two lines.',
+                'text': 'tighten this',
+            },
             {'file': 'plan.md', 'start': 7, 'end': 7, 'old': False, 'quote': '- item two', 'text': 'drop it'},
         ],
         'overall': 'good start',
     }, review
     assert page.inner_text('#count') == '2 comments'
     # Fonts are embedded; a wrong path silently falls back to system fonts.
-    loaded = page.evaluate("document.fonts.ready.then(() => [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family).sort())")
+    loaded = page.evaluate(
+        "document.fonts.ready.then(() => [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family).sort())"
+    )
     assert loaded == ['"Inter"', '"JetBrains Mono"'] or loaded == ['Inter', 'JetBrains Mono'], loaded
 
 
@@ -135,7 +154,9 @@ def test_highlighting_and_themes(page, url, work):
 
 
 def test_session_name(page, url, work):
-    (work / 'doc.json').write_text(json.dumps({'docs': [{'name': 'a.md', 'kind': 'md', 'text': _MD}], 'session': 'fix login'}))
+    (work / 'doc.json').write_text(
+        json.dumps({'docs': [{'name': 'a.md', 'kind': 'md', 'text': _MD}], 'session': 'fix login'})
+    )
     page.goto(url)
     page.wait_for_selector('[data-key]')
     assert page.inner_text('#session') == 'fix login'
@@ -146,8 +167,14 @@ def test_session_name(page, url, work):
 
 
 def test_multiple_documents(page, url, work):
-    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD}, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF},
-          {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    _open(
+        page,
+        url,
+        work,
+        {'name': 'a.md', 'kind': 'md', 'text': _MD},
+        {'name': 'git diff', 'kind': 'diff', 'text': _DIFF},
+        {'name': 'a.md', 'kind': 'md', 'text': _MD},
+    )
     assert page.inner_text('#name') == 'a.md, git diff, a.md'
     assert page.locator('.doc-header').all_inner_texts() == ['a.md', 'a.md']
     # Same name, same line, different documents: two separate comments.
@@ -168,12 +195,15 @@ def test_multiple_documents(page, url, work):
     assert page.locator('#files').is_hidden()
     states = [m for m in page.evaluate('window.__msgs') if m['type'] == 'state']
     got = sorted((c['doc'], c['file'], c['start'], c['text']) for c in states[-1]['review']['comments'])
-    assert got == [(0, 'a.md', 3, 'first copy'), (1, 'src/app.py', 2, 'in the diff'), (2, 'a.md', 3, 'second copy')], got
+    assert got == [(0, 'a.md', 3, 'first copy'), (1, 'src/app.py', 2, 'in the diff'), (2, 'a.md', 3, 'second copy')], (
+        got
+    )
 
 
 def _select(page, start, end):
     """Selects from the start of the first element matching `start` to the end of the one matching `end`."""
-    page.evaluate("""([s, e]) => {
+    page.evaluate(
+        """([s, e]) => {
         const r = document.createRange();
         r.setStart(document.querySelector(s), 0);
         const last = document.querySelector(e);
@@ -181,7 +211,9 @@ def _select(page, start, end):
         getSelection().removeAllRanges();
         getSelection().addRange(r);
         document.dispatchEvent(new MouseEvent('mouseup'));
-    }""", [start, end])
+    }""",
+        [start, end],
+    )
 
 
 def test_selection_comments(page, url, work):
@@ -199,8 +231,16 @@ def test_selection_comments(page, url, work):
     page.keyboard.press('c')
     _comment(page, 'merge these')
     review = _review(page)
-    assert review['comments'] == [{'file': 'n.md', 'start': 3, 'end': 6, 'old': False,
-                                   'quote': 'First para.\n\nSecond\npara.', 'text': 'merge these'}], review
+    assert review['comments'] == [
+        {
+            'file': 'n.md',
+            'start': 3,
+            'end': 6,
+            'old': False,
+            'quote': 'First para.\n\nSecond\npara.',
+            'text': 'merge these',
+        }
+    ], review
 
     # Diff: select the deleted and the added line; numbered by the new file, quoting both.
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
@@ -210,8 +250,16 @@ def test_selection_comments(page, url, work):
     page.keyboard.press('v')  # the range comment survives a re-render
     assert page.locator('#orphans').count() == 0
     review = _review(page)
-    assert review['comments'] == [{'file': 'src/app.py', 'start': 2, 'end': 2, 'old': False, 'quote': '-def old():\n+def new():',
-                                   'text': 'rename?'}], review
+    assert review['comments'] == [
+        {
+            'file': 'src/app.py',
+            'start': 2,
+            'end': 2,
+            'old': False,
+            'quote': '-def old():\n+def new():',
+            'text': 'rename?',
+        }
+    ], review
 
 
 def test_code_file(page, url, work):
@@ -224,11 +272,18 @@ def test_code_file(page, url, work):
     assert page.locator('table.code .hljs-keyword').first.inner_text() == 'fn'
     rows.nth(3).locator('.code-ln').click()
     _comment(page, 'name it')
-    assert _review(page)['comments'] == [{'file': 'src/main.rs', 'start': 4, 'end': 4, 'old': False, 'quote': '    let x = "s";', 'text': 'name it'}]
+    assert _review(page)['comments'] == [
+        {'file': 'src/main.rs', 'start': 4, 'end': 4, 'old': False, 'quote': '    let x = "s";', 'text': 'name it'}
+    ]
 
 
 def test_clicks_that_do_not_comment(page, url, work):
-    _open(page, url, work, {'name': 'l.md', 'kind': 'md', 'text': 'See [the docs](https://example.invalid/docs) first.\n\nSecond.\n'})
+    _open(
+        page,
+        url,
+        work,
+        {'name': 'l.md', 'kind': 'md', 'text': 'See [the docs](https://example.invalid/docs) first.\n\nSecond.\n'},
+    )
     # Runs after vjuu's handler; keeps the test on the page instead of following the link.
     page.evaluate("window.addEventListener('click', (e) => e.preventDefault())")
     page.get_by_text('the docs').click()
@@ -242,7 +297,13 @@ def test_clicks_that_do_not_comment(page, url, work):
 
 
 def test_keyboard_navigation(page, url, work):
-    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD}, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
+    _open(
+        page,
+        url,
+        work,
+        {'name': 'a.md', 'kind': 'md', 'text': _MD},
+        {'name': 'git diff', 'kind': 'diff', 'text': _DIFF},
+    )
     focused = lambda: page.evaluate("document.querySelector('.focused')?.dataset.key.split('\\n').slice(2).join(' ')")
     page.keyboard.press('ArrowDown')  # nothing focused yet: the first line on screen
     assert focused() == 'a.md 1-1', focused()
@@ -298,9 +359,19 @@ def test_directory_tree(page, url, work):
     diff = ''.join(_DIFF.replace('src/app.py', f) for f in files)
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': diff})
     rows = page.locator('#files > *')
-    got = [(r.evaluate('e => e.tagName'), r.inner_text().split()[0], r.evaluate('e => e.style.paddingLeft')) for r in rows.all()]
-    assert got == [('A', 'a.py', '12px'), ('DIV', 'src', '12px'), ('DIV', 'pkg', '26px'), ('A', 'b.py', '40px'),
-                   ('DIV', 'sub', '40px'), ('A', 'c.py', '54px'), ('A', 'd.py', '26px')], got
+    got = [
+        (r.evaluate('e => e.tagName'), r.inner_text().split()[0], r.evaluate('e => e.style.paddingLeft'))
+        for r in rows.all()
+    ]
+    assert got == [
+        ('A', 'a.py', '12px'),
+        ('DIV', 'src', '12px'),
+        ('DIV', 'pkg', '26px'),
+        ('A', 'b.py', '40px'),
+        ('DIV', 'sub', '40px'),
+        ('A', 'c.py', '54px'),
+        ('A', 'd.py', '26px'),
+    ], got
 
 
 def test_comment_box_wraps_within_view(page, url, work):
@@ -323,11 +394,21 @@ def test_comment_box_wraps_within_view(page, url, work):
 def test_markdown_file_in_a_diff_uses_code_size(page, url, work):
     # diff2html puts a `markdown` class on highlighted lines of .md files; document styles must not apply to them.
     md_diff = _DIFF.replace('src/app.py', 'README.md')
-    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': md_diff}, {'name': 'x.md', 'kind': 'md', 'text': _MD})
-    page.wait_for_selector('.d2h-code-line-ctn.markdown, .d2h-code-line-ctn .hljs-section, .d2h-code-line-ctn', state='attached')
+    _open(
+        page,
+        url,
+        work,
+        {'name': 'git diff', 'kind': 'diff', 'text': md_diff},
+        {'name': 'x.md', 'kind': 'md', 'text': _MD},
+    )
+    page.wait_for_selector(
+        '.d2h-code-line-ctn.markdown, .d2h-code-line-ctn .hljs-section, .d2h-code-line-ctn', state='attached'
+    )
     page.wait_for_timeout(300)  # highlighting runs after paint
     size = lambda sel: page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).fontSize")
-    assert size('.d2h-code-line-ctn') == size('.d2h-code-linenumber') or size('.d2h-code-line-ctn') == '13px', size('.d2h-code-line-ctn')
+    assert size('.d2h-code-line-ctn') == size('.d2h-code-linenumber') or size('.d2h-code-line-ctn') == '13px', size(
+        '.d2h-code-line-ctn'
+    )
     assert size('article.markdown p') == '16px'
 
 
@@ -345,10 +426,23 @@ def main():
         browser = p.chromium.launch(channel='msedge')
         errors = []
         only = sys.argv[1:]
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_session_name, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
-                     test_same_file_twice_in_one_diff, test_directory_tree, test_comment_box_wraps_within_view,
-                     test_markdown_file_in_a_diff_uses_code_size,
-                     test_markdown_html_is_not_rendered):
+        for test in (
+            test_diff,
+            test_markdown,
+            test_highlighting_and_themes,
+            test_session_name,
+            test_multiple_documents,
+            test_selection_comments,
+            test_code_file,
+            test_clicks_that_do_not_comment,
+            test_keyboard_navigation,
+            test_unsaved_comment_is_kept,
+            test_same_file_twice_in_one_diff,
+            test_directory_tree,
+            test_comment_box_wraps_within_view,
+            test_markdown_file_in_a_diff_uses_code_size,
+            test_markdown_html_is_not_rendered,
+        ):
             if only and test.__name__ not in only:
                 continue
             page = browser.new_page()

@@ -2,6 +2,7 @@
 
 Run: uv run --no-project --with playwright python tests/screenshots.py
 """
+
 import json
 import shutil
 import subprocess
@@ -56,8 +57,13 @@ def _shoot(page, url, work, *docs):
 
 
 def main():
-    diff = subprocess.run(['git', '-C', str(_ROOT), 'show', 'dc6bf53', '--format=', '--', 'src/main.rs', 'src/platform.rs'],
-                          capture_output=True, check=True, text=True, encoding='utf-8').stdout
+    diff = subprocess.run(
+        ['git', '-C', str(_ROOT), 'show', 'dc6bf53', '--format=', '--', 'src/main.rs', 'src/platform.rs'],
+        capture_output=True,
+        check=True,
+        text=True,
+        encoding='utf-8',
+    ).stdout
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
         shutil.copytree(_ROOT / 'ui', work)
