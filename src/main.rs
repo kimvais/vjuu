@@ -349,6 +349,8 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/vendor/markdown-it.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/markdown-it.min.js")), "text/javascript"),
         "/vendor/diff2html-ui.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html-ui.min.js")), "text/javascript"),
         "/vendor/diff2html.min.css" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html.min.css")), "text/css"),
+        "/vendor/inter.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/inter.woff2")), "font/woff2"),
+        "/vendor/jetbrains-mono.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2"),
         // A spare window has no document yet; the page waits for revuLoad().
         "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
             Some(r) => (Cow::Owned(serde_json::to_vec(&r.doc).expect("Doc serialises")), "application/json"),

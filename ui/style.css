@@ -1,5 +1,11 @@
+/* Embedded in the exe rather than fetched, so opening stays instant and works offline. */
+@font-face { font-family: "Inter"; src: url("vendor/inter.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono"; src: url("vendor/jetbrains-mono.woff2") format("woff2"); font-weight: 100 800; }
+
 :root {
   color-scheme: light dark;
+  --sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, monospace;
   --bg: #ffffff;
   --fg: #1f2328;
   --muted: #59636e;
@@ -27,7 +33,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 15px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif;
+  font: 15px/1.55 var(--sans);
 }
 button {
   font: inherit;
@@ -56,7 +62,7 @@ header {
 
 main { padding: 16px 16px 16px 40px; }
 .markdown { max-width: 900px; }
-.markdown pre, .markdown code { background: var(--code-bg); border-radius: 6px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; }
+.markdown pre, .markdown code { background: var(--code-bg); border-radius: 6px; font-family: var(--mono); font-size: 13px; }
 .markdown pre { padding: 12px; overflow-x: auto; }
 .markdown code { padding: 1px 4px; }
 .markdown pre code { padding: 0; }
@@ -65,6 +71,7 @@ main { padding: 16px 16px 16px 40px; }
 .markdown img { max-width: 100%; }
 .markdown blockquote { margin-left: 0; padding-left: 12px; border-left: 3px solid var(--border); color: var(--muted); }
 a { color: var(--accent); }
+.d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }
 
 .focused { background: var(--focus) !important; outline: 1px solid var(--accent); }
 .markdown [data-key]:hover { background: var(--focus); }
@@ -92,7 +99,7 @@ a { color: var(--accent); }
   gap: 8px;
   align-items: flex-start;
   flex-wrap: wrap;
-  font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.5 var(--sans);
   white-space: normal;
 }
 .comment .text { flex: 1; white-space: pre-wrap; cursor: text; }

@@ -104,6 +104,9 @@ def test_markdown(page, url, work):
         'overall': 'good start',
     }, review
     assert page.inner_text('#count') == '2 comments'
+    # Fonts are embedded; a wrong path silently falls back to system fonts.
+    loaded = page.evaluate("document.fonts.ready.then(() => [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family).sort())")
+    assert loaded == ['"Inter"', '"JetBrains Mono"'] or loaded == ['Inter', 'JetBrains Mono'], loaded
 
 
 def test_markdown_html_is_not_rendered(page, url, work):
