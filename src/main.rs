@@ -64,7 +64,9 @@ impl Request {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 enum Msg {
-    State { review: Review },
+    State {
+        review: Review,
+    },
     Done,
     Rendered,
     /// The page has drawn its documents. Finishing WebView2's start-up can hand focus back to the previous
@@ -72,7 +74,9 @@ enum Msg {
     Ready,
     // The window is frameless; the page draws the title bar and asks for these.
     Drag,
-    Resize { dir: String },
+    Resize {
+        dir: String,
+    },
     Minimize,
     Maximize,
 }
@@ -117,10 +121,13 @@ fn main() {
             let mut bytes = Vec::new();
             std::io::stdin().read_to_end(&mut bytes).unwrap_or_else(|e| fail(&format!("Cannot read stdin: {e}")));
             let text = String::from_utf8_lossy(&bytes).into_owned();
-            let doc = Doc { name: "stdin".into(), kind: kind_of("", &text).into(), text, base: env::current_dir().ok() };
+            let doc =
+                Doc { name: "stdin".into(), kind: kind_of("", &text).into(), text, base: env::current_dir().ok() };
             request(vec![doc])
         }
-        ref paths @ [_, ..] if paths.iter().all(|p| !p.starts_with('-')) => request(paths.iter().map(|p| file_doc(p)).collect()),
+        ref paths @ [_, ..] if paths.iter().all(|p| !p.starts_with('-')) => {
+            request(paths.iter().map(|p| file_doc(p)).collect())
+        }
         _ => {
             eprintln!("{USAGE}");
             process::exit(2)
@@ -140,11 +147,15 @@ fn main() {
 /// Returns the title of the Claude Code session running us: its `/rename` name, else the generated one.
 fn claude_session_title() -> Option<String> {
     let id = env::var("CLAUDE_CODE_SESSION_ID").ok()?;
-    let root = env::var_os("CLAUDE_CONFIG_DIR")
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude")))?;
+    let root = env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
+        env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude"))
+    })?;
     // The project folder is the session's start directory, mangled; finding the id is simpler than mangling.
-    let file = fs::read_dir(root.join("projects")).ok()?.flatten().map(|d| d.path().join(format!("{id}.jsonl"))).find(|p| p.is_file())?;
+    let file = fs::read_dir(root.join("projects"))
+        .ok()?
+        .flatten()
+        .map(|d| d.path().join(format!("{id}.jsonl")))
+        .find(|p| p.is_file())?;
     transcript_title(&fs::read_to_string(file).ok()?)
 }
 
@@ -247,11 +258,12 @@ fn spawn_server() {
 /// Accepts clients on a thread and hands each request to the event loop.
 fn listen(proxy: EventLoopProxy<AppEvent>) {
     // A socket file left by a crashed instance would block us forever; we only get here when nobody answered it.
-    let listener = match ListenerOptions::new().name(pipe_name()).try_overwrite(platform::socket_may_be_stale()).create_sync() {
-        Ok(listener) => listener,
-        // Another resident instance won the race.
-        Err(_) => process::exit(0),
-    };
+    let listener =
+        match ListenerOptions::new().name(pipe_name()).try_overwrite(platform::socket_may_be_stale()).create_sync() {
+            Ok(listener) => listener,
+            // Another resident instance won the race.
+            Err(_) => process::exit(0),
+        };
     thread::spawn(move || {
         for conn in listener.incoming().filter_map(Result::ok) {
             let mut reader = BufReader::new(conn);
@@ -330,7 +342,9 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 }
                 finish(&mut sessions, id, false)
             }
-            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, window_id, true),
+            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => {
+                finish(&mut sessions, window_id, true)
+            }
             // Activation focuses the native window, not the webview inside it; pass keyboard focus on, or keys
             // go nowhere until the page is clicked (seen with resident windows and after alt-tab).
             Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } => {
@@ -430,7 +444,8 @@ fn new_session(
             }
             Err(e) => eprintln!("Bad message from UI: {e}"),
         });
-    let webview = platform::build_webview(builder, &window).unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
+    let webview =
+        platform::build_webview(builder, &window).unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
     Session { webview, window, _context: own, slot, reply: None, latest: Review::default(), started: Instant::now() }
 }
 
@@ -460,13 +475,23 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/" => (Cow::Borrowed(include_bytes!("../ui/index.html")), "text/html"),
         "/app.js" => (Cow::Borrowed(include_bytes!("../ui/app.js")), "text/javascript"),
         "/style.css" => (Cow::Borrowed(include_bytes!("../ui/style.css")), "text/css"),
-        "/vendor/markdown-it.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/markdown-it.min.js")), "text/javascript"),
-        "/vendor/diff2html-ui-base.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html-ui-base.min.js")), "text/javascript"),
-        "/vendor/highlight.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/highlight.min.js")), "text/javascript"),
-        "/vendor/hljs-languages.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/hljs-languages.min.js")), "text/javascript"),
+        "/vendor/markdown-it.min.js" => {
+            (Cow::Borrowed(include_bytes!("../ui/vendor/markdown-it.min.js")), "text/javascript")
+        }
+        "/vendor/diff2html-ui-base.min.js" => {
+            (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html-ui-base.min.js")), "text/javascript")
+        }
+        "/vendor/highlight.min.js" => {
+            (Cow::Borrowed(include_bytes!("../ui/vendor/highlight.min.js")), "text/javascript")
+        }
+        "/vendor/hljs-languages.min.js" => {
+            (Cow::Borrowed(include_bytes!("../ui/vendor/hljs-languages.min.js")), "text/javascript")
+        }
         "/vendor/diff2html.min.css" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html.min.css")), "text/css"),
         "/vendor/inter.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/inter.woff2")), "font/woff2"),
-        "/vendor/jetbrains-mono.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2"),
+        "/vendor/jetbrains-mono.woff2" => {
+            (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2")
+        }
         // A spare window has no document yet; the page waits for vjuuLoad().
         "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
             Some(r) => (Cow::Owned(serde_json::to_vec(r).expect("Request serialises")), "application/json"),
@@ -476,11 +501,15 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         // shortcut: no percent-decoding, so paths with spaces 404.
         _ => {
             let file = path.strip_prefix("/files/").and_then(|p| p.split_once('/')).and_then(|(i, rest)| {
-                let base = slot.lock().expect("slot lock").as_ref()?.docs.get(i.parse::<usize>().ok()?)?.base.clone()?;
+                let base =
+                    slot.lock().expect("slot lock").as_ref()?.docs.get(i.parse::<usize>().ok()?)?.base.clone()?;
                 Some(base.join(rest))
             });
             match file.and_then(|f| fs::read(f).ok()) {
-                Some(bytes) => (Cow::Owned(bytes), if path.ends_with(".svg") { "image/svg+xml" } else { "application/octet-stream" }),
+                Some(bytes) => (
+                    Cow::Owned(bytes),
+                    if path.ends_with(".svg") { "image/svg+xml" } else { "application/octet-stream" },
+                ),
                 None => return not_found(),
             }
         }
@@ -497,7 +526,8 @@ fn save_review(name: &str, review: &Review) -> String {
     let md = review::to_markdown(name, review);
     let dir = reviews_dir();
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let slug: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' { c } else { '_' }).take(60).collect();
+    let slug: String =
+        name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' { c } else { '_' }).take(60).collect();
     let path = dir.join(format!("{secs}-{slug}.md"));
     if let Err(e) = fs::create_dir_all(&dir).and_then(|_| fs::write(&path, &md)) {
         eprintln!("Could not save review to {}: {e}", path.display());
@@ -593,8 +623,15 @@ mod tests {
             (vec![renamed, quoted], Some("Mine")),
             (vec![quoted, "not json customTitle"], None),
         ] {
-            assert_eq!(transcript_title(&lines.join("
-")).as_deref(), title, "{lines:?}");
+            assert_eq!(
+                transcript_title(&lines.join(
+                    "
+"
+                ))
+                .as_deref(),
+                title,
+                "{lines:?}"
+            );
         }
     }
 
@@ -615,7 +652,13 @@ mod tests {
         assert_eq!(install_skill(&home).unwrap(), [home.join(".agents").join("skills").join("vjuu").join("SKILL.md")]);
         fs::create_dir_all(home.join(".claude")).unwrap();
         let written = install_skill(&home).unwrap();
-        assert_eq!(written, [home.join(".claude").join("skills").join("vjuu").join("SKILL.md"), home.join(".agents").join("skills").join("vjuu").join("SKILL.md")]);
+        assert_eq!(
+            written,
+            [
+                home.join(".claude").join("skills").join("vjuu").join("SKILL.md"),
+                home.join(".agents").join("skills").join("vjuu").join("SKILL.md")
+            ]
+        );
         // Running it again (after an upgrade) overwrites the old skill.
         assert!(written.iter().all(|p| fs::read_to_string(p).unwrap() == SKILL));
         fs::remove_dir_all(&home).unwrap();
