@@ -61,8 +61,8 @@ def test_diff(page, url, work):
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
     _comment(page, 'rename is fine')
+    # Clicking anywhere on a line comments on it, not just the line number.
     page.locator('tr', has=page.locator('.d2h-del')).first.locator('.d2h-code-line').click()
-    page.keyboard.press('c')
     _comment(page, 'why removed?')
     assert page.locator('tr.vjuu-c').count() == 2
     page.keyboard.press('v')
@@ -85,14 +85,11 @@ def test_diff(page, url, work):
 def test_markdown(page, url, work):
     _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     page.get_by_text('First paragraph').click()
-    page.keyboard.press('c')
     _comment(page, 'tighten this')
     page.get_by_text('item two').click()
-    page.keyboard.press('Enter')
     _comment(page, 'drop it')
     # Esc on a new comment leaves nothing behind.
     page.get_by_text('print(1)').click()
-    page.keyboard.press('c')
     page.keyboard.press('Escape')
     page.fill('#overall', 'good start')
     review = _review(page)
@@ -137,7 +134,6 @@ def test_multiple_documents(page, url, work):
     # Same name, same line, different documents: two separate comments.
     for n, text in ((0, 'first copy'), (1, 'second copy')):
         page.get_by_text('First paragraph').nth(n).click()
-        page.keyboard.press('c')
         _comment(page, text)
     page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
     _comment(page, 'in the diff')
@@ -210,6 +206,19 @@ def test_code_file(page, url, work):
     assert _review(page)['comments'] == [{'file': 'src/main.rs', 'start': 4, 'end': 4, 'old': False, 'quote': '    let x = "s";', 'text': 'name it'}]
 
 
+def test_clicks_that_do_not_comment(page, url, work):
+    _open(page, url, work, {'name': 'l.md', 'kind': 'md', 'text': 'See [the docs](https://example.invalid/docs) first.\n\nSecond.\n'})
+    # Runs after vjuu's handler; keeps the test on the page instead of following the link.
+    page.evaluate("window.addEventListener('click', (e) => e.preventDefault())")
+    page.get_by_text('the docs').click()
+    assert page.locator('.vjuu-c').count() == 0
+    # The click that ends a drag-selection must leave the selection for the Comment button.
+    _select(page, '.markdown p', '.markdown p')
+    page.evaluate("document.querySelector('.markdown p').dispatchEvent(new MouseEvent('click', {bubbles: true}))")
+    assert page.locator('.vjuu-c').count() == 0
+    assert page.locator('#sel-comment').is_visible()
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
     _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n'})
     assert page.locator('#content img').count() == 0
@@ -223,7 +232,7 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file,
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment,
                      test_markdown_html_is_not_rendered):
             page = browser.new_page()
             page.add_init_script(_STUB)

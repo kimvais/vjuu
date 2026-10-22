@@ -39,16 +39,15 @@ its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 |-----|--------|
 | `j` / `k` | Next / previous line or block |
 | `n` / `p` | Next / previous file (diff) or heading (markdown) |
-| `c` or `Enter` | Comment on the focused line or block |
+| `c` or `Enter` | Comment on the selection, or the line or block focused with `j`/`k` |
 | `Ctrl+Enter` / `Esc` | Save / cancel the comment being written |
 | `v` | Toggle unified / side-by-side diff |
 | `t` | Next theme: Auto, Light, Monokai, Graphite |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+Shift+Enter` | Done |
 
-Fastest: select text (a word, a paragraph, several diff lines) and click **Comment** or press `c`; the
-comment covers every line the selection touches. You can also click the `+` that appears on hover, or a diff
-line number.
+Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
+rows) and click **Comment** or press `c`. Links still open; clicks inside a comment edit it.
 
 Themes: **Light** (GitHub), **Monokai** (its own warm dark grey), **Graphite** (Monokai code colours on
 neutral grey). **Auto** picks Light or Monokai from the Windows setting. The choice is remembered.

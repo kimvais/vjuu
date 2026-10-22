@@ -1,7 +1,6 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
 const content = $('#content');
-const addBtn = $('#add');
 const overall = $('#overall');
 
 /** {docs: [{name, kind, text}], autoclose} */
@@ -475,31 +474,27 @@ function done() {
   post({ type: 'done' });
 }
 
+// Highlight only the innermost line or block: that is what a click comments on.
+let hovered = null;
 content.addEventListener('mouseover', (e) => {
-  const el = e.target.closest('[data-key]');
-  if (!el) return;
-  const num = el.querySelector('.d2h-code-linenumber, .d2h-code-side-linenumber, .code-ln');
-  const r = el.getBoundingClientRect();
-  addBtn.hidden = false;
-  if (num) {
-    const n = num.getBoundingClientRect();
-    addBtn.style.top = `${n.top + window.scrollY + (n.height - 22) / 2}px`;
-    addBtn.style.left = `${n.right - 11}px`;
-  } else {
-    addBtn.style.top = `${r.top + window.scrollY + 2}px`;
-    addBtn.style.left = `${Math.max(r.left - 28, 0)}px`;
-  }
-  addBtn.onclick = () => startComment(el);
+  const el = e.target.closest('.vjuu-c') ? null : e.target.closest('[data-key]');
+  if (el === hovered) return;
+  hovered?.classList.remove('hovered');
+  hovered = el;
+  el?.classList.add('hovered');
+});
+content.addEventListener('mouseleave', () => {
+  hovered?.classList.remove('hovered');
+  hovered = null;
 });
 
+// Clicking content has no other purpose than commenting, so any click on a line or block starts one.
 content.addEventListener('click', (e) => {
-  if (e.target.closest('.vjuu-c')) return;
-  const link = e.target.closest('a[href]');
-  if (link) return;
+  if (e.target.closest('.vjuu-c, a[href]')) return;
+  // A drag that selected text is a range comment: the Comment button handles it.
+  if (!getSelection().isCollapsed) return;
   const el = e.target.closest('[data-key]');
-  if (!el) return;
-  // Clicking a diff line number comments right away, like GitLab and GitHub.
-  if (e.target.closest('.d2h-code-linenumber, .d2h-code-side-linenumber, .code-ln')) startComment(el); else setFocus(el);
+  if (el) startComment(el);
 });
 
 document.addEventListener('keydown', (e) => {

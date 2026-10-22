@@ -166,25 +166,14 @@ main { padding: 24px 24px 24px 48px; }
 .markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
 .markdown blockquote > :last-child { margin-bottom: 0; }
 .markdown h1, .markdown h2, .markdown h3 { scroll-margin-top: calc(var(--header-h, 45px) + 8px); }
-tr[data-key]:hover td { background-image: linear-gradient(var(--focus), var(--focus)); }
+tr.hovered td { background-image: linear-gradient(var(--focus), var(--focus)); }
 a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }
 
 .focused { background: var(--focus) !important; outline: 1px solid var(--accent); }
-.markdown [data-key]:hover { background: var(--focus); }
-
-#add {
-  position: absolute;
-  z-index: 5;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  line-height: 20px;
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-fg);
-  font-weight: 700;
-}
+/* Whatever is hovered gets the comment on click. */
+.hovered { cursor: pointer; }
+.hovered:not(tr) { background: var(--focus); border-radius: 4px; }
 
 .comment {
   margin: 6px 0;
