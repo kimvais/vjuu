@@ -173,6 +173,9 @@
 
     /* How it works */
     .how { padding: var(--section-y) 0; }
+    /* Straight after the hero, whose bottom padding already separates them. */
+    .why { padding-top: 0; }
+    .why .bonus { max-width: 40em; margin: 32px 0 0; text-wrap: pretty; }
     .panels {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -198,6 +201,7 @@
       letter-spacing: -0.02em;
     }
     .panel p { margin: 0; font-size: 16px; line-height: 1.6; }
+    .panel .eyebrow { margin-bottom: 12px; font-size: 11px; }
 
     /* Install: the raised black gives the page its one change of rhythm. */
     .install { padding: var(--section-y) 0; background: var(--black-raised); }
@@ -245,9 +249,34 @@
         <!-- Finnish: "rallienglanti", English as Finnish rally drivers speak it. -->
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Don't open the file. <span>Your agent already did.</span></h1>
-        <p>When an agent would say "open this and review it", it runs <code>vjuu</code> instead. A window opens with the markdown, diff or source. You comment on lines, click Done, and your comments go back to the agent as markdown, anchored to <code>file:line</code>.</p>
+        <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Done, and your comments go straight back to the agent.</p>
         <a class="button" href="#install">Install</a>
         <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>Source on GitHub</a>
+      </div>
+    </section>
+
+    <section class="how why" aria-labelledby="why-title">
+      <div class="column">
+        <p class="eyebrow">Why</p>
+        <h2 id="why-title">Built out of annoyance.</h2>
+        <ol class="panels">
+          <li class="panel">
+            <p class="eyebrow">Agents</p>
+            <h3>"Open X and review it."</h3>
+            <p>I hated it every time. Now the agent opens the file itself, and my comments go back to it as <code>file:line</code> markdown it can act on.</p>
+          </li>
+          <li class="panel">
+            <p class="eyebrow">Diffs</p>
+            <h3>IDE diff windows are sluggish.</h3>
+            <p>Especially on a cold start. Having the agent push, open an MR and open it in the browser was even slower. Nothing fast and local had inline comments.</p>
+          </li>
+          <li class="panel">
+            <p class="eyebrow">Markdown</p>
+            <h3>Editors, but no viewer.</h3>
+            <p>Everything I had installed wanted to edit markdown, and none of it let me comment on a line. I couldn't be arsed to look for a viewer I was pretty sure didn't exist, so I built one.</p>
+          </li>
+        </ol>
+        <p class="bonus">Nice to haves: it's keyboard first (arrows to move, Enter to comment, Ctrl+Enter when done), and dark mode follows your system out of the box.</p>
       </div>
     </section>
 
