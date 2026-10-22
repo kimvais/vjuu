@@ -17,6 +17,7 @@ foreground timeout, and you are notified when it exits. Do not poll; wait for th
 | What to review | Command |
 |---|---|
 | A markdown file | `revu path/to/file.md` |
+| Several files at once | `revu plan.md notes.md change.diff` (one window, one review) |
 | Uncommitted changes | `revu --git` (add `--staged`, `HEAD`, `main...HEAD`, paths: any `git diff` args) |
 | A commit | `git show <sha> \| revu -` |
 | A diff or patch file | `revu change.diff` |
