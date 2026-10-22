@@ -14,7 +14,6 @@
 <header id="titlebar">
   <span id="brand">vjuu</span>
   <span id="name"></span>
-  <span id="count"></span>
   <select id="theme" title="Theme (t)">
     <option value="auto">Auto</option>
     <option value="light">Light</option>
@@ -22,7 +21,6 @@
     <option value="graphite">Graphite</option>
   </select>
   <button id="view" hidden title="Toggle unified / side-by-side (v)">Side-by-side</button>
-  <button id="done" title="Ctrl+Shift+Enter">Done</button>
   <div id="window-controls">
     <button data-cmd="minimize" title="Minimize">&#xE921;</button>
     <button data-cmd="maximize" id="max" title="Maximize">&#xE922;</button>
@@ -38,6 +36,11 @@
   </section>
   <button id="sel-comment" hidden title="Comment on the selected lines (c)">Comment</button>
 </div>
+<footer id="statusbar">
+  <span id="count"></span>
+  <span id="hint">Click a line to comment, or select text to comment on a range</span>
+  <button id="done" title="Ctrl+Shift+Enter">Done</button>
+</footer>
 <!-- Resize handles: the webview covers the window, so its edges have to be handled here. -->
 <div class="edge" data-dir="n"></div><div class="edge" data-dir="s"></div>
 <div class="edge" data-dir="e"></div><div class="edge" data-dir="w"></div>

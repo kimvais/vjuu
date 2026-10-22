@@ -341,19 +341,21 @@ fn window_command(window: &Window, msg: Msg) {
     }
 }
 
-/// Asks Windows 11 for rounded corners, which frameless windows don't get by default; older Windows ignores it.
-fn round_corners(window: &Window) {
+/// vjuu's brand colour (#a6e22e, Monokai green) as a Windows COLORREF (0x00BBGGRR); ui/style.css has it as --brand.
+const BRAND_COLORREF: u32 = 0x002E_E2A6;
+
+/// Asks Windows 11 for rounded corners and a brand-coloured border, which frameless windows don't get by
+/// default; older Windows ignores both.
+fn style_frame(window: &Window) {
     use tao::platform::windows::WindowExtWindows;
-    use windows_sys::Win32::Graphics::Dwm::{DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute};
-    let preference = DWMWCP_ROUND;
-    unsafe {
-        DwmSetWindowAttribute(
-            window.hwnd() as _,
-            DWMWA_WINDOW_CORNER_PREFERENCE as u32,
-            (&raw const preference).cast(),
-            size_of_val(&preference) as u32,
-        );
-    }
+    use windows_sys::Win32::Graphics::Dwm::{
+        DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
+    };
+    let set = |attribute: i32, value: u32| unsafe {
+        DwmSetWindowAttribute(window.hwnd() as _, attribute as u32, (&raw const value).cast(), size_of_val(&value) as u32);
+    };
+    set(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND as u32);
+    set(DWMWA_BORDER_COLOR, BRAND_COLORREF);
 }
 
 /// Creates a window and webview; without a request it stays hidden until a client hands one over.
@@ -372,7 +374,7 @@ fn new_session(
         .with_undecorated_shadow(true)
         .build(target)
         .unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
-    round_corners(&window);
+    style_frame(&window);
     let slot: Slot = Arc::new(Mutex::new(request));
     let proxy = proxy.clone();
     let id = window.id();

@@ -5,6 +5,10 @@
 /* Themes. app.js sets <html data-theme>; "Auto" resolves to light or monokai from the OS setting.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
+  /* vjuu's brand colour (Monokai green): window border, wordmark, Done. src/main.rs sets the border to the same value. */
+  --brand: #a6e22e;
+  --brand-fg: #272822;
+  --brand-text: #a6e22e;
   --sans: "Inter", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", Consolas, monospace;
 }
@@ -32,6 +36,8 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --hl-meta: #6e7781;
   --heading: #1f2328;
   --chrome: #f3f3f3;
+  /* #a6e22e text is unreadable on a near-white title bar. */
+  --brand-text: #5c8a00;
   --heading-3: #0550ae;
   --inline-code: #953800;
   --d2h-bg-color: var(--bg);
@@ -144,7 +150,7 @@ button, select {
   font-size: 13px;
   user-select: none;
 }
-#brand { font-weight: 700; color: var(--accent); letter-spacing: -0.02em; }
+#brand { font-weight: 700; color: var(--brand-text); letter-spacing: -0.02em; }
 #titlebar select, #titlebar > button { padding: 1px 10px; }
 #window-controls { display: flex; align-self: stretch; margin-left: 4px; }
 #window-controls button {
@@ -172,9 +178,22 @@ button, select {
 .edge[data-dir="nw"] { top: 0; left: 0; width: 8px; height: 8px; cursor: nwse-resize; }
 .edge[data-dir="se"] { bottom: 0; right: 0; width: 8px; height: 8px; cursor: nwse-resize; }
 body.maximized .edge { display: none; }
-#name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#count { color: var(--muted); flex: 1; }
-#done { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+#name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#count { color: var(--fg); font-weight: 600; }
+#statusbar {
+  flex: none;
+  height: 48px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 0 14px;
+  background: var(--chrome);
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+#hint { color: var(--muted); }
+#done { margin-left: auto; padding: 5px 22px; background: var(--brand); border-color: var(--brand); color: var(--brand-fg); font-weight: 700; }
+#done:hover { filter: brightness(1.08); }
 
 main { padding: 24px 24px 24px 48px; }
 .markdown { max-width: 860px; font-size: 16px; line-height: 1.7; }
@@ -242,7 +261,7 @@ tr.vjuu-c td { padding: 0 8px; }
   position: fixed;
   z-index: 20; /* above the scrolling area, which is positioned too */
   top: var(--header-h, 45px);
-  bottom: 0;
+  bottom: 49px; /* above the status bar */
   left: 0;
   width: 280px;
   overflow-y: auto;
