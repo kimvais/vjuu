@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>vjuu: a review window for agent handoffs</title>
+  <meta name="description" content="When an agent would ask you to open a file and review it, it runs vjuu instead. You comment on lines, click Done, and your comments go back to the agent.">
+  <style>
+    /* Self-hosted, so the page makes no third-party requests. */
+    @font-face {
+      font-family: "Inter";
+      font-style: normal;
+      font-weight: 300 500;
+      font-display: swap;
+      src: url("fonts/Inter-latin.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url("fonts/JetBrainsMono.woff2") format("woff2");
+    }
+
+    :root {
+      --black: #000000;
+      --black-raised: #0e0e0e;
+      --ink: #ffffff;
+      /* 64% is the floor for any text: about 9:1 on black. */
+      --ink-body: rgba(255, 255, 255, 0.82);
+      --ink-dim: rgba(255, 255, 255, 0.64);
+      --line: rgba(255, 255, 255, 0.18);
+
+      --font: "Inter", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+      --page-max: 1120px;
+      --page-x: 40px;
+      --section-y: 96px;
+      --radius-card: 6px;
+      --glide: cubic-bezier(.22, .61, .36, 1);
+      --dur-wipe: 460ms;
+    }
+
+    @media (max-width: 720px) {
+      :root { --page-x: 22px; --section-y: 56px; }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { background: var(--black); }
+
+    body {
+      margin: 0;
+      color: var(--ink-body);
+      font: 300 18px/1.6 var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .column {
+      max-width: var(--page-max);
+      margin: 0 auto;
+      padding: 0 var(--page-x);
+    }
+
+    .eyebrow {
+      margin: 0 0 20px;
+      color: var(--ink-dim);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    /* The grow-in underline: confirms the hover, nothing more. */
+    .textlink {
+      color: var(--ink);
+      text-decoration: none;
+      background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+      transition: background-size var(--dur-wipe) var(--glide);
+    }
+    .textlink:hover, .textlink:focus-visible { background-size: 100% 1px; }
+
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+
+    h2 {
+      margin: 0 0 16px;
+      color: var(--ink);
+      font-size: clamp(26px, 2.8vw, 36px);
+      font-weight: 400;
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+      text-wrap: balance;
+    }
+    .lede { max-width: 36em; margin: 0 0 40px; text-wrap: pretty; }
+
+    code, pre { font-family: var(--mono); font-size: 14px; }
+    p code { color: var(--ink); font-size: 0.85em; }
+    pre {
+      margin: 0;
+      padding: 18px 20px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+      background: var(--black-raised);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+    pre .dim { color: var(--ink-dim); }
+
+    /* Header */
+    .header .column {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 88px;
+    }
+    .wordmark {
+      color: var(--ink);
+      font-size: 20px;
+      font-weight: 300;
+      letter-spacing: -0.02em;
+    }
+    .header .textlink { font-size: 15px; font-weight: 400; }
+
+    /* Hero */
+    .hero { padding: calc(var(--section-y) * 1.25) 0 var(--section-y); }
+    .hero h1 {
+      max-width: 15em;
+      margin: 0 0 28px;
+      font-size: clamp(32px, 4.4vw, 56px);
+      font-weight: 400;
+      line-height: 1.07;
+      letter-spacing: -0.03em;
+      text-wrap: balance;
+      color: var(--ink);
+    }
+    .hero h1 span { display: block; font-weight: 300; color: var(--ink-dim); }
+    .hero p { max-width: 34em; margin: 0 0 40px; text-wrap: pretty; }
+
+    .button {
+      display: inline-block;
+      padding: 0.85em 1.6em;
+      border: 1px solid var(--ink);
+      border-radius: 2em;
+      background: var(--ink);
+      color: var(--black);
+      font-size: 15px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background-color var(--dur-wipe) var(--glide), color var(--dur-wipe) var(--glide);
+    }
+    .button:hover, .button:focus-visible { background: transparent; color: var(--ink); }
+    .button + .textlink { margin-left: 24px; font-size: 15px; font-weight: 400; }
+
+    /* Screenshots */
+    .shots { padding: 0 0 var(--section-y); }
+    .shot { margin: 0 0 48px; }
+    .shot:last-child { margin-bottom: 0; }
+    .shot img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+    }
+    .shot figcaption { margin-top: 16px; color: var(--ink-dim); font-size: 15px; }
+
+    /* How it works */
+    .how { padding: var(--section-y) 0; }
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin: 0 0 40px;
+      padding: 0;
+      list-style: none;
+    }
+    @media (max-width: 720px) {
+      .panels { grid-template-columns: 1fr; }
+    }
+    .panel {
+      padding: 32px 28px 36px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+    }
+    .panel h3 {
+      margin: 0 0 12px;
+      color: var(--ink);
+      font-size: 24px;
+      font-weight: 400;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    .panel p { margin: 0; font-size: 16px; line-height: 1.6; }
+
+    /* Install: the raised black gives the page its one change of rhythm. */
+    .install { padding: var(--section-y) 0; background: var(--black-raised); }
+    .install pre { background: var(--black); }
+    /* minmax(0, ...): long commands scroll inside their box instead of widening the page. */
+    .platforms { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin: 0; }
+    .platforms dt { margin: 0 0 10px; color: var(--ink); font-size: 16px; font-weight: 400; }
+    .platforms dd { margin: 0; }
+    .platforms dd p { margin: 10px 0 0; color: var(--ink-dim); font-size: 15px; }
+
+    .footer { background: var(--black-raised); }
+    .footer .column {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding-top: 28px;
+      padding-bottom: 40px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-dim);
+      font-size: 14px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0s !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="column">
+      <span class="wordmark">vjuu</span>
+      <a class="textlink" href="https://github.com/kimvais/vjuu">GitHub</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="column">
+        <p class="eyebrow">Review for agent handoffs</p>
+        <h1>Your agent asks for a review. <span>You comment on the lines.</span></h1>
+        <p>When an agent would say "open this and review it", it runs <code>vjuu</code> instead. A window opens with the markdown, diff or source. You comment on lines, click Done, and your comments go back to the agent as markdown, anchored to <code>file:line</code>.</p>
+        <a class="button" href="#install">Install</a>
+        <a class="textlink" href="https://github.com/kimvais/vjuu">Source on GitHub</a>
+      </div>
+    </section>
+
+    <section class="shots" aria-label="Screenshots">
+      <div class="column">
+        <figure class="shot">
+          <img src="img/markdown.png" width="2560" height="1600" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and a Done button at the bottom.">
+          <figcaption>A plan, with a comment on two of its lines.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="img/diff.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a syntax-highlighted Rust diff with a comment under one added line and a file list on the left.">
+          <figcaption>A diff, with a comment under the added line.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="how" aria-labelledby="how-title">
+      <div class="column">
+        <p class="eyebrow">How it works</p>
+        <h2 id="how-title">Fast enough to stay in the loop.</h2>
+        <p class="lede">After the first window, vjuu keeps a pre-warmed one ready. A markdown file appears in about 15 ms.</p>
+        <ol class="panels">
+          <li class="panel">
+            <p class="eyebrow">Open</p>
+            <h3>Anything the agent wrote.</h3>
+            <p>Markdown, diffs and patches, <code>git diff</code> ranges, any source file, or stdin. Several files stack in one window.</p>
+          </li>
+          <li class="panel">
+            <p class="eyebrow">Comment</p>
+            <h3>On a line or a selection.</h3>
+            <p>Click a line, or select across lines, paragraphs or diff rows. Keyboard first: arrows to move, Enter to comment, Ctrl+Enter when done.</p>
+          </li>
+          <li class="panel">
+            <p class="eyebrow">Return</p>
+            <h3>Markdown on stdout.</h3>
+            <p>The agent gets every comment with its <code>file:line</code> and the quoted lines. Each review is also saved, and <code>vjuu last</code> prints it again.</p>
+          </li>
+        </ol>
+<pre><span class="dim"># Review: docs/plan.md (2 comments)</span>
+
+## docs/plan.md:9
+&gt; 3. Hand each new document to it over a named pipe.
+
+What happens when two agents call vjuu at the same time?
+
+## docs/plan.md:14
+&gt; - A stale pipe after a crash must not block the next call.
+
+Add a test for this one.</pre>
+      </div>
+    </section>
+
+    <section class="install" id="install" aria-labelledby="install-title">
+      <div class="column">
+        <p class="eyebrow">Install</p>
+        <h2 id="install-title">Windows, macOS and Linux.</h2>
+        <p class="lede">Uses the system web view: WebView2 on Windows, WKWebView on macOS, WebKitGTK 4.1 on Linux (Debian 12+, Ubuntu 22.04+).</p>
+        <dl class="platforms">
+          <div>
+            <dt>Windows</dt>
+            <dd><pre>winget install vjuu</pre></dd>
+          </div>
+          <div>
+            <dt>macOS</dt>
+            <dd>
+              <pre>brew install kimvais/tap/vjuu</pre>
+              <p>Not signed or notarised. Homebrew installs work as is; a binary downloaded by hand needs <code>xattr -d com.apple.quarantine vjuu</code> once.</p>
+            </dd>
+          </div>
+          <div>
+            <dt>Debian, Ubuntu</dt>
+            <dd><pre>curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg &gt;/dev/null
+echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
+sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
+          </div>
+          <div>
+            <dt>Claude Code</dt>
+            <dd>
+              <pre>claude plugin marketplace add kimvais/vjuu
+claude plugin install vjuu@vjuu</pre>
+              <p>The plugin adds a skill that tells agents to run vjuu instead of asking you to open files.</p>
+            </dd>
+          </div>
+          <div>
+            <dt>Anything else</dt>
+            <dd>
+              <pre>cargo install --locked --git https://github.com/kimvais/vjuu</pre>
+              <p>Or a <code>.zip</code>, <code>.tar.gz</code> or <code>.deb</code> from <a class="textlink" href="https://github.com/kimvais/vjuu/releases">GitHub Releases</a>. Building on Linux needs <code>libwebkit2gtk-4.1-dev</code> and <code>libgtk-3-dev</code>.</p>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="column">
+      <span>© 2026 Kimmo Parviainen-Jalanko · MIT licence</span>
+      <a class="textlink" href="https://github.com/kimvais/vjuu">GitHub</a>
+    </div>
+  </footer>
+</body>
+</html>

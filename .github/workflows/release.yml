@@ -122,38 +122,15 @@ jobs:
           git commit -m "vjuu ${version}"
           git push
 
-  apt:
-    # apt install vjuu: a signed apt repository on this repo's GitHub Pages (Settings > Pages > Source: GitHub Actions).
+  pages:
+    # Redeploys vjuu.it with the new .deb files in its apt repository.
     needs: release
-    runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-    steps:
-      - id: check
-        env:
-          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-        run: if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::APT_GPG_PRIVATE_KEY not set; skipping apt"; fi
-      - if: steps.check.outputs.ok == 'true'
-        uses: actions/checkout@v5
-      - if: steps.check.outputs.ok == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - if: steps.check.outputs.ok == 'true'
-        name: Build and sign the repository
-        env:
-          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-        run: packaging/apt/build-repo.sh dist site/apt
-      - if: steps.check.outputs.ok == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - if: steps.check.outputs.ok == 'true'
-        uses: actions/deploy-pages@v4
+    uses: ./.github/workflows/pages.yml
+    secrets: inherit
 
   winget:
     # winget install vjuu: opens a pull request to microsoft/winget-pkgs. Works once the first version has been

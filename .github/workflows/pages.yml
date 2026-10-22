@@ -1,0 +1,43 @@
+name: Pages
+
+# vjuu.it: the site in site/ plus the signed apt repository at /apt (Settings > Pages > Source: GitHub Actions).
+# A deploy replaces the whole site, so every run rebuilds apt from the latest release's .deb files; the repository
+# only ever holds the latest version anyway. Runs on site changes, and from release.yml after each release.
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'packaging/apt/**', '.github/workflows/pages.yml']
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        env:
+          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::APT_GPG_PRIVATE_KEY not set; skipping apt"; fi
+      - if: steps.check.outputs.ok == 'true'
+        name: Build and sign the apt repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir dist
+          packaging/apt/build-repo.sh dist site/apt
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
