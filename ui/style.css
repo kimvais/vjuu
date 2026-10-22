@@ -31,6 +31,7 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --hl-param: #1f2328;
   --hl-meta: #6e7781;
   --heading: #1f2328;
+  --chrome: #f3f3f3;
   --heading-3: #0550ae;
   --inline-code: #953800;
   --d2h-bg-color: var(--bg);
@@ -57,6 +58,7 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --hl-param: #fd971f;
   --hl-meta: #75715e;
   --heading: #a6e22e;
+  --chrome: #1e1f1c;
   --heading-3: #66d9ef;
   --inline-code: #fd971f;
   --d2h-bg-color: var(--bg);
@@ -90,6 +92,7 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --border: #3a3a3a;
   --comment-bg: #2e2e2e;
   --code-bg: #171717;
+  --chrome: #141414;
 }
 
 .hljs-keyword, .hljs-selector-tag, .hljs-doctag { color: var(--hl-keyword); }
@@ -108,8 +111,13 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
 .d2h-info { color: var(--muted); }
 
 * { box-sizing: border-box; }
+html, body { height: 100%; }
 body {
   margin: 0;
+  /* Title bar on top, a scrolling content area below it, like Windows Terminal. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
   font: 15px/1.55 var(--sans);
@@ -124,17 +132,46 @@ button, select {
   cursor: pointer;
 }
 
-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+#titlebar {
+  flex: none;
+  height: 40px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  padding: 8px 16px;
-  background: var(--bg);
+  padding-left: 14px;
+  background: var(--chrome);
   border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  user-select: none;
 }
+#brand { font-weight: 700; color: var(--accent); letter-spacing: -0.02em; }
+#titlebar select, #titlebar > button { padding: 1px 10px; }
+#window-controls { display: flex; align-self: stretch; margin-left: 4px; }
+#window-controls button {
+  width: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  font: 10px "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  cursor: default;
+}
+#window-controls button:hover { background: rgba(128, 128, 128, 0.2); }
+#window-controls #close:hover { background: #c42b1c; color: #fff; }
+#scroll { flex: 1; overflow: auto; position: relative; }
+
+/* Resize handles along the window edges; hidden when maximised. */
+.edge { position: fixed; z-index: 50; }
+.edge[data-dir="n"] { top: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+.edge[data-dir="s"] { bottom: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+.edge[data-dir="e"] { right: 0; top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; }
+.edge[data-dir="w"] { left: 0; top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; }
+.edge[data-dir="ne"] { top: 0; right: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+.edge[data-dir="sw"] { bottom: 0; left: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+.edge[data-dir="nw"] { top: 0; left: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+.edge[data-dir="se"] { bottom: 0; right: 0; width: 8px; height: 8px; cursor: nwse-resize; }
+body.maximized .edge { display: none; }
 #name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #count { color: var(--muted); flex: 1; }
 #done { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
@@ -165,7 +202,7 @@ main { padding: 24px 24px 24px 48px; }
 .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
 .markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
 .markdown blockquote > :last-child { margin-bottom: 0; }
-.markdown h1, .markdown h2, .markdown h3 { scroll-margin-top: calc(var(--header-h, 45px) + 8px); }
+.markdown h1, .markdown h2, .markdown h3 { scroll-margin-top: 8px; }
 tr.hovered td { background-image: linear-gradient(var(--focus), var(--focus)); }
 a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }
@@ -203,6 +240,7 @@ tr.vjuu-c td { padding: 0 8px; }
 /* File list for multi-file reviews, like GitLab's and GitHub's. */
 #files {
   position: fixed;
+  z-index: 20; /* above the scrolling area, which is positioned too */
   top: var(--header-h, 45px);
   bottom: 0;
   left: 0;
@@ -222,7 +260,7 @@ body.with-files main, body.with-files #overall-box { margin-left: 280px; }
 #files .add { color: var(--d2h-ins-label-color); font: 12px var(--mono); }
 #files .del { color: var(--d2h-del-label-color); font: 12px var(--mono); }
 #files .badge { background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 0 6px; font-size: 11px; font-weight: 600; }
-.d2h-file-wrapper, .doc { scroll-margin-top: calc(var(--header-h, 45px) + 8px); }
+.d2h-file-wrapper, .doc { scroll-margin-top: 8px; }
 #files a.toc { color: var(--muted); }
 #files a.toc.active, #files a.toc:hover { color: var(--fg); }
 #files .heading { overflow: hidden; text-overflow: ellipsis; }
@@ -243,3 +281,9 @@ table.code { border-collapse: collapse; min-width: 100%; font: 13px/1.6 var(--mo
 table.code td { padding: 0 14px; white-space: pre; vertical-align: top; }
 table.code td.code-ln { width: 1%; text-align: right; color: var(--muted); user-select: none; cursor: pointer; border-right: 1px solid var(--border); }
 table.code tr.vjuu-c td { white-space: normal; font-family: var(--sans); }
+
+/* Thin, theme-coloured scrollbars instead of the classic Windows ones. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }

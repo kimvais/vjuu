@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowBuilder, WindowId};
+use tao::platform::windows::WindowBuilderExtWindows;
+use tao::window::{ResizeDirection, Window, WindowBuilder, WindowId};
 use wry::http::Response;
 use wry::{WebContext, WebView, WebViewBuilder};
 
@@ -56,6 +57,12 @@ enum Msg {
     State { review: Review },
     Done,
     Rendered,
+    // The window is frameless; the page draws the title bar and asks for these.
+    Drag,
+    Resize { dir: String },
+    Minimize,
+    Maximize,
+    Close,
 }
 
 enum AppEvent {
@@ -287,7 +294,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 }
                 finish(&mut sessions, id, false)
             }
-            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, window_id, true),
+            Event::UserEvent(AppEvent::Ui(id, Msg::Close))
+            | Event::WindowEvent { window_id: id, event: WindowEvent::CloseRequested, .. } => finish(&mut sessions, id, true),
+            Event::UserEvent(AppEvent::Ui(id, msg)) => {
+                if let Some(s) = sessions.get(&id) {
+                    window_command(&s.window, msg);
+                }
+            }
             _ => {}
         }
         if spare.is_none() && spare_due.is_some_and(|due| due <= Instant::now()) {
@@ -301,6 +314,48 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     })
 }
 
+/// Moves, resizes, minimises or maximises a frameless window for the page's title bar and edges.
+fn window_command(window: &Window, msg: Msg) {
+    match msg {
+        // drag_window hands the move to Windows, so Aero Snap keeps working.
+        Msg::Drag => {
+            let _ = window.drag_window();
+        }
+        Msg::Resize { dir } => {
+            let dir = match dir.as_str() {
+                "n" => ResizeDirection::North,
+                "s" => ResizeDirection::South,
+                "e" => ResizeDirection::East,
+                "w" => ResizeDirection::West,
+                "ne" => ResizeDirection::NorthEast,
+                "nw" => ResizeDirection::NorthWest,
+                "se" => ResizeDirection::SouthEast,
+                "sw" => ResizeDirection::SouthWest,
+                _ => return,
+            };
+            let _ = window.drag_resize_window(dir);
+        }
+        Msg::Minimize => window.set_minimized(true),
+        Msg::Maximize => window.set_maximized(!window.is_maximized()),
+        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Close => {}
+    }
+}
+
+/// Asks Windows 11 for rounded corners, which frameless windows don't get by default; older Windows ignores it.
+fn round_corners(window: &Window) {
+    use tao::platform::windows::WindowExtWindows;
+    use windows_sys::Win32::Graphics::Dwm::{DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute};
+    let preference = DWMWCP_ROUND;
+    unsafe {
+        DwmSetWindowAttribute(
+            window.hwnd() as _,
+            DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+            (&raw const preference).cast(),
+            size_of_val(&preference) as u32,
+        );
+    }
+}
+
 /// Creates a window and webview; without a request it stays hidden until a client hands one over.
 fn new_session(
     target: &EventLoopWindowTarget<AppEvent>,
@@ -312,8 +367,12 @@ fn new_session(
         .with_title("vjuu")
         .with_visible(request.is_some())
         .with_inner_size(LogicalSize::new(1100.0, 900.0))
+        // Frameless like Windows Terminal: ui/ draws the title bar.
+        .with_decorations(false)
+        .with_undecorated_shadow(true)
         .build(target)
         .unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
+    round_corners(&window);
     let slot: Slot = Arc::new(Mutex::new(request));
     let proxy = proxy.clone();
     let id = window.id();

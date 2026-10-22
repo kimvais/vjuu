@@ -11,5 +11,5 @@ interprocess = "2.4.6"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tao = "0.37.1"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Console"] }
 wry = "0.57.0"

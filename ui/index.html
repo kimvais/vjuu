@@ -10,7 +10,9 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
+<!-- The window is frameless: this is its title bar. Empty space drags the window. -->
+<header id="titlebar">
+  <span id="brand">vjuu</span>
   <span id="name"></span>
   <span id="count"></span>
   <select id="theme" title="Theme (t)">
@@ -21,14 +23,26 @@
   </select>
   <button id="view" hidden title="Toggle unified / side-by-side (v)">Side-by-side</button>
   <button id="done" title="Ctrl+Shift+Enter">Done</button>
+  <div id="window-controls">
+    <button data-cmd="minimize" title="Minimize">&#xE921;</button>
+    <button data-cmd="maximize" id="max" title="Maximize">&#xE922;</button>
+    <button data-cmd="close" id="close" title="Close">&#xE8BB;</button>
+  </div>
 </header>
 <nav id="files" hidden title="Files (f to hide)"></nav>
-<main id="content"></main>
-<section id="overall-box">
-  <label for="overall">Overall</label>
-  <textarea id="overall" rows="3" placeholder="General comment (optional)"></textarea>
-</section>
-<button id="sel-comment" hidden title="Comment on the selected lines (c)">Comment</button>
+<div id="scroll">
+  <main id="content"></main>
+  <section id="overall-box">
+    <label for="overall">Overall</label>
+    <textarea id="overall" rows="3" placeholder="General comment (optional)"></textarea>
+  </section>
+  <button id="sel-comment" hidden title="Comment on the selected lines (c)">Comment</button>
+</div>
+<!-- Resize handles: the webview covers the window, so its edges have to be handled here. -->
+<div class="edge" data-dir="n"></div><div class="edge" data-dir="s"></div>
+<div class="edge" data-dir="e"></div><div class="edge" data-dir="w"></div>
+<div class="edge" data-dir="ne"></div><div class="edge" data-dir="nw"></div>
+<div class="edge" data-dir="se"></div><div class="edge" data-dir="sw"></div>
 <script src="app.js"></script>
 </body>
 </html>

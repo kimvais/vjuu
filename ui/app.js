@@ -2,6 +2,8 @@
 const $ = (s) => document.querySelector(s);
 const content = $('#content');
 const overall = $('#overall');
+/** Content scrolls here, below the title bar, as in Windows Terminal. */
+const scroller = $('#scroll');
 
 /** {docs: [{name, kind, text}], autoclose} */
 let req;
@@ -162,10 +164,10 @@ function renderCode(section, doc, i) {
     tr.insertCell().innerHTML = line;
     anchor(tr, { doc: i, file: doc.name, start: idx + 1, end: idx + 1, old: false, quote: raw[idx] });
   });
-  const scroller = document.createElement('div');
-  scroller.className = 'code-scroll';
-  scroller.append(table);
-  section.append(header, scroller);
+  const wrap = document.createElement('div');
+  wrap.className = 'code-scroll';
+  wrap.append(table);
+  section.append(header, wrap);
   targets.push({ el: section, doc: i, file: doc.name });
 }
 
@@ -303,13 +305,13 @@ function markActiveFile() {
   let active = 0;
   targets.forEach((t, i) => { if (t.el.getBoundingClientRect().top <= top) active = i; });
   // A short last file never reaches the top; at the bottom of the page it is the current one.
-  if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) active = targets.length - 1;
+  if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) active = targets.length - 1;
   [...nav.children].forEach((a, i) => a.classList.toggle('active', i === active));
   nav.children[active]?.scrollIntoView({ block: 'nearest' });
 }
 
 let scrollQueued = false;
-window.addEventListener('scroll', () => {
+scroller.addEventListener('scroll', () => {
   if (scrollQueued) return;
   scrollQueued = true;
   requestAnimationFrame(() => { scrollQueued = false; markActiveFile(); });
@@ -450,8 +452,10 @@ document.addEventListener('mouseup', () => setTimeout(() => {
   selBtn.hidden = !s;
   if (!s) return;
   const r = getSelection().getRangeAt(0).getBoundingClientRect();
-  selBtn.style.top = `${r.bottom + window.scrollY + 6}px`;
-  selBtn.style.left = `${Math.max(r.left + window.scrollX, 8)}px`;
+  // The button lives in the scrolling area, so position it in that area's coordinates.
+  const area = scroller.getBoundingClientRect();
+  selBtn.style.top = `${r.bottom - area.top + scroller.scrollTop + 6}px`;
+  selBtn.style.left = `${Math.max(r.left - area.left + scroller.scrollLeft, 8)}px`;
 }));
 document.addEventListener('selectionchange', () => { if (getSelection().isCollapsed) selBtn.hidden = true; });
 
@@ -465,7 +469,7 @@ function setFocus(el) {
 function move(list, delta) {
   const cur = list.indexOf(focused);
   // Nothing focused yet: start at the first element on screen.
-  if (cur < 0) return list.find((el) => el.getBoundingClientRect().top >= 0) ?? list[0];
+  if (cur < 0) return list.find((el) => el.getBoundingClientRect().top >= scroller.getBoundingClientRect().top) ?? list[0];
   return list[Math.min(Math.max(cur + delta, 0), list.length - 1)];
 }
 
@@ -552,6 +556,30 @@ $('#theme').onchange = (e) => { setTheme(e.target.value); e.target.blur(); };
 $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
+
+// Window chrome: the window is frameless, so the title bar and edges ask vjuu to move, resize or close it.
+const titlebar = $('#titlebar');
+const isMaximized = () => window.outerWidth >= screen.availWidth && window.outerHeight >= screen.availHeight;
+titlebar.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || e.target.closest('button, select, input')) return;
+  if (e.detail === 2) post({ type: 'maximize' }); else post({ type: 'drag' });
+});
+for (const btn of document.querySelectorAll('#window-controls button')) {
+  btn.onclick = () => (btn.dataset.cmd === 'close' ? done() : post({ type: btn.dataset.cmd }));
+}
+for (const edge of document.querySelectorAll('.edge')) {
+  edge.addEventListener('mousedown', (e) => {
+    if (e.button === 0) post({ type: 'resize', dir: edge.dataset.dir });
+  });
+}
+function syncMaximized() {
+  const max = isMaximized();
+  document.body.classList.toggle('maximized', max);
+  $('#max').innerHTML = max ? '&#xE923;' : '&#xE922;'; // Segoe Fluent: restore / maximize
+  $('#max').title = max ? 'Restore' : 'Maximize';
+}
+window.addEventListener('resize', syncMaximized);
+syncMaximized();
 
 window.vjuuLoad = () => load().catch((err) => {
   content.textContent = `vjuu failed to render: ${err}`;
