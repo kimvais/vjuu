@@ -10,7 +10,7 @@
     @font-face {
       font-family: "Inter";
       font-style: normal;
-      font-weight: 300 500;
+      font-weight: 300 700;
       font-display: swap;
       src: url("fonts/Inter-latin.woff2") format("woff2");
     }
@@ -30,6 +30,8 @@
       --ink-body: rgba(255, 255, 255, 0.82);
       --ink-dim: rgba(255, 255, 255, 0.64);
       --line: rgba(255, 255, 255, 0.18);
+      /* vjuu's brand colour (Monokai green), as in the app's wordmark and Done button. */
+      --brand: #a6e22e;
 
       --font: "Inter", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
       --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -115,9 +117,9 @@
       height: 88px;
     }
     .wordmark {
-      color: var(--ink);
+      color: var(--brand);
       font-size: 20px;
-      font-weight: 300;
+      font-weight: 700;
       letter-spacing: -0.02em;
     }
     .header .textlink { font-size: 15px; font-weight: 400; }
