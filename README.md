@@ -1,4 +1,4 @@
-# vjuu
+# [vjuu](https://vjuu.it)
 
 A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
 `vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
