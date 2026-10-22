@@ -324,18 +324,17 @@ echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable ma
 sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
           </div>
           <div>
-            <dt>Claude Code</dt>
-            <dd>
-              <pre>claude plugin marketplace add kimvais/vjuu
-claude plugin install vjuu@vjuu</pre>
-              <p>The plugin adds a skill that tells agents to run vjuu instead of asking you to open files.</p>
-            </dd>
-          </div>
-          <div>
             <dt>Anything else</dt>
             <dd>
               <pre>cargo install --locked --git https://github.com/kimvais/vjuu</pre>
               <p>Or a <code>.zip</code>, <code>.tar.gz</code> or <code>.deb</code> from <a class="textlink" href="https://github.com/kimvais/vjuu/releases">GitHub Releases</a>. Building on Linux needs <code>libwebkit2gtk-4.1-dev</code> and <code>libgtk-3-dev</code>.</p>
+            </dd>
+          </div>
+          <div>
+            <dt>Then, for Claude Code and Codex</dt>
+            <dd>
+              <pre>vjuu setup</pre>
+              <p>Installs the skill that tells your agents to run vjuu instead of asking you to open files. Run it again after an upgrade.</p>
             </dd>
           </div>
         </dl>
