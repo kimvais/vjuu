@@ -148,7 +148,9 @@ def test_multiple_documents(page, url, work):
     files = page.locator('#files a')
     rows = [' '.join(t.split()) for t in files.all_inner_texts()]
     # Markdown files list their headings under them.
-    assert rows == ['a.md 1', 'Title', 'app.py src +1 −1 1', 'a.md 1', 'Title'], rows
+    assert rows == ['a.md 1', 'Title', 'app.py +1 −1 1', 'a.md 1', 'Title'], rows
+    # Directories are folder rows above their files, as in GitLab's tree.
+    assert page.locator('#files .folder').all_inner_texts() == ['src']
     files.nth(4).click()
     page.wait_for_function("document.querySelectorAll('#files a')[4].classList.contains('active')")
     page.keyboard.press('f')
@@ -280,6 +282,16 @@ def test_same_file_twice_in_one_diff(page, url, work):
     assert page.locator('#orphans').count() == 0
 
 
+def test_directory_tree(page, url, work):
+    files = ['a.py', 'src/pkg/b.py', 'src/pkg/sub/c.py', 'src/d.py']
+    diff = ''.join(_DIFF.replace('src/app.py', f) for f in files)
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': diff})
+    rows = page.locator('#files > *')
+    got = [(r.evaluate('e => e.tagName'), r.inner_text().split()[0], r.evaluate('e => e.style.paddingLeft')) for r in rows.all()]
+    assert got == [('A', 'a.py', '12px'), ('DIV', 'src', '12px'), ('DIV', 'pkg', '26px'), ('A', 'b.py', '40px'),
+                   ('DIV', 'sub', '40px'), ('A', 'c.py', '54px'), ('A', 'd.py', '26px')], got
+
+
 def test_comment_box_wraps_within_view(page, url, work):
     # A line wider than the view makes the comment row as wide as the table; the box must stay visible.
     long = _DIFF.replace('+def new():', '+def new(): ' + 'pass; ' * 80)
@@ -323,7 +335,7 @@ def main():
         errors = []
         only = sys.argv[1:]
         for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
-                     test_same_file_twice_in_one_diff, test_comment_box_wraps_within_view,
+                     test_same_file_twice_in_one_diff, test_directory_tree, test_comment_box_wraps_within_view,
                      test_markdown_file_in_a_diff_uses_code_size,
                      test_markdown_html_is_not_rendered):
             if only and test.__name__ not in only:

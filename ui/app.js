@@ -274,26 +274,47 @@ function renderFileList() {
     s.textContent = text;
     return s;
   };
-  const indent = req.docs.length > 1 ? 1 : 0;
-  nav.replaceChildren(...targets.map((t) => {
+  const pad = (el, depth) => { el.style.paddingLeft = `${12 + depth * 14}px`; };
+  // A directory tree, like GitLab's: a folder row wherever a file's directory parts differ from the previous
+  // file's. Files keep document order, which git already sorts by path.
+  const rows = [];
+  let dirs = [];
+  let depth = 0;
+  for (const t of targets) {
     const a = document.createElement('a');
     a.onclick = () => t.el.scrollIntoView({ block: 'start' });
     if (t.heading) {
-      // Markdown: a table of contents, indented by heading level.
+      // Markdown: a table of contents, indented by heading level, under its file when there are several.
       a.className = 'toc';
       a.title = t.heading;
-      a.style.paddingLeft = `${12 + (t.level - 1 + indent) * 14}px`;
+      pad(a, t.level - 1 + (req.docs.length > 1 ? depth + 1 : 0));
       a.append(span('heading', t.heading));
-      return a;
+      rows.push(a);
+      continue;
     }
-    a.title = t.file;
     const parts = t.file.split(/[\\/]/);
-    a.append(span('base', parts.pop()), span('dir', parts.join('/')));
+    const base = parts.pop();
+    let same = 0;
+    while (same < parts.length && parts[same] === dirs[same]) same++;
+    for (let k = same; k < parts.length; k++) {
+      const folder = document.createElement('div');
+      folder.className = 'folder';
+      folder.title = parts.slice(0, k + 1).join('/');
+      pad(folder, k);
+      folder.append(span('name', parts[k]));
+      rows.push(folder);
+    }
+    dirs = parts;
+    depth = parts.length;
+    a.title = t.file;
+    pad(a, depth);
+    a.append(span('base', base));
     if (t.add !== undefined) a.append(span('add', `+${t.add}`), span('del', `−${t.del}`));
     const n = perFile.get(`${t.doc}\n${t.file}`);
     if (n) a.append(span('badge', n));
-    return a;
-  }));
+    rows.push(a);
+  }
+  nav.replaceChildren(...rows);
   markActiveFile();
 }
 
@@ -313,8 +334,10 @@ function markActiveFile() {
   const nav = $('#files');
   if (nav.hidden) return;
   const active = activeTarget(targets);
-  [...nav.children].forEach((a, i) => a.classList.toggle('active', i === active));
-  nav.children[active]?.scrollIntoView({ block: 'nearest' });
+  // One link per target; folder rows are not links.
+  const links = nav.querySelectorAll('a');
+  links.forEach((a, i) => a.classList.toggle('active', i === active));
+  links[active]?.scrollIntoView({ block: 'nearest' });
 }
 
 let scrollQueued = false;

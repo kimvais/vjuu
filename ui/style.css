@@ -274,7 +274,18 @@ body.with-files main, body.with-files #overall-box { margin-left: 280px; }
 #files a:hover { background: var(--focus); }
 #files a.active { background: var(--focus); box-shadow: inset 3px 0 var(--accent); }
 #files .base { font-weight: 600; }
-#files .dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+#files .base { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#files .folder { display: flex; gap: 6px; align-items: center; padding: 3px 12px; color: var(--muted); white-space: nowrap; }
+#files .folder .name { overflow: hidden; text-overflow: ellipsis; }
+/* Octicons' file-directory-fill (MIT), as a mask so it takes the text colour. */
+#files .folder::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 #files .add { color: var(--d2h-ins-label-color); font: 12px var(--mono); }
 #files .del { color: var(--d2h-del-label-color); font: 12px var(--mono); }
 #files .badge { background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 0 6px; font-size: 11px; font-weight: 600; }
