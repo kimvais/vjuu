@@ -22,7 +22,7 @@ use wry::{WebContext, WebView, WebViewBuilder};
 use platform::{bring_to_front, pipe_name};
 use review::Review;
 
-const USAGE: &str = "usage: vjuu <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
+const USAGE: &str = "usage: vjuu [--session <name>] <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
 /// The skill that tells agents to run vjuu; built in, so it always matches this version.
 const SKILL: &str = include_str!("../skills/vjuu/SKILL.md");
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
@@ -42,11 +42,21 @@ struct Doc {
 struct Request {
     docs: Vec<Doc>,
     autoclose: bool,
+    /// The agent session that asked for the review, shown in the title bar.
+    #[serde(default)]
+    session: Option<String>,
 }
 
 impl Request {
     fn name(&self) -> String {
         self.docs.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ")
+    }
+
+    fn title(&self) -> String {
+        match &self.session {
+            Some(session) => format!("vjuu: {session} · {}", self.name()),
+            None => format!("vjuu: {}", self.name()),
+        }
     }
 }
 
@@ -94,8 +104,10 @@ struct Session {
 
 fn main() {
     let started = Instant::now();
-    let args: Vec<String> = env::args().skip(1).collect();
-    let request = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    // Only as the first argument, so it never eats a `--git` argument.
+    let session = (args.len() > 1 && args[0] == "--session").then(|| args.drain(..2).nth(1).expect("checked length"));
+    let mut request = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["last"] => print_last(),
         ["stop"] => stop(),
         ["setup"] => setup(),
@@ -114,6 +126,7 @@ fn main() {
             process::exit(2)
         }
     };
+    request.session = session;
     if env::var_os("VJUU_COLD").is_none() {
         match Stream::connect(pipe_name()) {
             Ok(conn) => client(conn, &request, started),
@@ -125,7 +138,7 @@ fn main() {
 }
 
 fn request(docs: Vec<Doc>) -> Request {
-    Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some() }
+    Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some(), session: None }
 }
 
 fn file_doc(path: &str) -> Doc {
@@ -246,7 +259,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let mut spare_due = None;
     match initial {
         Some(request) => {
-            let title = format!("vjuu: {}", request.name());
+            let title = request.title();
             let mut s = new_session(&event_loop, &proxy, &mut context, Some(request));
             s.window.set_title(&title);
             s.reply = Some(Reply::Stdout);
@@ -262,7 +275,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             Event::UserEvent(AppEvent::Open(request, conn)) => {
-                let title = format!("vjuu: {}", request.name());
+                let title = request.title();
                 let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
                 *s.slot.lock().expect("slot lock") = Some(request);
                 s.reply = Some(Reply::Client(conn));

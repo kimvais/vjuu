@@ -134,6 +134,17 @@ def test_highlighting_and_themes(page, url, work):
     page.evaluate('localStorage.removeItem("vjuu-theme")')
 
 
+def test_session_name(page, url, work):
+    (work / 'doc.json').write_text(json.dumps({'docs': [{'name': 'a.md', 'kind': 'md', 'text': _MD}], 'session': 'fix login'}))
+    page.goto(url)
+    page.wait_for_selector('[data-key]')
+    assert page.inner_text('#session') == 'fix login'
+    assert page.inner_text('#name') == 'a.md'
+    # Without one, the title bar shows no empty slot.
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    assert not page.locator('#session').is_visible()
+
+
 def test_multiple_documents(page, url, work):
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD}, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF},
           {'name': 'a.md', 'kind': 'md', 'text': _MD})
@@ -334,7 +345,7 @@ def main():
         browser = p.chromium.launch(channel='msedge')
         errors = []
         only = sys.argv[1:]
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_session_name, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
                      test_same_file_twice_in_one_diff, test_directory_tree, test_comment_box_wraps_within_view,
                      test_markdown_file_in_a_diff_uses_code_size,
                      test_markdown_html_is_not_rendered):
