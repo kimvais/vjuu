@@ -144,7 +144,7 @@ fn main() {
     run(Some(request), started)
 }
 
-/// Returns the title of the Claude Code session running us: its `/rename` name, else the generated one.
+/// Returns the name given with `/rename` to the Claude Code session running us.
 fn claude_session_title() -> Option<String> {
     let id = env::var("CLAUDE_CODE_SESSION_ID").ok()?;
     let root = env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
@@ -161,15 +161,11 @@ fn claude_session_title() -> Option<String> {
 
 /// shortcut: Claude Code's transcript format is undocumented; anything unexpected just means no title.
 fn transcript_title(transcript: &str) -> Option<String> {
+    // Not `aiTitle`: Claude Code's own summary of the first prompt reads as a task description, not a name.
     // Titles are appended again as they change; the last one wins. Quoted text elsewhere is not top level.
-    let last = |key: &str| {
-        transcript
-            .lines()
-            .rev()
-            .filter(|l| l.contains(key))
-            .find_map(|l| serde_json::from_str::<serde_json::Value>(l).ok()?.get(key)?.as_str().map(String::from))
-    };
-    last("customTitle").or_else(|| last("aiTitle"))
+    transcript.lines().rev().filter(|l| l.contains("customTitle")).find_map(|l| {
+        serde_json::from_str::<serde_json::Value>(l).ok()?.get("customTitle")?.as_str().map(String::from)
+    })
 }
 
 fn request(docs: Vec<Doc>) -> Request {
@@ -618,7 +614,7 @@ mod tests {
         let quoted = r#"{"type":"user","message":"{\"customTitle\":\"quoted\"}"}"#;
         for (lines, title) in [
             (vec![], None),
-            (vec![ai], Some("Generated")),
+            (vec![ai], None),
             (vec![renamed, ai], Some("Mine")),
             (vec![renamed, quoted], Some("Mine")),
             (vec![quoted, "not json customTitle"], None),
