@@ -117,14 +117,20 @@ def test_highlighting_and_themes(page, url, work):
     page.keyboard.press('t')
     assert theme() == ['light', 'light']
     page.keyboard.press('t')
-    assert theme() == ['monokai', 'monokai']
-    assert page.evaluate('getComputedStyle(document.body).backgroundColor') == 'rgb(39, 40, 34)'
+    assert theme() == ['graphite', 'graphite']
+    assert page.evaluate('getComputedStyle(document.body).backgroundColor') == 'rgb(30, 30, 30)'
+    page.keyboard.press('t')  # wraps around
+    assert theme() == ['light', 'auto']
     page.select_option('#theme', 'graphite')
     assert theme() == ['graphite', 'graphite']
     # The choice survives into the next window.
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     assert theme() == ['graphite', 'graphite']
     page.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
+    # Monokai was folded into Graphite: an old saved choice still gives a dark theme, not an unknown one.
+    page.evaluate('localStorage.setItem("vjuu-theme", "monokai")')
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+    assert theme() == ['graphite', 'graphite']
     page.evaluate('localStorage.removeItem("vjuu-theme")')
 
 

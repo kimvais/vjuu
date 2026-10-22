@@ -43,15 +43,15 @@ its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 | `Ctrl+Enter` | In a comment: save it. Anywhere else: **Done** |
 | `Esc` | Cancel the comment being written |
 | `v` | Toggle unified / side-by-side diff |
-| `t` | Next theme: Auto, Light, Monokai, Graphite |
+| `t` | Next theme: Auto, Light, Graphite |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+Shift+Enter` | Done, from anywhere |
 
 Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
 rows) and click **Comment** or press `c`. Links still open; clicks inside a comment edit it.
 
-Themes: **Light** (GitHub), **Monokai** (its own warm dark grey), **Graphite** (Monokai code colours on
-neutral grey). **Auto** picks Light or Monokai from the Windows setting. The choice is remembered.
+Themes: **Light** (GitHub) and **Graphite** (Monokai code colours on neutral dark grey). **Auto** picks one from the
+system's light/dark setting. The choice is remembered.
 
 ## Output
 

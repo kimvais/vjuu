@@ -580,13 +580,16 @@ let theme = 'auto';
 
 function setTheme(name) {
   theme = name;
-  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'monokai' : 'light') : name;
+  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
   $('#theme').value = name;
   // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
   try { localStorage.setItem('vjuu-theme', name); } catch {}
 }
 
 try { theme = localStorage.getItem('vjuu-theme') ?? 'auto'; } catch {}
+// Monokai was folded into Graphite; anything unknown falls back to Auto.
+if (theme === 'monokai') theme = 'graphite';
+if (![...$('#theme').options].some((o) => o.value === theme)) theme = 'auto';
 setTheme(theme);
 osDark.addEventListener('change', () => { if (theme === 'auto') setTheme('auto'); });
 $('#theme').onchange = (e) => { setTheme(e.target.value); e.target.blur(); };

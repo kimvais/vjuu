@@ -2,7 +2,7 @@
 @font-face { font-family: "Inter"; src: url("vendor/inter.woff2") format("woff2"); font-weight: 100 900; }
 @font-face { font-family: "JetBrains Mono"; src: url("vendor/jetbrains-mono.woff2") format("woff2"); font-weight: 100 800; }
 
-/* Themes. app.js sets <html data-theme>; "Auto" resolves to light or monokai from the OS setting.
+/* Themes. app.js sets <html data-theme>; "Auto" resolves to light or graphite from the OS setting.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
   /* vjuu's brand colour (Monokai green): window border, wordmark, Done. src/main.rs sets the border to the same value. */
@@ -44,18 +44,18 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --d2h-change-del-color: var(--d2h-del-bg-color);
   --d2h-change-ins-color: var(--d2h-ins-bg-color);
 }
-/* Monokai's own palette: a warm, brownish dark grey rather than blue. */
-[data-theme="monokai"], [data-theme="graphite"] {
+/* Monokai's code colours on a neutral grey (no blue tint, unlike most dark themes). */
+[data-theme="graphite"] {
   color-scheme: dark;
-  --bg: #272822;
+  --bg: #1e1e1e;
   --fg: #f8f8f2;
-  --muted: #a59f85;
-  --border: #49483e;
+  --muted: #9a9a9a;
+  --border: #3a3a3a;
   --accent: #66d9ef;
-  --accent-fg: #272822;
-  --comment-bg: #3e3d32;
+  --accent-fg: #1e1e1e;
+  --comment-bg: #2e2e2e;
   --focus: rgba(248, 248, 242, 0.08);
-  --code-bg: #1e1f1c;
+  --code-bg: #171717;
   --hl-keyword: #f92672;
   --hl-string: #e6db74;
   --hl-comment: #75715e;
@@ -66,7 +66,7 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --hl-param: #fd971f;
   --hl-meta: #75715e;
   --heading: #a6e22e;
-  --chrome: #1e1f1c;
+  --chrome: #141414;
   --heading-3: #66d9ef;
   --inline-code: #fd971f;
   --d2h-bg-color: var(--bg);
@@ -82,7 +82,7 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --d2h-ins-border-color: rgba(46, 160, 67, 0.4);
   --d2h-ins-highlight-bg-color: rgba(46, 160, 67, 0.45);
   --d2h-ins-label-color: #3fb950;
-  --d2h-del-bg-color: rgba(255, 56, 86, 0.16); /* crimson-leaning: Monokai's warm background turns plain red brown */
+  --d2h-del-bg-color: rgba(255, 56, 86, 0.16); /* crimson-leaning: plain red reads orange on a dark background */
   --d2h-del-border-color: rgba(255, 56, 86, 0.4);
   --d2h-del-highlight-bg-color: rgba(255, 56, 86, 0.42);
   --d2h-del-label-color: #ff5c74;
@@ -93,15 +93,6 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --d2h-info-border-color: var(--border);
   --d2h-change-label-color: #fd971f;
   --d2h-moved-label-color: #66d9ef;
-}
-/* Monokai code colours on neutral grey. */
-[data-theme="graphite"] {
-  --bg: #1e1e1e;
-  --muted: #9a9a9a;
-  --border: #3a3a3a;
-  --comment-bg: #2e2e2e;
-  --code-bg: #171717;
-  --chrome: #141414;
 }
 
 .hljs-keyword, .hljs-selector-tag, .hljs-doctag { color: var(--hl-keyword); }
