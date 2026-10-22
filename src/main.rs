@@ -126,7 +126,7 @@ fn main() {
             process::exit(2)
         }
     };
-    request.session = session;
+    request.session = session.or_else(claude_session_title);
     if env::var_os("VJUU_COLD").is_none() {
         match Stream::connect(pipe_name()) {
             Ok(conn) => client(conn, &request, started),
@@ -135,6 +135,30 @@ fn main() {
         }
     }
     run(Some(request), started)
+}
+
+/// Returns the title of the Claude Code session running us: its `/rename` name, else the generated one.
+fn claude_session_title() -> Option<String> {
+    let id = env::var("CLAUDE_CODE_SESSION_ID").ok()?;
+    let root = env::var_os("CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude")))?;
+    // The project folder is the session's start directory, mangled; finding the id is simpler than mangling.
+    let file = fs::read_dir(root.join("projects")).ok()?.flatten().map(|d| d.path().join(format!("{id}.jsonl"))).find(|p| p.is_file())?;
+    transcript_title(&fs::read_to_string(file).ok()?)
+}
+
+/// shortcut: Claude Code's transcript format is undocumented; anything unexpected just means no title.
+fn transcript_title(transcript: &str) -> Option<String> {
+    // Titles are appended again as they change; the last one wins. Quoted text elsewhere is not top level.
+    let last = |key: &str| {
+        transcript
+            .lines()
+            .rev()
+            .filter(|l| l.contains(key))
+            .find_map(|l| serde_json::from_str::<serde_json::Value>(l).ok()?.get(key)?.as_str().map(String::from))
+    };
+    last("customTitle").or_else(|| last("aiTitle"))
 }
 
 fn request(docs: Vec<Doc>) -> Request {
@@ -535,7 +559,7 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::{SKILL, install_skill, is_diff, kind_of};
+    use super::{SKILL, install_skill, is_diff, kind_of, transcript_title};
     use std::fs;
 
     #[test]
@@ -554,6 +578,23 @@ mod tests {
             ("", "# Notes\n", "md"),
         ] {
             assert_eq!(kind_of(path, text), kind, "{path}");
+        }
+    }
+
+    #[test]
+    fn session_titles() {
+        let ai = r#"{"type":"ai-title","aiTitle":"Generated"}"#;
+        let renamed = r#"{"type":"custom-title","customTitle":"Mine"}"#;
+        let quoted = r#"{"type":"user","message":"{\"customTitle\":\"quoted\"}"}"#;
+        for (lines, title) in [
+            (vec![], None),
+            (vec![ai], Some("Generated")),
+            (vec![renamed, ai], Some("Mine")),
+            (vec![renamed, quoted], Some("Mine")),
+            (vec![quoted, "not json customTitle"], None),
+        ] {
+            assert_eq!(transcript_title(&lines.join("
+")).as_deref(), title, "{lines:?}");
         }
     }
 

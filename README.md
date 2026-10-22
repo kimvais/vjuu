@@ -13,7 +13,7 @@ vjuu change.diff             # diff or patch file
 vjuu src/main.rs             # any other file: line-numbered, syntax-highlighted source
 vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
 git show HEAD | vjuu -       # stdin; diff or markdown is detected
-vjuu --session "fix login" plan.md  # name the asking session in the title bar
+vjuu --session "fix login" plan.md  # name the asking session in the title bar (automatic under Claude Code)
 vjuu last                    # print the most recent review again
 vjuu stop                    # stop the resident instance (before upgrading the exe)
 vjuu setup                   # install the skill for Claude Code and Codex

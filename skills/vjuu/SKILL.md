@@ -24,9 +24,9 @@ foreground timeout, and you are notified when it exits. Do not poll; wait for th
 | Source files (whole files, not a diff) | `vjuu src/main.rs src/review.rs` |
 | Text you generated | write it to a `.md` file first, then `vjuu` that file |
 
-Run `--git` from inside the repository. Put `--session "<name>"` first (`vjuu --session "fix login" plan.md`) so the user can tell
-which session's window this is: the session's name if it has one, otherwise a two-to-four word label for
-the task. Tell the user in one line that the review window is open.
+Run `--git` from inside the repository. Under Claude Code the title bar shows the session's name by
+itself; elsewhere put `--session "<name>"` first (`vjuu --session "fix login" plan.md`) so the user can
+tell which session's window this is. Tell the user in one line that the review window is open.
 
 ## Read the result
 
