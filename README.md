@@ -37,14 +37,15 @@ its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Next / previous line or block |
-| `n` / `p` | Next / previous file (diff) or heading (markdown) |
-| `c` or `Enter` | Comment on the selection, or the line or block focused with `j`/`k` |
-| `Ctrl+Enter` / `Esc` | Save / cancel the comment being written |
+| `↑` / `↓` (or `k` / `j`) | Previous / next line or block |
+| `←` / `→` (or `p` / `n`) | Previous / next file; with a single markdown file, previous / next heading |
+| `Enter` (or `c`) | Comment on the current line, or on the selected text |
+| `Ctrl+Enter` | In a comment: save it. Anywhere else: **Done** |
+| `Esc` | Cancel the comment being written |
 | `v` | Toggle unified / side-by-side diff |
 | `t` | Next theme: Auto, Light, Monokai, Graphite |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
-| `Ctrl+Shift+Enter` | Done |
+| `Ctrl+Shift+Enter` | Done, from anywhere |
 
 Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
 rows) and click **Comment** or press `c`. Links still open; clicks inside a comment edit it.

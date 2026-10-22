@@ -297,15 +297,21 @@ function renderFileList() {
 }
 
 /** Highlights the file at the top of the view. */
+/** Returns the index in `list` of the file or heading at the top of the view. */
+function activeTarget(list) {
+  const top = scroller.getBoundingClientRect().top + 8;
+  let active = 0;
+  list.forEach((t, i) => { if (t.el.getBoundingClientRect().top <= top) active = i; });
+  // A short last file never reaches the top; at the bottom of the page it is the current one.
+  if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) active = list.length - 1;
+  return active;
+}
+
 function markActiveFile() {
   document.documentElement.style.setProperty('--header-h', `${$('header').offsetHeight}px`);
   const nav = $('#files');
   if (nav.hidden) return;
-  const top = $('header').offsetHeight + 8;
-  let active = 0;
-  targets.forEach((t, i) => { if (t.el.getBoundingClientRect().top <= top) active = i; });
-  // A short last file never reaches the top; at the bottom of the page it is the current one.
-  if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) active = targets.length - 1;
+  const active = activeTarget(targets);
   [...nav.children].forEach((a, i) => a.classList.toggle('active', i === active));
   nav.children[active]?.scrollIntoView({ block: 'nearest' });
 }
@@ -501,23 +507,44 @@ content.addEventListener('click', (e) => {
   if (el) startComment(el);
 });
 
+/** Moves to the previous or next file, or between headings when there is only one file; lands on its first line. */
+function jumpFile(delta) {
+  const files = targets.filter((t) => !t.heading);
+  const list = files.length > 1 ? files : targets.filter((t) => t.heading);
+  if (!list.length) return;
+  // Start from the cursor when there is one, so the keys follow it rather than the scroll position.
+  const atOrBefore = (t) => t.el === focused
+    || t.el.compareDocumentPosition(focused) & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY);
+  const cur = focused ? list.findLastIndex(atOrBefore) : activeTarget(list);
+  const next = list[Math.min(Math.max(cur + delta, 0), list.length - 1)];
+  next.el.scrollIntoView({ block: 'start' });
+  const first = next.el.matches('[data-key]') ? next.el : next.el.querySelector('[data-key]');
+  if (first) setFocus(first);
+}
+
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.ctrlKey && e.shiftKey) { e.preventDefault(); done(); return; }
-  if (e.target.closest('textarea') || e.ctrlKey || e.altKey || e.metaKey) return;
+  const inField = e.target.closest('textarea, input, select');
+  // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
+  if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {
+    e.preventDefault();
+    done();
+    return;
+  }
+  if (inField || e.ctrlKey || e.altKey || e.metaKey) return;
   const all = [...content.querySelectorAll('[data-key]')];
-  const sections = [...content.querySelectorAll('.d2h-file-wrapper, .doc-header, .markdown > h1, .markdown > h2, .markdown > h3')];
-  if (e.key === 'j' || e.key === 'k') {
-    const el = move(all, e.key === 'j' ? 1 : -1);
+  // Arrows and the vim-style letters do the same thing.
+  const key = { ArrowDown: 'j', ArrowUp: 'k', ArrowRight: 'n', ArrowLeft: 'p' }[e.key] ?? e.key;
+  if (key === 'j' || key === 'k') {
+    const el = move(all, key === 'j' ? 1 : -1);
     if (el) setFocus(el);
-  } else if (e.key === 'n' || e.key === 'p') {
-    const top = (el) => el.getBoundingClientRect().top;
-    const target = e.key === 'n' ? sections.find((s) => top(s) > 2) : sections.findLast((s) => top(s) < -2);
-    target?.scrollIntoView({ block: 'start' });
-  } else if (e.key === 'c' && selectionAnchor()) {
+  } else if (key === 'n' || key === 'p') {
+    jumpFile(key === 'n' ? 1 : -1);
+  } else if (key === 'c' && selectionAnchor()) {
     const s = selectionAnchor();
     commentOn(s.el, s.a);
-  } else if ((e.key === 'c' || e.key === 'Enter') && focused) {
-    startComment(focused);
+  } else if (key === 'c' || key === 'Enter') {
+    const el = focused ?? move(all, 0);
+    if (el) startComment(el);
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
   } else if (e.key === 'f') {

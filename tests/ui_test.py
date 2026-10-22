@@ -219,6 +219,30 @@ def test_clicks_that_do_not_comment(page, url, work):
     assert page.locator('#sel-comment').is_visible()
 
 
+def test_keyboard_navigation(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD}, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
+    focused = lambda: page.evaluate("document.querySelector('.focused')?.dataset.key.split('\\n').slice(1).join(' ')")
+    page.keyboard.press('ArrowDown')  # nothing focused yet: the first line on screen
+    assert focused() == 'a.md 1-1', focused()
+    page.keyboard.press('ArrowDown')
+    assert focused() == 'a.md 3-4', focused()
+    page.keyboard.press('Enter')
+    _comment(page, 'on the paragraph')  # Ctrl+Enter inside the comment saves it
+    page.keyboard.press('ArrowRight')  # next file: the diff, cursor on its first line
+    assert focused() == 'src/app.py 1-1', focused()
+    page.keyboard.press('ArrowLeft')
+    assert focused() == 'a.md 1-1', focused()
+    page.keyboard.press('ArrowRight')
+    page.keyboard.press('ArrowDown')
+    page.keyboard.press('Enter')
+    _comment(page, 'on the diff')
+    got = sorted((c['file'], c['start'], c['text']) for c in _review(page)['comments'])
+    assert got == [('a.md', 3, 'on the paragraph'), ('src/app.py', 2, 'on the diff')], got
+    assert page.evaluate('window.__msgs.at(-1).type') == 'state'
+    page.keyboard.press('Control+Enter')  # outside a comment: Done
+    assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done'}
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
     _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n'})
     assert page.locator('#content img').count() == 0
@@ -232,7 +256,7 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment,
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation,
                      test_markdown_html_is_not_rendered):
             page = browser.new_page()
             page.add_init_script(_STUB)
