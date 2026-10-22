@@ -223,8 +223,9 @@ def test_clicks_that_do_not_comment(page, url, work):
     # The click that ends a drag-selection must leave the selection for the Comment button.
     _select(page, '.markdown p', '.markdown p')
     page.evaluate("document.querySelector('.markdown p').dispatchEvent(new MouseEvent('click', {bubbles: true}))")
+    # The Comment button appears in a setTimeout after mouseup; wait for it instead of racing it (slow CI runners).
+    page.locator('#sel-comment').wait_for(state='visible', timeout=5000)
     assert page.locator('.vjuu-c').count() == 0
-    assert page.locator('#sel-comment').is_visible()
 
 
 def test_keyboard_navigation(page, url, work):
