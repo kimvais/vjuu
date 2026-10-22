@@ -2,7 +2,7 @@
 @font-face { font-family: "Inter"; src: url("vendor/inter.woff2") format("woff2"); font-weight: 100 900; }
 @font-face { font-family: "JetBrains Mono"; src: url("vendor/jetbrains-mono.woff2") format("woff2"); font-weight: 100 800; }
 
-/* Themes. app.js sets <html data-theme>; "Auto" resolves to light or monokai from the OS setting.
+/* Themes. app.js sets <html data-theme>; "Auto" resolves to light or graphite from the OS setting.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
   /* vjuu's brand colour (Monokai green): window border, wordmark, Done. src/main.rs sets the border to the same value. */
@@ -41,19 +41,21 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --heading-3: #0550ae;
   --inline-code: #953800;
   --d2h-bg-color: var(--bg);
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
 }
-/* Monokai's own palette: a warm, brownish dark grey rather than blue. */
-[data-theme="monokai"], [data-theme="graphite"] {
+/* Monokai's code colours on a neutral grey (no blue tint, unlike most dark themes). */
+[data-theme="graphite"] {
   color-scheme: dark;
-  --bg: #272822;
+  --bg: #1e1e1e;
   --fg: #f8f8f2;
-  --muted: #a59f85;
-  --border: #49483e;
+  --muted: #9a9a9a;
+  --border: #3a3a3a;
   --accent: #66d9ef;
-  --accent-fg: #272822;
-  --comment-bg: #3e3d32;
+  --accent-fg: #1e1e1e;
+  --comment-bg: #2e2e2e;
   --focus: rgba(248, 248, 242, 0.08);
-  --code-bg: #1e1f1c;
+  --code-bg: #171717;
   --hl-keyword: #f92672;
   --hl-string: #e6db74;
   --hl-comment: #75715e;
@@ -64,7 +66,7 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --hl-param: #fd971f;
   --hl-meta: #75715e;
   --heading: #a6e22e;
-  --chrome: #1e1f1c;
+  --chrome: #141414;
   --heading-3: #66d9ef;
   --inline-code: #fd971f;
   --d2h-bg-color: var(--bg);
@@ -76,29 +78,21 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --d2h-empty-placeholder-bg-color: var(--code-bg);
   --d2h-empty-placeholder-border-color: var(--comment-bg);
   --d2h-selected-color: var(--focus);
-  --d2h-ins-bg-color: rgba(166, 226, 46, 0.12);
-  --d2h-ins-border-color: rgba(166, 226, 46, 0.35);
-  --d2h-ins-highlight-bg-color: rgba(166, 226, 46, 0.3);
-  --d2h-ins-label-color: #a6e22e;
-  --d2h-del-bg-color: rgba(249, 38, 114, 0.12);
-  --d2h-del-border-color: rgba(249, 38, 114, 0.35);
-  --d2h-del-highlight-bg-color: rgba(249, 38, 114, 0.3);
-  --d2h-del-label-color: #f92672;
-  --d2h-change-del-color: rgba(253, 151, 31, 0.15);
-  --d2h-change-ins-color: rgba(166, 226, 46, 0.18);
+  --d2h-ins-bg-color: rgba(46, 160, 67, 0.18);
+  --d2h-ins-border-color: rgba(46, 160, 67, 0.4);
+  --d2h-ins-highlight-bg-color: rgba(46, 160, 67, 0.45);
+  --d2h-ins-label-color: #3fb950;
+  --d2h-del-bg-color: rgba(255, 56, 86, 0.16); /* crimson-leaning: plain red reads orange on a dark background */
+  --d2h-del-border-color: rgba(255, 56, 86, 0.4);
+  --d2h-del-highlight-bg-color: rgba(255, 56, 86, 0.42);
+  --d2h-del-label-color: #ff5c74;
+  /* Changed lines use the same colours as plain added / removed ones, not a third (orange) colour. */
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
   --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
   --d2h-info-border-color: var(--border);
   --d2h-change-label-color: #fd971f;
   --d2h-moved-label-color: #66d9ef;
-}
-/* Monokai code colours on neutral grey. */
-[data-theme="graphite"] {
-  --bg: #1e1e1e;
-  --muted: #9a9a9a;
-  --border: #3a3a3a;
-  --comment-bg: #2e2e2e;
-  --code-bg: #171717;
-  --chrome: #141414;
 }
 
 .hljs-keyword, .hljs-selector-tag, .hljs-doctag { color: var(--hl-keyword); }
@@ -196,32 +190,33 @@ body.maximized .edge { display: none; }
 #done:hover { filter: brightness(1.08); }
 
 main { padding: 24px 24px 24px 48px; }
-.markdown { max-width: 860px; font-size: 16px; line-height: 1.7; }
-.markdown > :first-child { margin-top: 0; }
-.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown pre, .markdown table { margin: 0 0 1em; }
-.markdown h1, .markdown h2, .markdown h3, .markdown h4 { margin: 1.6em 0 0.6em; line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
-.markdown h1 { font-size: 2em; color: var(--heading); padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
-.markdown h2 { font-size: 1.45em; color: var(--heading); padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
-.markdown h3 { font-size: 1.2em; color: var(--heading-3); }
-.markdown h4 { font-size: 1em; color: var(--heading-3); }
-.markdown ul, .markdown ol { padding-left: 1.6em; }
-.markdown li + li, .markdown li > ul, .markdown li > ol { margin-top: 0.25em; }
-.markdown li::marker { color: var(--muted); }
-.markdown strong { font-weight: 650; }
-.markdown a { text-underline-offset: 2px; }
-.markdown pre, .markdown code { background: var(--code-bg); border-radius: 6px; font-family: var(--mono); font-size: 13.5px; }
-.markdown pre { padding: 14px 16px; overflow-x: auto; line-height: 1.55; border: 1px solid var(--border); }
-.markdown code { padding: 2px 5px; color: var(--inline-code); }
-.markdown pre code { padding: 0; color: var(--fg); background: none; border: 0; }
-.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
-.markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 12px; }
-.markdown th { background: var(--code-bg); font-weight: 600; text-align: left; }
-.markdown tr:nth-child(2n) td { background: color-mix(in srgb, var(--code-bg) 60%, transparent); }
-.markdown img { max-width: 100%; border-radius: 6px; }
-.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
-.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
-.markdown blockquote > :last-child { margin-bottom: 0; }
-.markdown h1, .markdown h2, .markdown h3 { scroll-margin-top: 8px; }
+/* Rendered markdown documents. Always `article.markdown`: diff2html puts a `markdown` class on highlighted lines of .md files. */
+article.markdown { max-width: 860px; font-size: 16px; line-height: 1.7; }
+article.markdown > :first-child { margin-top: 0; }
+article.markdown p, article.markdown ul, article.markdown ol, article.markdown blockquote, article.markdown pre, article.markdown table { margin: 0 0 1em; }
+article.markdown h1, article.markdown h2, article.markdown h3, article.markdown h4 { margin: 1.6em 0 0.6em; line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
+article.markdown h1 { font-size: 2em; color: var(--heading); padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+article.markdown h2 { font-size: 1.45em; color: var(--heading); padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
+article.markdown h3 { font-size: 1.2em; color: var(--heading-3); }
+article.markdown h4 { font-size: 1em; color: var(--heading-3); }
+article.markdown ul, article.markdown ol { padding-left: 1.6em; }
+article.markdown li + li, article.markdown li > ul, article.markdown li > ol { margin-top: 0.25em; }
+article.markdown li::marker { color: var(--muted); }
+article.markdown strong { font-weight: 650; }
+article.markdown a { text-underline-offset: 2px; }
+article.markdown pre, article.markdown code { background: var(--code-bg); border-radius: 6px; font-family: var(--mono); font-size: 13.5px; }
+article.markdown pre { padding: 14px 16px; overflow-x: auto; line-height: 1.55; border: 1px solid var(--border); }
+article.markdown code { padding: 2px 5px; color: var(--inline-code); }
+article.markdown pre code { padding: 0; color: var(--fg); background: none; border: 0; }
+article.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
+article.markdown th, article.markdown td { border: 1px solid var(--border); padding: 6px 12px; }
+article.markdown th { background: var(--code-bg); font-weight: 600; text-align: left; }
+article.markdown tr:nth-child(2n) td { background: color-mix(in srgb, var(--code-bg) 60%, transparent); }
+article.markdown img { max-width: 100%; border-radius: 6px; }
+article.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+article.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
+article.markdown blockquote > :last-child { margin-bottom: 0; }
+article.markdown h1, article.markdown h2, article.markdown h3 { scroll-margin-top: 8px; }
 tr.hovered td { background-image: linear-gradient(var(--focus), var(--focus)); }
 a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }

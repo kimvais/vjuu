@@ -110,6 +110,49 @@ pub fn build_webview(builder: WebViewBuilder, window: &Window) -> wry::Result<We
     builder.build(window)
 }
 
+/// Gives the window the full height of its screen, keeping its width, centred horizontally.
+///
+/// Windows uses the monitor's work area, so the taskbar stays visible. macOS and Linux don't expose one through
+/// tao, so 92% of the screen height stands in for it (menu bar, dock, panels).
+pub fn fit_height(window: &Window) {
+    use tao::dpi::{PhysicalPosition, PhysicalSize};
+    let width = window.outer_size().width;
+    #[cfg(windows)]
+    let area = {
+        use tao::platform::windows::WindowExtWindows;
+        use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
+        let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..unsafe { std::mem::zeroed() } };
+        let ok = unsafe { GetMonitorInfoW(MonitorFromWindow(window.hwnd() as _, MONITOR_DEFAULTTONEAREST), &mut info) } != 0;
+        let work = info.rcWork;
+        ok.then(|| (work.left, work.top, (work.right - work.left) as u32, (work.bottom - work.top) as u32))
+    };
+    #[cfg(not(windows))]
+    let area = window.current_monitor().map(|monitor| {
+        let (pos, size) = (monitor.position(), monitor.size());
+        let height = size.height * 92 / 100;
+        (pos.x, pos.y + ((size.height - height) / 2) as i32, size.width, height)
+    });
+    let Some((left, top, area_width, height)) = area else { return };
+    let width = width.min(area_width);
+    window.set_outer_position(PhysicalPosition::new(left + ((area_width - width) / 2) as i32, top));
+    window.set_inner_size(PhysicalSize::new(width, height));
+    // Windows 11 draws a 1px border outside the client area; trim whatever now overlaps the taskbar.
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
+        let mut visible: RECT = unsafe { std::mem::zeroed() };
+        let ok = unsafe {
+            DwmGetWindowAttribute(window.hwnd() as _, DWMWA_EXTENDED_FRAME_BOUNDS as u32, (&raw mut visible).cast(), size_of::<RECT>() as u32)
+        } == 0;
+        let overlap = visible.bottom - (top + height as i32);
+        if ok && overlap > 0 {
+            window.set_inner_size(PhysicalSize::new(width, height - overlap as u32));
+        }
+    }
+}
+
 /// vjuu's brand colour (#a6e22e, Monokai green) as a Windows COLORREF (0x00BBGGRR); ui/style.css has it as --brand.
 #[cfg(windows)]
 const BRAND_COLORREF: u32 = 0x002E_E2A6;
