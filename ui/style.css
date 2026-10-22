@@ -201,7 +201,7 @@ a { color: var(--accent); }
 }
 .comment .text { flex: 1; white-space: pre-wrap; cursor: text; }
 .comment textarea { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
-tr.revu-c td { padding: 0 8px; }
+tr.vjuu-c td { padding: 0 8px; }
 
 #overall-box { padding: 0 16px 24px 40px; max-width: 940px; }
 #overall-box label { display: block; font-weight: 600; margin-bottom: 4px; }

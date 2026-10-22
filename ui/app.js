@@ -39,7 +39,7 @@ const RENDERERS = ['vendor/highlight.min.js', 'vendor/markdown-it.min.js', 'vend
 /** highlight.js plus grammars its common bundle lacks; they register on the global hljs. */
 const loadHighlight = () => loadScript(RENDERERS[0]).then(() => loadScript('vendor/hljs-languages.min.js'));
 
-/** Loads the documents; a pre-warmed spare window gets 404 until revu hands it some and calls this again. */
+/** Loads the documents; a pre-warmed spare window gets 404 until vjuu hands it some and calls this again. */
 async function load() {
   if (req) return;
   // Resident windows share one browser profile; never reuse an earlier document.
@@ -127,7 +127,7 @@ function renderMarkdown(section, doc, i) {
   article.className = 'markdown';
   article.innerHTML = md.renderer.render(tokens, md.options, {});
   section.append(article);
-  // Relative images resolve against each document's own folder, served by revu as files/<i>/.
+  // Relative images resolve against each document's own folder, served by vjuu as files/<i>/.
   for (const img of article.querySelectorAll('img[src]')) {
     const src = img.getAttribute('src');
     if (!/^([a-z]+:|\/)/i.test(src)) img.src = `files/${i}/${src}`;
@@ -190,7 +190,7 @@ function renderDiff(section, doc, i) {
 }
 
 function renderComments() {
-  content.querySelectorAll('.revu-c').forEach((e) => e.remove());
+  content.querySelectorAll('.vjuu-c').forEach((e) => e.remove());
   $('#orphans')?.remove();
   const orphans = [];
   for (const [key, c] of comments) {
@@ -208,7 +208,7 @@ function renderComments() {
   const n = [...comments.values()].filter((c) => c.text.trim()).length;
   $('#count').textContent = n ? `${n} comment${n > 1 ? 's' : ''}` : '';
   renderFileList();
-  content.querySelector('.revu-c textarea, #orphans textarea')?.focus();
+  content.querySelector('.vjuu-c textarea, #orphans textarea')?.focus();
 }
 
 function renderFileList() {
@@ -273,12 +273,12 @@ window.addEventListener('scroll', () => {
 
 function place(el, box) {
   if (el.tagName !== 'TR') {
-    box.classList.add('revu-c');
+    box.classList.add('vjuu-c');
     if (el.tagName === 'LI') el.append(box); else el.after(box);
     return;
   }
   const row = document.createElement('tr');
-  row.className = 'revu-c';
+  row.className = 'vjuu-c';
   const td = row.insertCell();
   td.colSpan = el.cells.length;
   td.append(box);
@@ -290,7 +290,7 @@ function place(el, box) {
   const twin = other.querySelector(`tr[data-idx="${el.dataset.idx}"]`);
   if (!twin) return;
   const spacer = document.createElement('tr');
-  spacer.className = 'revu-c spacer';
+  spacer.className = 'vjuu-c spacer';
   spacer.insertCell().colSpan = twin.cells.length;
   twin.after(spacer);
   new ResizeObserver(() => { spacer.style.height = `${row.offsetHeight}px`; }).observe(row);
@@ -373,7 +373,7 @@ function selectionAnchor() {
   const keyed = (node) => (node.nodeType === 1 ? node : node.parentElement)?.closest('#content [data-key]');
   const first = keyed(range.startContainer);
   const last = keyed(range.endContainer);
-  if (!first || !last || first.closest('.revu-c') || last.closest('.revu-c')) return null;
+  if (!first || !last || first.closest('.vjuu-c') || last.closest('.vjuu-c')) return null;
   const all = [...content.querySelectorAll('[data-key]')];
   const head = anchors.get(first.dataset.key).a;
   const span = all.slice(all.indexOf(first), all.indexOf(last) + 1)
@@ -448,7 +448,7 @@ content.addEventListener('mouseover', (e) => {
 });
 
 content.addEventListener('click', (e) => {
-  if (e.target.closest('.revu-c')) return;
+  if (e.target.closest('.vjuu-c')) return;
   const link = e.target.closest('a[href]');
   if (link) return;
   const el = e.target.closest('[data-key]');
@@ -502,10 +502,10 @@ function setTheme(name) {
   document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'monokai' : 'light') : name;
   $('#theme').value = name;
   // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
-  try { localStorage.setItem('revu-theme', name); } catch {}
+  try { localStorage.setItem('vjuu-theme', name); } catch {}
 }
 
-try { theme = localStorage.getItem('revu-theme') ?? 'auto'; } catch {}
+try { theme = localStorage.getItem('vjuu-theme') ?? 'auto'; } catch {}
 setTheme(theme);
 osDark.addEventListener('change', () => { if (theme === 'auto') setTheme('auto'); });
 $('#theme').onchange = (e) => { setTheme(e.target.value); e.target.blur(); };
@@ -513,7 +513,7 @@ $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
 
-window.revuLoad = () => load().catch((err) => {
-  content.textContent = `revu failed to render: ${err}`;
+window.vjuuLoad = () => load().catch((err) => {
+  content.textContent = `vjuu failed to render: ${err}`;
 });
-revuLoad();
+vjuuLoad();

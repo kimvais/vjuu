@@ -21,7 +21,7 @@ use wry::{WebContext, WebView, WebViewBuilder};
 
 use review::Review;
 
-const USAGE: &str = "usage: revu <file.md|file.diff> | revu - | revu --git [git diff args] | revu last | revu stop";
+const USAGE: &str = "usage: vjuu <file.md|file.diff> | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop";
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
 const SPARE_DELAY: Duration = Duration::from_millis(500);
 const DETACHED_PROCESS: u32 = 0x8;
@@ -100,7 +100,7 @@ fn main() {
             process::exit(2)
         }
     };
-    if env::var_os("REVU_COLD").is_none() {
+    if env::var_os("VJUU_COLD").is_none() {
         match Stream::connect(pipe_name()) {
             Ok(conn) => client(conn, &request, started),
             // Nobody listening: show this one ourselves and start a resident instance for next time.
@@ -111,7 +111,7 @@ fn main() {
 }
 
 fn request(docs: Vec<Doc>) -> Request {
-    Request { docs, autoclose: env::var_os("REVU_AUTOCLOSE").is_some() }
+    Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some() }
 }
 
 fn doc(name: String, text: String, force_diff: bool, base: Option<PathBuf>) -> Doc {
@@ -146,7 +146,7 @@ fn git_diff(rest: &[&str]) -> Request {
 
 fn pipe_name() -> Name<'static> {
     // shortcut: default pipe ACL; fine on a single-user machine, set a security descriptor if shared.
-    format!("revu-{}.sock", env::var("USERNAME").unwrap_or_default())
+    format!("vjuu-{}.sock", env::var("USERNAME").unwrap_or_default())
         .to_ns_name::<GenericNamespaced>()
         .expect("valid pipe name")
 }
@@ -155,7 +155,7 @@ fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
     let mut line = serde_json::to_vec(request).expect("Request serialises");
     line.push(b'\n');
     if let Err(e) = conn.write_all(&line).and_then(|_| conn.flush()) {
-        fail(&format!("Cannot reach the resident revu: {e}"));
+        fail(&format!("Cannot reach the resident vjuu: {e}"));
     }
     let mut md = String::new();
     // Windows reports the server closing the pipe as an error rather than EOF.
@@ -165,7 +165,7 @@ fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
         process::exit(0)
     }
     if md.is_empty() {
-        fail(&format!("The resident revu closed without a review ({read:?}). `revu last` may have it."));
+        fail(&format!("The resident vjuu closed without a review ({read:?}). `vjuu last` may have it."));
     }
     print!("{md}");
     process::exit(0)
@@ -235,7 +235,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let mut spare_due = None;
     match initial {
         Some(request) => {
-            let title = format!("revu: {}", request.name());
+            let title = format!("vjuu: {}", request.name());
             let mut s = new_session(&event_loop, &proxy, &mut context, Some(request));
             s.window.set_title(&title);
             s.reply = Some(Reply::Stdout);
@@ -250,13 +250,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             Event::UserEvent(AppEvent::Open(request, conn)) => {
-                let title = format!("revu: {}", request.name());
+                let title = format!("vjuu: {}", request.name());
                 let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
                 *s.slot.lock().expect("slot lock") = Some(request);
                 s.reply = Some(Reply::Client(conn));
                 s.started = Instant::now();
                 s.window.set_title(&title);
-                let _ = s.webview.evaluate_script("window.revuLoad && revuLoad()");
+                let _ = s.webview.evaluate_script("window.vjuuLoad && vjuuLoad()");
                 s.window.set_visible(true);
                 s.window.set_focus();
                 sessions.insert(s.window.id(), s);
@@ -298,7 +298,7 @@ fn new_session(
     request: Option<Request>,
 ) -> Session {
     let window = WindowBuilder::new()
-        .with_title("revu")
+        .with_title("vjuu")
         .with_visible(request.is_some())
         .with_inner_size(LogicalSize::new(1100.0, 900.0))
         .build(target)
@@ -308,11 +308,11 @@ fn new_session(
     let id = window.id();
     let serve_slot = slot.clone();
     let webview = WebViewBuilder::new_with_web_context(context)
-        .with_custom_protocol("revu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
-        .with_url("revu://localhost/")
+        .with_custom_protocol("vjuu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
+        .with_url("vjuu://localhost/")
         .with_navigation_handler(|url| {
             // WebView2 serves custom protocols as http://<scheme>.localhost.
-            if url.starts_with("revu:") || url.starts_with("http://revu.localhost") {
+            if url.starts_with("vjuu:") || url.starts_with("http://vjuu.localhost") {
                 return true;
             }
             // External links go to the default browser so the review page is never replaced.
@@ -365,7 +365,7 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/vendor/diff2html.min.css" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html.min.css")), "text/css"),
         "/vendor/inter.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/inter.woff2")), "font/woff2"),
         "/vendor/jetbrains-mono.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2"),
-        // A spare window has no document yet; the page waits for revuLoad().
+        // A spare window has no document yet; the page waits for vjuuLoad().
         "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
             Some(r) => (Cow::Owned(serde_json::to_vec(r).expect("Request serialises")), "application/json"),
             None => return not_found(),
@@ -387,7 +387,7 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
 }
 
 fn data_dir() -> PathBuf {
-    PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("revu")
+    PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("vjuu")
 }
 
 fn reviews_dir() -> PathBuf {

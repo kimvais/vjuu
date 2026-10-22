@@ -1,30 +1,30 @@
-# revu
+# vjuu
 
 A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
-`revu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
+`vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
 ## Usage
 
 ```
-revu docs/design.md          # markdown
-revu a.md b.md change.diff   # several files in one window, stacked
-revu change.diff             # diff or patch file
-revu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
-git show HEAD | revu -       # stdin; diff or markdown is detected
-revu last                    # print the most recent review again
-revu stop                    # stop the resident instance (before upgrading the exe)
+vjuu docs/design.md          # markdown
+vjuu a.md b.md change.diff   # several files in one window, stacked
+vjuu change.diff             # diff or patch file
+vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
+git show HEAD | vjuu -       # stdin; diff or markdown is detected
+vjuu last                    # print the most recent review again
+vjuu stop                    # stop the resident instance (before upgrading the exe)
 ```
 
-`revu` blocks until you click **Done** or close the window. Every review is also saved to
-`%LOCALAPPDATA%\revu\reviews\`, so a later session can pick it up with `revu last`.
+`vjuu` blocks until you click **Done** or close the window. Every review is also saved to
+`%LOCALAPPDATA%\vjuu\reviews\`, so a later session can pick it up with `vjuu last`.
 
 ## Why it opens fast
 
-The first `revu` opens its window itself (~400 ms, mostly WebView2 starting) and starts a hidden
+The first `vjuu` opens its window itself (~400 ms, mostly WebView2 starting) and starts a hidden
 resident instance that keeps a pre-warmed window. Later calls hand the document to it over a named
 pipe and the window appears almost at once. The spare window preloads fonts and renderers. The resident instance costs roughly 300 MB working set across
-its WebView2 processes; `revu stop` ends it. `REVU_COLD=1` skips it.
+its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 
 | Case | First paint |
 |------|-------------|
@@ -72,11 +72,11 @@ Deleted diff lines are marked `(old)` and use the old file's line number.
 
 ```
 cargo install --path .
-claude plugin marketplace add C:\Users\k\p\revu
-claude plugin install revu@revu
+claude plugin marketplace add C:\Users\k\p\vjuu
+claude plugin install vjuu@vjuu
 ```
 
-The plugin adds the `revu` skill, which tells agents to run `revu` in the background instead of
+The plugin adds the `vjuu` skill, which tells agents to run `vjuu` in the background instead of
 asking you to open files.
 
 ## Development
@@ -84,8 +84,8 @@ asking you to open files.
 - `cargo test`: review formatter and diff detection.
 - `uv run --no-project --with playwright python tests/ui_test.py`: drives `ui/` in headless Edge with a
   stubbed `window.ipc` and checks the review the page reports.
-- `REVU_AUTOCLOSE=1 revu <file>` exits as soon as the page has rendered and prints the time to
+- `VJUU_AUTOCLOSE=1 vjuu <file>` exits as soon as the page has rendered and prints the time to
   stderr, for startup measurements.
 
 UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56 base bundle, highlight.js
-11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to revu.
+11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu.

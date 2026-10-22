@@ -1,13 +1,13 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "revu",
+  "name": "vjuu",
   "description": "Fast review window with inline comments for agent handoffs.",
   "owner": {
     "name": "Kimmo"
   },
   "plugins": [
     {
-      "name": "revu",
+      "name": "vjuu",
       "description": "Review markdown and diffs with inline comments that return to the agent.",
       "source": "./",
       "category": "productivity"

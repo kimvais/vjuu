@@ -64,10 +64,10 @@ def test_diff(page, url, work):
     page.locator('tr', has=page.locator('.d2h-del')).first.locator('.d2h-code-line').click()
     page.keyboard.press('c')
     _comment(page, 'why removed?')
-    assert page.locator('tr.revu-c').count() == 2
+    assert page.locator('tr.vjuu-c').count() == 2
     page.keyboard.press('v')
     # Each comment row plus a spacer row in the other table; nothing orphaned.
-    assert page.locator('tr.revu-c').count() == 4
+    assert page.locator('tr.vjuu-c').count() == 4
     assert page.locator('#orphans').count() == 0
     page.locator('.comment .text', has_text='why removed?').click()
     page.keyboard.press('Control+a')
@@ -113,7 +113,7 @@ def test_highlighting_and_themes(page, url, work):
     _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     # Fenced ```py block is highlighted; `print` is a built-in.
     assert page.locator('pre code .hljs-built_in').inner_text() == 'print'
-    theme = lambda: page.evaluate('[document.documentElement.dataset.theme, localStorage.getItem("revu-theme")]')
+    theme = lambda: page.evaluate('[document.documentElement.dataset.theme, localStorage.getItem("vjuu-theme")]')
     assert theme() == ['light', 'auto']  # headless Edge reports a light OS
     page.keyboard.press('t')
     assert theme() == ['light', 'light']
@@ -126,7 +126,7 @@ def test_highlighting_and_themes(page, url, work):
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     assert theme() == ['graphite', 'graphite']
     page.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
-    page.evaluate('localStorage.removeItem("revu-theme")')
+    page.evaluate('localStorage.removeItem("vjuu-theme")')
 
 
 def test_multiple_documents(page, url, work):
@@ -168,13 +168,13 @@ def _select(page, start, end):
 
 
 def test_selection_comments(page, url, work):
-    text = '# One\n\nFirst para.\n\nSecond\npara.\n\n## Two\n\n```\ncargo install --path .   # build it\nrevu last\n```\n\n```\nimport os\ndef f(x):\n    return os.sep  # sep\n```\n\n```\n# Review: a.md (1 comment)\n> quoted\n```\n'
+    text = '# One\n\nFirst para.\n\nSecond\npara.\n\n## Two\n\n```\ncargo install --path .   # build it\nvjuu last\n```\n\n```\nimport os\ndef f(x):\n    return os.sep  # sep\n```\n\n```\n# Review: a.md (1 comment)\n> quoted\n```\n'
     _open(page, url, work, {'name': 'n.md', 'kind': 'md', 'text': text})
     # A single markdown file with two or more headings gets a table of contents.
     assert [' '.join(t.split()) for t in page.locator('#files a.toc').all_inner_texts()] == ['One', 'Two']
     # Unlabelled fences: command lines are highlighted as shell, example output stays plain.
     assert page.locator('pre code').nth(0).locator('[class^=hljs-]').count() > 0
-    assert page.locator('pre code').nth(0).locator('.hljs-title').all_inner_texts() == ['cargo', 'revu']
+    assert page.locator('pre code').nth(0).locator('.hljs-title').all_inner_texts() == ['cargo', 'vjuu']
     assert page.locator('pre code').nth(1).locator('.hljs-keyword').count() > 0  # python, not shell
     assert page.locator('pre code').nth(2).locator('[class^=hljs-]').count() == 0
     # Selecting across two paragraphs comments on both, as one range.

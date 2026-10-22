@@ -1,11 +1,11 @@
 ---
-name: revu
-description: Use whenever you would ask the user to open, read, look over or review a file, document, plan, spec, diff, patch, commit or branch, and when the user says "let me review", "show me", "/revu" or "review it in revu". Opens the content in the revu window, where the user comments on lines; the comments come back as the command's output.
+name: vjuu
+description: Use whenever you would ask the user to open, read, look over or review a file, document, plan, spec, diff, patch, commit or branch, and when the user says "let me review", "show me", "/vjuu" or "review it in vjuu". Opens the content in the vjuu window, where the user comments on lines; the comments come back as the command's output.
 ---
 
-# revu
+# vjuu
 
-`revu` shows a markdown file or a diff in a window where the user leaves line comments. It blocks
+`vjuu` shows a markdown file or a diff in a window where the user leaves line comments. It blocks
 until they click Done, then prints the review as markdown on stdout. Use it instead of saying "open X
 and review it" or pasting long content into chat for review.
 
@@ -16,12 +16,12 @@ foreground timeout, and you are notified when it exits. Do not poll; wait for th
 
 | What to review | Command |
 |---|---|
-| A markdown file | `revu path/to/file.md` |
-| Several files at once | `revu plan.md notes.md change.diff` (one window, one review) |
-| Uncommitted changes | `revu --git` (add `--staged`, `HEAD`, `main...HEAD`, paths: any `git diff` args) |
-| A commit | `git show <sha> \| revu -` |
-| A diff or patch file | `revu change.diff` |
-| Text you generated | write it to a `.md` file first, then `revu` that file |
+| A markdown file | `vjuu path/to/file.md` |
+| Several files at once | `vjuu plan.md notes.md change.diff` (one window, one review) |
+| Uncommitted changes | `vjuu --git` (add `--staged`, `HEAD`, `main...HEAD`, paths: any `git diff` args) |
+| A commit | `git show <sha> \| vjuu -` |
+| A diff or patch file | `vjuu change.diff` |
+| Text you generated | write it to a `.md` file first, then `vjuu` that file |
 
 Run `--git` from inside the repository. Tell the user in one line that the review window is open.
 
@@ -47,6 +47,6 @@ general comment
 - `No comments.` means the user closed it without remarks: ask whether they approve rather than assume.
 - `No changes to review.` means the git diff was empty: check the arguments.
 
-If the session restarted or the output was lost, `revu last` prints the most recent review again.
+If the session restarted or the output was lost, `vjuu last` prints the most recent review again.
 
-If `revu` is not on PATH, tell the user to install it: `cargo install --path C:\Users\k\p\revu`.
+If `vjuu` is not on PATH, tell the user to install it: `cargo install --path C:\Users\k\p\vjuu`.
