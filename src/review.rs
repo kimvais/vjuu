@@ -29,7 +29,11 @@ pub fn to_markdown(name: &str, review: &Review) -> String {
         return format!("# Review: {name}\nNo comments.\n");
     }
     comments.sort_by(|a, b| (&a.file, a.start, a.old).cmp(&(&b.file, b.start, b.old)));
-    let mut out = format!("# Review: {name} ({} comments)\n", comments.len());
+    let count = match comments.len() {
+        1 => "1 comment".to_string(),
+        n => format!("{n} comments"),
+    };
+    let mut out = format!("# Review: {name} ({count})\n");
     for c in comments {
         let range = if c.start == c.end { c.start.to_string() } else { format!("{}-{}", c.start, c.end) };
         let side = if c.old { " (old)" } else { "" };
@@ -91,6 +95,7 @@ mod tests {
         let quote = (1..=8).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
         let review = Review { comments: vec![comment("a.md", 1, 8, false, &quote, "t")], overall: String::new() };
         let md = to_markdown("a.md", &review);
+        assert!(md.starts_with("# Review: a.md (1 comment)\n"), "{md}");
         assert!(md.contains("> 6\n> …\n"), "{md}");
         assert!(!md.contains("> 7"), "{md}");
     }
