@@ -42,6 +42,7 @@ its WebView2 processes; `revu stop` ends it. `REVU_COLD=1` skips it.
 | `Ctrl+Enter` / `Esc` | Save / cancel the comment being written |
 | `v` | Toggle unified / side-by-side diff |
 | `t` | Next theme: Auto, Light, Monokai, Graphite |
+| `f` | Hide / show the file list (multi-file reviews) |
 | `Ctrl+Shift+Enter` | Done |
 
 You can also click the `+` next to a line or block, or click a diff line number.

@@ -10,6 +10,9 @@ let sideBySide = false;
 let focused = null;
 /** key -> {el, a}: every commentable element of the current render. */
 let anchors = new Map();
+/** [{el, doc, file, add, del}]: one per file, for the file list. Rebuilt by render(). */
+let targets = [];
+let filesHidden = false;
 /** key -> {doc, file, start, end, old, quote, text, editing}. Survives re-renders. */
 const comments = new Map();
 
@@ -59,6 +62,7 @@ const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
 
 function render() {
   anchors = new Map();
+  targets = [];
   focused = null;
   content.replaceChildren();
   req.docs.forEach((doc, i) => {
@@ -72,6 +76,7 @@ function render() {
       if (req.docs.length > 1) section.innerHTML = `<div class="doc-header"></div>`;
       section.querySelector('.doc-header')?.append(doc.name);
       renderMarkdown(section, doc, i);
+      targets.push({ el: section, doc: i, file: doc.name });
     }
   });
   renderComments();
@@ -126,6 +131,9 @@ function renderDiff(section, doc, i) {
   requestAnimationFrame(() => setTimeout(() => ui.highlightCode()));
   for (const wrapper of section.querySelectorAll('.d2h-file-wrapper')) {
     const file = wrapper.querySelector('.d2h-file-name').textContent.split(' → ').pop().trim();
+    // Side-by-side shows added lines on the right only and deleted ones on the left only.
+    const count = (cls) => wrapper.querySelectorAll(`.d2h-code-linenumber.${cls}, .d2h-code-side-linenumber.${cls}`).length;
+    targets.push({ el: wrapper, doc: i, file, add: count('d2h-ins'), del: count('d2h-del') });
     const lineText = (tr) =>
       (tr.querySelector('.d2h-code-line-prefix')?.textContent.trim() ?? '') +
       (tr.querySelector('.d2h-code-line-ctn')?.textContent.trimEnd() ?? '');
@@ -171,8 +179,60 @@ function renderComments() {
   }
   const n = [...comments.values()].filter((c) => c.text.trim()).length;
   $('#count').textContent = n ? `${n} comment${n > 1 ? 's' : ''}` : '';
+  renderFileList();
   content.querySelector('.revu-c textarea, #orphans textarea')?.focus();
 }
+
+function renderFileList() {
+  const nav = $('#files');
+  const show = targets.length > 1 && !filesHidden;
+  nav.hidden = !show;
+  document.body.classList.toggle('with-files', show);
+  if (!show) return;
+  const perFile = new Map();
+  for (const c of comments.values()) {
+    if (c.text.trim()) perFile.set(`${c.doc}\n${c.file}`, (perFile.get(`${c.doc}\n${c.file}`) ?? 0) + 1);
+  }
+  const span = (cls, text) => {
+    const s = document.createElement('span');
+    s.className = cls;
+    s.textContent = text;
+    return s;
+  };
+  nav.replaceChildren(...targets.map((t) => {
+    const a = document.createElement('a');
+    a.title = t.file;
+    const parts = t.file.split(/[\\/]/);
+    a.append(span('base', parts.pop()), span('dir', parts.join('/')));
+    if (t.add !== undefined) a.append(span('add', `+${t.add}`), span('del', `−${t.del}`));
+    const n = perFile.get(`${t.doc}\n${t.file}`);
+    if (n) a.append(span('badge', n));
+    a.onclick = () => t.el.scrollIntoView({ block: 'start' });
+    return a;
+  }));
+  markActiveFile();
+}
+
+/** Highlights the file at the top of the view. */
+function markActiveFile() {
+  document.documentElement.style.setProperty('--header-h', `${$('header').offsetHeight}px`);
+  const nav = $('#files');
+  if (nav.hidden) return;
+  const top = $('header').offsetHeight + 8;
+  let active = 0;
+  targets.forEach((t, i) => { if (t.el.getBoundingClientRect().top <= top) active = i; });
+  // A short last file never reaches the top; at the bottom of the page it is the current one.
+  if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) active = targets.length - 1;
+  [...nav.children].forEach((a, i) => a.classList.toggle('active', i === active));
+  nav.children[active]?.scrollIntoView({ block: 'nearest' });
+}
+
+let scrollQueued = false;
+window.addEventListener('scroll', () => {
+  if (scrollQueued) return;
+  scrollQueued = true;
+  requestAnimationFrame(() => { scrollQueued = false; markActiveFile(); });
+});
 
 function place(el, box) {
   if (el.tagName !== 'TR') {
@@ -317,6 +377,9 @@ document.addEventListener('keydown', (e) => {
     startComment(focused);
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
+  } else if (e.key === 'f') {
+    filesHidden = !filesHidden;
+    renderFileList();
   } else if (e.key === 't') {
     const names = [...$('#theme').options].map((o) => o.value);
     setTheme(names[(names.indexOf(theme) + 1) % names.length]);

@@ -141,6 +141,13 @@ def test_multiple_documents(page, url, work):
         _comment(page, text)
     page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
     _comment(page, 'in the diff')
+    files = page.locator('#files a')
+    assert files.all_inner_texts() == ['a.md', 'app.py\nsrc\n+1\n−1\n1', 'a.md\n1'] or \
+        [t.replace('\n', ' ') for t in files.all_inner_texts()] == ['a.md 1', 'app.py src +1 −1 1', 'a.md 1'], files.all_inner_texts()
+    files.nth(2).click()
+    page.wait_for_function("document.querySelectorAll('#files a')[2].classList.contains('active')")
+    page.keyboard.press('f')
+    assert page.locator('#files').is_hidden()
     states = [m for m in page.evaluate('window.__msgs') if m['type'] == 'state']
     got = sorted((c['doc'], c['file'], c['start'], c['text']) for c in states[-1]['review']['comments'])
     assert got == [(0, 'a.md', 3, 'first copy'), (1, 'src/app.py', 2, 'in the diff'), (2, 'a.md', 3, 'second copy')], got

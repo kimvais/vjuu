@@ -186,3 +186,27 @@ tr.revu-c td { padding: 0 8px; }
 
 .doc + .doc { margin-top: 32px; }
 .doc-header { font: 600 14px/1.4 var(--mono); padding: 8px 12px; margin-bottom: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; max-width: 900px; }
+
+/* File list for multi-file reviews, like GitLab's and GitHub's. */
+#files {
+  position: fixed;
+  top: var(--header-h, 45px);
+  bottom: 0;
+  left: 0;
+  width: 280px;
+  overflow-y: auto;
+  padding: 8px 0;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  font-size: 13px;
+}
+body.with-files main, body.with-files #overall-box { margin-left: 280px; }
+#files a { display: flex; gap: 6px; align-items: baseline; padding: 3px 12px; color: var(--fg); text-decoration: none; cursor: pointer; white-space: nowrap; }
+#files a:hover { background: var(--focus); }
+#files a.active { background: var(--focus); box-shadow: inset 3px 0 var(--accent); }
+#files .base { font-weight: 600; }
+#files .dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+#files .add { color: var(--d2h-ins-label-color); font: 12px var(--mono); }
+#files .del { color: var(--d2h-del-label-color); font: 12px var(--mono); }
+#files .badge { background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 0 6px; font-size: 11px; font-weight: 600; }
+.d2h-file-wrapper, .doc { scroll-margin-top: calc(var(--header-h, 45px) + 8px); }
