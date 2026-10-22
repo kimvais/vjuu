@@ -279,6 +279,17 @@ def test_same_file_twice_in_one_diff(page, url, work):
     assert page.locator('#orphans').count() == 0
 
 
+def test_markdown_file_in_a_diff_uses_code_size(page, url, work):
+    # diff2html puts a `markdown` class on highlighted lines of .md files; document styles must not apply to them.
+    md_diff = _DIFF.replace('src/app.py', 'README.md')
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': md_diff}, {'name': 'x.md', 'kind': 'md', 'text': _MD})
+    page.wait_for_selector('.d2h-code-line-ctn.markdown, .d2h-code-line-ctn .hljs-section, .d2h-code-line-ctn', state='attached')
+    page.wait_for_timeout(300)  # highlighting runs after paint
+    size = lambda sel: page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).fontSize")
+    assert size('.d2h-code-line-ctn') == size('.d2h-code-linenumber') or size('.d2h-code-line-ctn') == '13px', size('.d2h-code-line-ctn')
+    assert size('article.markdown p') == '16px'
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
     _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n'})
     assert page.locator('#content img').count() == 0
@@ -294,7 +305,7 @@ def main():
         errors = []
         only = sys.argv[1:]
         for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents, test_selection_comments, test_code_file, test_clicks_that_do_not_comment, test_keyboard_navigation, test_unsaved_comment_is_kept,
-                     test_same_file_twice_in_one_diff,
+                     test_same_file_twice_in_one_diff, test_markdown_file_in_a_diff_uses_code_size,
                      test_markdown_html_is_not_rendered):
             if only and test.__name__ not in only:
                 continue

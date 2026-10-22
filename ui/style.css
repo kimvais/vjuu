@@ -190,32 +190,33 @@ body.maximized .edge { display: none; }
 #done:hover { filter: brightness(1.08); }
 
 main { padding: 24px 24px 24px 48px; }
-.markdown { max-width: 860px; font-size: 16px; line-height: 1.7; }
-.markdown > :first-child { margin-top: 0; }
-.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown pre, .markdown table { margin: 0 0 1em; }
-.markdown h1, .markdown h2, .markdown h3, .markdown h4 { margin: 1.6em 0 0.6em; line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
-.markdown h1 { font-size: 2em; color: var(--heading); padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
-.markdown h2 { font-size: 1.45em; color: var(--heading); padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
-.markdown h3 { font-size: 1.2em; color: var(--heading-3); }
-.markdown h4 { font-size: 1em; color: var(--heading-3); }
-.markdown ul, .markdown ol { padding-left: 1.6em; }
-.markdown li + li, .markdown li > ul, .markdown li > ol { margin-top: 0.25em; }
-.markdown li::marker { color: var(--muted); }
-.markdown strong { font-weight: 650; }
-.markdown a { text-underline-offset: 2px; }
-.markdown pre, .markdown code { background: var(--code-bg); border-radius: 6px; font-family: var(--mono); font-size: 13.5px; }
-.markdown pre { padding: 14px 16px; overflow-x: auto; line-height: 1.55; border: 1px solid var(--border); }
-.markdown code { padding: 2px 5px; color: var(--inline-code); }
-.markdown pre code { padding: 0; color: var(--fg); background: none; border: 0; }
-.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
-.markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 12px; }
-.markdown th { background: var(--code-bg); font-weight: 600; text-align: left; }
-.markdown tr:nth-child(2n) td { background: color-mix(in srgb, var(--code-bg) 60%, transparent); }
-.markdown img { max-width: 100%; border-radius: 6px; }
-.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
-.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
-.markdown blockquote > :last-child { margin-bottom: 0; }
-.markdown h1, .markdown h2, .markdown h3 { scroll-margin-top: 8px; }
+/* Rendered markdown documents. Always `article.markdown`: diff2html puts a `markdown` class on highlighted lines of .md files. */
+article.markdown { max-width: 860px; font-size: 16px; line-height: 1.7; }
+article.markdown > :first-child { margin-top: 0; }
+article.markdown p, article.markdown ul, article.markdown ol, article.markdown blockquote, article.markdown pre, article.markdown table { margin: 0 0 1em; }
+article.markdown h1, article.markdown h2, article.markdown h3, article.markdown h4 { margin: 1.6em 0 0.6em; line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
+article.markdown h1 { font-size: 2em; color: var(--heading); padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+article.markdown h2 { font-size: 1.45em; color: var(--heading); padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
+article.markdown h3 { font-size: 1.2em; color: var(--heading-3); }
+article.markdown h4 { font-size: 1em; color: var(--heading-3); }
+article.markdown ul, article.markdown ol { padding-left: 1.6em; }
+article.markdown li + li, article.markdown li > ul, article.markdown li > ol { margin-top: 0.25em; }
+article.markdown li::marker { color: var(--muted); }
+article.markdown strong { font-weight: 650; }
+article.markdown a { text-underline-offset: 2px; }
+article.markdown pre, article.markdown code { background: var(--code-bg); border-radius: 6px; font-family: var(--mono); font-size: 13.5px; }
+article.markdown pre { padding: 14px 16px; overflow-x: auto; line-height: 1.55; border: 1px solid var(--border); }
+article.markdown code { padding: 2px 5px; color: var(--inline-code); }
+article.markdown pre code { padding: 0; color: var(--fg); background: none; border: 0; }
+article.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
+article.markdown th, article.markdown td { border: 1px solid var(--border); padding: 6px 12px; }
+article.markdown th { background: var(--code-bg); font-weight: 600; text-align: left; }
+article.markdown tr:nth-child(2n) td { background: color-mix(in srgb, var(--code-bg) 60%, transparent); }
+article.markdown img { max-width: 100%; border-radius: 6px; }
+article.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+article.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
+article.markdown blockquote > :last-child { margin-bottom: 0; }
+article.markdown h1, article.markdown h2, article.markdown h3 { scroll-margin-top: 8px; }
 tr.hovered td { background-image: linear-gradient(var(--focus), var(--focus)); }
 a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }

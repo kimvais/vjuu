@@ -360,6 +360,7 @@ fn new_session(
         .with_inner_size(LogicalSize::new(1100.0, 900.0));
     let window = platform::frame(builder).build(target).unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
     platform::style_frame(&window);
+    platform::fit_height(&window);
     let slot: Slot = Arc::new(Mutex::new(request));
     let proxy = proxy.clone();
     let id = window.id();
