@@ -186,6 +186,32 @@
     }
     .carousel .shot.current { opacity: 1; visibility: visible; }
     /* The first dot lines up with the caption; the buttons are bigger than the dots for easy tapping. */
+    /* Over the screenshot (16:10), not its caption. Clicks between the arrows reach the image. */
+    .arrows {
+      grid-area: 1 / 1;
+      align-self: start;
+      aspect-ratio: 16 / 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      pointer-events: none;
+    }
+    .arrows button {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: background-color var(--dur-wipe) var(--glide);
+    }
+    .arrows button:hover { background: rgba(0, 0, 0, 0.85); }
     .dots { display: flex; gap: 4px; margin: 8px 0 0 -10px; }
     .dots button {
       width: 28px;
@@ -339,12 +365,12 @@
     <section class="shots" aria-label="Screenshots">
       <div class="column">
         <figure class="shot">
-          <img src="img/markdown.png" width="2560" height="1600" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and a Done button at the bottom.">
-          <figcaption>A plan, with a comment on two of its lines.</figcaption>
+          <img src="img/diff.png" width="2560" height="1600" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
+          <figcaption>A diff side by side, with a comment under the added line.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="img/diff.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
-          <figcaption>A diff side by side, with a comment under the added line.</figcaption>
+          <img src="img/markdown.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and a Done button at the bottom.">
+          <figcaption>A plan, with a comment on two of its lines.</figcaption>
         </figure>
         <figure class="shot">
           <img src="img/light.png" width="2560" height="1600" loading="lazy" alt="The same diff unified, in vjuu's light theme, with the comment under the added line.">
@@ -491,7 +517,18 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
         dot.onclick = () => show(i);
         dots.append(dot);
       });
+      const arrows = document.createElement('div');
+      arrows.className = 'arrows';
+      for (const [label, glyph, step] of [['Previous screenshot', '‹', -1], ['Next screenshot', '›', 1]]) {
+        const arrow = document.createElement('button');
+        arrow.type = 'button';
+        arrow.setAttribute('aria-label', label);
+        arrow.textContent = glyph;
+        arrow.onclick = () => show((current + step + shots.length) % shots.length);
+        arrows.append(arrow);
+      }
       box.classList.add('carousel');
+      box.append(arrows);
       // Inside the column, so the dots line up with the screenshots.
       box.append(dots);
       show(0);
