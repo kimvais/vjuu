@@ -41,6 +41,8 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --heading-3: #0550ae;
   --inline-code: #953800;
   --d2h-bg-color: var(--bg);
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
 }
 /* Monokai's own palette: a warm, brownish dark grey rather than blue. */
 [data-theme="monokai"], [data-theme="graphite"] {
@@ -76,16 +78,17 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --d2h-empty-placeholder-bg-color: var(--code-bg);
   --d2h-empty-placeholder-border-color: var(--comment-bg);
   --d2h-selected-color: var(--focus);
-  --d2h-ins-bg-color: rgba(166, 226, 46, 0.12);
-  --d2h-ins-border-color: rgba(166, 226, 46, 0.35);
-  --d2h-ins-highlight-bg-color: rgba(166, 226, 46, 0.3);
-  --d2h-ins-label-color: #a6e22e;
-  --d2h-del-bg-color: rgba(249, 38, 114, 0.12);
-  --d2h-del-border-color: rgba(249, 38, 114, 0.35);
-  --d2h-del-highlight-bg-color: rgba(249, 38, 114, 0.3);
-  --d2h-del-label-color: #f92672;
-  --d2h-change-del-color: rgba(253, 151, 31, 0.15);
-  --d2h-change-ins-color: rgba(166, 226, 46, 0.18);
+  --d2h-ins-bg-color: rgba(46, 160, 67, 0.18);
+  --d2h-ins-border-color: rgba(46, 160, 67, 0.4);
+  --d2h-ins-highlight-bg-color: rgba(46, 160, 67, 0.45);
+  --d2h-ins-label-color: #3fb950;
+  --d2h-del-bg-color: rgba(255, 56, 86, 0.16); /* crimson-leaning: Monokai's warm background turns plain red brown */
+  --d2h-del-border-color: rgba(255, 56, 86, 0.4);
+  --d2h-del-highlight-bg-color: rgba(255, 56, 86, 0.42);
+  --d2h-del-label-color: #ff5c74;
+  /* Changed lines use the same colours as plain added / removed ones, not a third (orange) colour. */
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
   --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
   --d2h-info-border-color: var(--border);
   --d2h-change-label-color: #fd971f;
