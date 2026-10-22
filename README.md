@@ -8,6 +8,7 @@ your comments come back to the agent as markdown on stdout, anchored to `file:li
 
 ```
 revu docs/design.md          # markdown
+revu a.md b.md change.diff   # several files in one window, stacked
 revu change.diff             # diff or patch file
 revu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
 git show HEAD | revu -       # stdin; diff or markdown is detected
