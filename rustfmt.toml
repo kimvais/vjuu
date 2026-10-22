@@ -1,0 +1,3 @@
+max_width = 119
+# Keep short chains and struct literals on one line, as the code was written.
+use_small_heuristics = "Max"

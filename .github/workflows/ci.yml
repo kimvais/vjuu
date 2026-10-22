@@ -21,12 +21,18 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
       - run: cargo test --locked
       - run: cargo build --release --locked
       # The UI tests drive ui/ in Edge, which only the Windows runners have.
       - uses: astral-sh/setup-uv@v6
         if: runner.os == 'Windows'
+      - name: Lint and format Python
+        if: runner.os == 'Windows'
+        run: uvx ruff check tests && uvx ruff format --check tests
       - name: UI tests
         if: runner.os == 'Windows'
         run: uv run --no-project --with playwright python tests/ui_test.py

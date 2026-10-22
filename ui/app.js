@@ -5,7 +5,7 @@ const overall = $('#overall');
 /** Content scrolls here, below the title bar, as in Windows Terminal. */
 const scroller = $('#scroll');
 
-/** {docs: [{name, kind, text}], autoclose} */
+/** {docs: [{name, kind, text}], autoclose, session} */
 let req;
 let sideBySide = false;
 let focused = null;
@@ -55,6 +55,7 @@ async function load() {
   const d = await r.json();
   if (req) return;
   req = d;
+  $('#session').textContent = req.session ?? '';
   $('#name').textContent = req.docs.map((x) => x.name).join(', ');
   $('#view').hidden = !hasDiff();
   const renderers = new Set(req.docs.map((x) => ({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind]).filter(Boolean));

@@ -56,7 +56,9 @@ pub fn spawn_detached(command: &mut Command) {
     {
         use std::os::windows::process::CommandExt;
         use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
-        use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE};
+        use windows_sys::Win32::System::Console::{
+            GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        };
         const DETACHED_PROCESS: u32 = 0x8;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x200;
         // CreateProcess inherits every inheritable handle, including our stdout pipe; the caller would then
@@ -120,9 +122,13 @@ pub fn fit_height(window: &Window) {
     #[cfg(windows)]
     let area = {
         use tao::platform::windows::WindowExtWindows;
-        use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
+        use windows_sys::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+        };
         let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..unsafe { std::mem::zeroed() } };
-        let ok = unsafe { GetMonitorInfoW(MonitorFromWindow(window.hwnd() as _, MONITOR_DEFAULTTONEAREST), &mut info) } != 0;
+        let ok =
+            unsafe { GetMonitorInfoW(MonitorFromWindow(window.hwnd() as _, MONITOR_DEFAULTTONEAREST), &mut info) }
+                != 0;
         let work = info.rcWork;
         ok.then(|| (work.left, work.top, (work.right - work.left) as u32, (work.bottom - work.top) as u32))
     };
@@ -132,7 +138,9 @@ pub fn fit_height(window: &Window) {
         let height = size.height * 92 / 100;
         (pos.x, pos.y + ((size.height - height) / 2) as i32, size.width, height)
     });
-    let Some((left, top, area_width, height)) = area else { return };
+    let Some((left, top, area_width, height)) = area else {
+        return;
+    };
     let width = width.min(area_width);
     window.set_outer_position(PhysicalPosition::new(left + ((area_width - width) / 2) as i32, top));
     window.set_inner_size(PhysicalSize::new(width, height));
@@ -144,7 +152,12 @@ pub fn fit_height(window: &Window) {
         use windows_sys::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
         let mut visible: RECT = unsafe { std::mem::zeroed() };
         let ok = unsafe {
-            DwmGetWindowAttribute(window.hwnd() as _, DWMWA_EXTENDED_FRAME_BOUNDS as u32, (&raw mut visible).cast(), size_of::<RECT>() as u32)
+            DwmGetWindowAttribute(
+                window.hwnd() as _,
+                DWMWA_EXTENDED_FRAME_BOUNDS as u32,
+                (&raw mut visible).cast(),
+                size_of::<RECT>() as u32,
+            )
         } == 0;
         let overlap = visible.bottom - (top + height as i32);
         if ok && overlap > 0 {
@@ -167,7 +180,12 @@ pub fn style_frame(window: &Window) {
             DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
         };
         let set = |attribute: i32, value: u32| unsafe {
-            DwmSetWindowAttribute(window.hwnd() as _, attribute as u32, (&raw const value).cast(), size_of_val(&value) as u32);
+            DwmSetWindowAttribute(
+                window.hwnd() as _,
+                attribute as u32,
+                (&raw const value).cast(),
+                size_of_val(&value) as u32,
+            );
         };
         set(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND as u32);
         set(DWMWA_BORDER_COLOR, BRAND_COLORREF);
