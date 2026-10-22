@@ -38,8 +38,8 @@ def _serve(work):
     return f'http://127.0.0.1:{server.server_port}/'
 
 
-def _open(page, url, work, doc):
-    (work / 'doc.json').write_text(json.dumps(doc))
+def _open(page, url, work, *docs):
+    (work / 'doc.json').write_text(json.dumps({'docs': list(docs)}))
     page.goto(url)
     page.wait_for_selector('[data-key]')
 
@@ -48,7 +48,7 @@ def _review(page):
     states = [m for m in page.evaluate('window.__msgs') if m['type'] == 'state']
     review = states[-1]['review']
     for c in review['comments']:
-        del c['editing']
+        del c['editing'], c['doc']
     return review
 
 
@@ -58,7 +58,7 @@ def _comment(page, text):
 
 
 def test_diff(page, url, work):
-    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF, 'autoclose': False})
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
     _comment(page, 'rename is fine')
     page.locator('tr', has=page.locator('.d2h-del')).first.locator('.d2h-code-line').click()
@@ -83,7 +83,7 @@ def test_diff(page, url, work):
 
 
 def test_markdown(page, url, work):
-    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD, 'autoclose': False})
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     page.get_by_text('First paragraph').click()
     page.keyboard.press('c')
     _comment(page, 'tighten this')
@@ -110,7 +110,7 @@ def test_markdown(page, url, work):
 
 
 def test_highlighting_and_themes(page, url, work):
-    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD, 'autoclose': False})
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     # Fenced ```py block is highlighted; `print` is a built-in.
     assert page.locator('pre code .hljs-built_in').inner_text() == 'print'
     theme = lambda: page.evaluate('[document.documentElement.dataset.theme, localStorage.getItem("revu-theme")]')
@@ -123,14 +123,31 @@ def test_highlighting_and_themes(page, url, work):
     page.select_option('#theme', 'graphite')
     assert theme() == ['graphite', 'graphite']
     # The choice survives into the next window.
-    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF, 'autoclose': False})
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     assert theme() == ['graphite', 'graphite']
     page.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
     page.evaluate('localStorage.removeItem("revu-theme")')
 
 
+def test_multiple_documents(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD}, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF},
+          {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    assert page.inner_text('#name') == 'a.md, git diff, a.md'
+    assert page.locator('.doc-header').all_inner_texts() == ['a.md', 'a.md']
+    # Same name, same line, different documents: two separate comments.
+    for n, text in ((0, 'first copy'), (1, 'second copy')):
+        page.get_by_text('First paragraph').nth(n).click()
+        page.keyboard.press('c')
+        _comment(page, text)
+    page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
+    _comment(page, 'in the diff')
+    states = [m for m in page.evaluate('window.__msgs') if m['type'] == 'state']
+    got = sorted((c['doc'], c['file'], c['start'], c['text']) for c in states[-1]['review']['comments'])
+    assert got == [(0, 'a.md', 3, 'first copy'), (1, 'src/app.py', 2, 'in the diff'), (2, 'a.md', 3, 'second copy')], got
+
+
 def test_markdown_html_is_not_rendered(page, url, work):
-    _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n', 'autoclose': False})
+    _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': 'hi <img src=x onerror="window.__pwned=1">\n'})
     assert page.locator('#content img').count() == 0
     assert page.evaluate('window.__pwned') is None
 
@@ -142,7 +159,8 @@ def main():
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
-        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_markdown_html_is_not_rendered):
+        for test in (test_diff, test_markdown, test_highlighting_and_themes, test_multiple_documents,
+                     test_markdown_html_is_not_rendered):
             page = browser.new_page()
             page.add_init_script(_STUB)
             page.on('pageerror', lambda e: errors.append(e))

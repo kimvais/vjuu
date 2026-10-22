@@ -32,14 +32,21 @@ struct Doc {
     name: String,
     kind: String,
     text: String,
+    /// Directory the document's relative images resolve against.
+    base: Option<PathBuf>,
+}
+
+/// The documents one window shows; also what a client sends the resident instance.
+#[derive(Serialize, Deserialize)]
+struct Request {
+    docs: Vec<Doc>,
     autoclose: bool,
 }
 
-/// What a client sends the resident instance: the document and the directory relative images resolve against.
-#[derive(Serialize, Deserialize)]
-struct Request {
-    doc: Doc,
-    base: Option<PathBuf>,
+impl Request {
+    fn name(&self) -> String {
+        self.docs.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ")
+    }
 }
 
 /// Messages posted by ui/app.js via `window.ipc.postMessage`.
@@ -85,14 +92,9 @@ fn main() {
         ["-"] => {
             let mut text = String::new();
             std::io::stdin().read_to_string(&mut text).unwrap_or_else(|e| fail(&format!("Cannot read stdin: {e}")));
-            request("stdin".into(), text, false, env::current_dir().ok())
+            request(vec![doc("stdin".into(), text, false, env::current_dir().ok())])
         }
-        [path] if !path.starts_with('-') => {
-            let text = fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
-            let ext_diff = matches!(Path::new(path).extension().and_then(|e| e.to_str()), Some("diff" | "patch"));
-            let base = Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-            request(path.into(), text, ext_diff, base)
-        }
+        ref paths @ [_, ..] if paths.iter().all(|p| !p.starts_with('-')) => request(paths.iter().map(|p| file_doc(p)).collect()),
         _ => {
             eprintln!("{USAGE}");
             process::exit(2)
@@ -108,10 +110,20 @@ fn main() {
     run(Some(request), started)
 }
 
-fn request(name: String, text: String, force_diff: bool, base: Option<PathBuf>) -> Request {
+fn request(docs: Vec<Doc>) -> Request {
+    Request { docs, autoclose: env::var_os("REVU_AUTOCLOSE").is_some() }
+}
+
+fn doc(name: String, text: String, force_diff: bool, base: Option<PathBuf>) -> Doc {
     let kind = if force_diff || is_diff(&text) { "diff" } else { "md" };
-    let doc = Doc { name, kind: kind.into(), text, autoclose: env::var_os("REVU_AUTOCLOSE").is_some() };
-    Request { doc, base }
+    Doc { name, kind: kind.into(), text, base }
+}
+
+fn file_doc(path: &str) -> Doc {
+    let text = fs::read_to_string(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
+    let ext_diff = matches!(Path::new(path).extension().and_then(|e| e.to_str()), Some("diff" | "patch"));
+    let base = Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+    doc(path.into(), text, ext_diff, base)
 }
 
 fn is_diff(text: &str) -> bool {
@@ -129,7 +141,7 @@ fn git_diff(rest: &[&str]) -> Request {
         process::exit(0);
     }
     let name = format!("git diff {}", rest.join(" ")).trim_end().to_string();
-    request(name, text, true, env::current_dir().ok())
+    request(vec![doc(name, text, true, env::current_dir().ok())])
 }
 
 fn pipe_name() -> Name<'static> {
@@ -148,7 +160,7 @@ fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
     let mut md = String::new();
     // Windows reports the server closing the pipe as an error rather than EOF.
     let read = conn.read_to_string(&mut md);
-    if request.doc.autoclose {
+    if request.autoclose {
         eprintln!("rendered in {} ms (resident)", started.elapsed().as_millis());
         process::exit(0)
     }
@@ -223,7 +235,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let mut spare_due = None;
     match initial {
         Some(request) => {
-            let title = format!("revu: {}", request.doc.name);
+            let title = format!("revu: {}", request.name());
             let mut s = new_session(&event_loop, &proxy, &mut context, Some(request));
             s.window.set_title(&title);
             s.reply = Some(Reply::Stdout);
@@ -238,7 +250,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             Event::UserEvent(AppEvent::Open(request, conn)) => {
-                let title = format!("revu: {}", request.doc.name);
+                let title = format!("revu: {}", request.name());
                 let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
                 *s.slot.lock().expect("slot lock") = Some(request);
                 s.reply = Some(Reply::Client(conn));
@@ -323,7 +335,7 @@ fn new_session(
 /// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
 fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
     let Some(s) = sessions.remove(&id) else { return };
-    let name = s.slot.lock().expect("slot lock").as_ref().map(|r| r.doc.name.clone()).unwrap_or_default();
+    let name = s.slot.lock().expect("slot lock").as_ref().map(Request::name).unwrap_or_default();
     let md = if save { save_review(&name, &s.latest) } else { String::new() };
     match s.reply {
         Some(Reply::Stdout) => {
@@ -354,13 +366,17 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/vendor/jetbrains-mono.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2"),
         // A spare window has no document yet; the page waits for revuLoad().
         "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
-            Some(r) => (Cow::Owned(serde_json::to_vec(&r.doc).expect("Doc serialises")), "application/json"),
+            Some(r) => (Cow::Owned(serde_json::to_vec(r).expect("Request serialises")), "application/json"),
             None => return not_found(),
         },
-        // Relative images in markdown. shortcut: no percent-decoding, so paths with spaces 404.
+        // Relative images in markdown, as /files/<doc index>/<path>; app.js rewrites them.
+        // shortcut: no percent-decoding, so paths with spaces 404.
         _ => {
-            let base = slot.lock().expect("slot lock").as_ref().and_then(|r| r.base.clone());
-            match base.and_then(|b| fs::read(b.join(path.trim_start_matches('/'))).ok()) {
+            let file = path.strip_prefix("/files/").and_then(|p| p.split_once('/')).and_then(|(i, rest)| {
+                let base = slot.lock().expect("slot lock").as_ref()?.docs.get(i.parse::<usize>().ok()?)?.base.clone()?;
+                Some(base.join(rest))
+            });
+            match file.and_then(|f| fs::read(f).ok()) {
                 Some(bytes) => (Cow::Owned(bytes), if path.ends_with(".svg") { "image/svg+xml" } else { "application/octet-stream" }),
                 None => return not_found(),
             }

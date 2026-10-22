@@ -4,15 +4,17 @@ const content = $('#content');
 const addBtn = $('#add');
 const overall = $('#overall');
 
-let doc;
+/** {docs: [{name, kind, text}], autoclose} */
+let req;
 let sideBySide = false;
 let focused = null;
 /** key -> {el, a}: every commentable element of the current render. */
 let anchors = new Map();
-/** key -> {file, start, end, old, quote, text, editing}. Survives re-renders. */
+/** key -> {doc, file, start, end, old, quote, text, editing}. Survives re-renders. */
 const comments = new Map();
 
-const keyOf = (a) => `${a.file}\n${a.start}-${a.end}${a.old ? 'o' : ''}`;
+// The doc index keeps two documents with the same name apart.
+const keyOf = (a) => `${a.doc}\n${a.file}\n${a.start}-${a.end}${a.old ? 'o' : ''}`;
 const post = (msg) => window.ipc.postMessage(JSON.stringify(msg));
 
 const scripts = new Map();
@@ -32,9 +34,9 @@ function loadScript(src) {
 
 const RENDERERS = ['vendor/highlight.min.js', 'vendor/markdown-it.min.js', 'vendor/diff2html-ui-base.min.js'];
 
-/** Loads the document; a pre-warmed spare window gets 404 until revu hands it one and calls this again. */
+/** Loads the documents; a pre-warmed spare window gets 404 until revu hands it some and calls this again. */
 async function load() {
-  if (doc) return;
+  if (req) return;
   // Resident windows share one browser profile; never reuse an earlier document.
   const r = await fetch('doc.json', { cache: 'no-store' });
   if (!r.ok) {
@@ -43,20 +45,35 @@ async function load() {
     return;
   }
   const d = await r.json();
-  if (doc) return;
-  doc = d;
-  $('#name').textContent = doc.name;
-  $('#view').hidden = doc.kind !== 'diff';
-  const renderer = doc.kind === 'diff' ? 'vendor/diff2html-ui-base.min.js' : 'vendor/markdown-it.min.js';
-  await Promise.all([loadScript('vendor/highlight.min.js'), loadScript(renderer)]);
+  if (req) return;
+  req = d;
+  $('#name').textContent = req.docs.map((x) => x.name).join(', ');
+  $('#view').hidden = !hasDiff();
+  const renderers = new Set(req.docs.map((x) => (x.kind === 'diff' ? RENDERERS[2] : RENDERERS[1])));
+  await Promise.all([RENDERERS[0], ...renderers].map(loadScript));
   render();
-  if (doc.autoclose) requestAnimationFrame(() => post({ type: 'rendered' }));
+  if (req.autoclose) requestAnimationFrame(() => post({ type: 'rendered' }));
 }
+
+const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
 
 function render() {
   anchors = new Map();
   focused = null;
-  if (doc.kind === 'diff') renderDiff(); else renderMarkdown();
+  content.replaceChildren();
+  req.docs.forEach((doc, i) => {
+    const section = document.createElement('section');
+    section.className = 'doc';
+    content.append(section);
+    if (doc.kind === 'diff') {
+      renderDiff(section, doc, i);
+    } else {
+      // Diffs carry their own per-file headers; markdown gets one when there is more than one document.
+      if (req.docs.length > 1) section.innerHTML = `<div class="doc-header"></div>`;
+      section.querySelector('.doc-header')?.append(doc.name);
+      renderMarkdown(section, doc, i);
+    }
+  });
   renderComments();
 }
 
@@ -65,7 +82,7 @@ function anchor(el, a) {
   anchors.set(el.dataset.key, { el, a });
 }
 
-function renderMarkdown() {
+function renderMarkdown(section, doc, i) {
   // html off: the document is agent output and must not run script next to window.ipc.
   // Only fences with a known language; auto-detection is slow and often wrong.
   const highlight = (code, lang) =>
@@ -76,17 +93,25 @@ function renderMarkdown() {
   for (const t of tokens) {
     if (t.map && t.nesting !== -1) t.attrSet('data-map', t.map.join(','));
   }
-  content.innerHTML = `<article class="markdown">${md.renderer.render(tokens, md.options, {})}</article>`;
-  for (const el of content.querySelectorAll('[data-map]')) {
+  const article = document.createElement('article');
+  article.className = 'markdown';
+  article.innerHTML = md.renderer.render(tokens, md.options, {});
+  section.append(article);
+  // Relative images resolve against each document's own folder, served by revu as files/<i>/.
+  for (const img of article.querySelectorAll('img[src]')) {
+    const src = img.getAttribute('src');
+    if (!/^([a-z]+:|\/)/i.test(src)) img.src = `files/${i}/${src}`;
+  }
+  for (const el of article.querySelectorAll('[data-map]')) {
     const [from, to] = el.dataset.map.split(',').map(Number);
     let end = to;
     while (end > from + 1 && !lines[end - 1].trim()) end--;
-    anchor(el, { file: doc.name, start: from + 1, end, old: false, quote: lines.slice(from, end).join('\n') });
+    anchor(el, { doc: i, file: doc.name, start: from + 1, end, old: false, quote: lines.slice(from, end).join('\n') });
   }
 }
 
-function renderDiff() {
-  const ui = new Diff2HtmlUI(content, doc.text, {
+function renderDiff(section, doc, i) {
+  const ui = new Diff2HtmlUI(section, doc.text, {
     outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
     drawFileList: false,
     matching: 'lines',
@@ -99,7 +124,7 @@ function renderDiff() {
   ui.draw();
   // Highlighting a large diff takes hundreds of ms; paint first, colour after.
   requestAnimationFrame(() => setTimeout(() => ui.highlightCode()));
-  for (const wrapper of content.querySelectorAll('.d2h-file-wrapper')) {
+  for (const wrapper of section.querySelectorAll('.d2h-file-wrapper')) {
     const file = wrapper.querySelector('.d2h-file-name').textContent.split(' → ').pop().trim();
     const lineText = (tr) =>
       (tr.querySelector('.d2h-code-line-prefix')?.textContent.trim() ?? '') +
@@ -112,17 +137,17 @@ function renderDiff() {
         const n1 = num.querySelector('.line-num1')?.textContent.trim();
         if (!n1 && !n2) continue;
         const line = Number(n2 || n1);
-        anchor(tr, { file, start: line, end: line, old: !n2, quote: lineText(tr) });
+        anchor(tr, { doc: i, file, start: line, end: line, old: !n2, quote: lineText(tr) });
       }
       continue;
     }
-    wrapper.querySelectorAll('.d2h-file-side-diff').forEach((side, i) => {
+    wrapper.querySelectorAll('.d2h-file-side-diff').forEach((side, sideIdx) => {
       side.querySelectorAll('tbody tr').forEach((tr, idx) => {
         tr.dataset.idx = idx;
         const n = tr.querySelector('.d2h-code-side-linenumber')?.textContent.trim();
         // Left side: only deleted lines; unchanged lines are commented on the right.
-        if (!n || (i === 0 && !tr.cells[1].classList.contains('d2h-del'))) return;
-        anchor(tr, { file, start: Number(n), end: Number(n), old: i === 0, quote: lineText(tr) });
+        if (!n || (sideIdx === 0 && !tr.cells[1].classList.contains('d2h-del'))) return;
+        anchor(tr, { doc: i, file, start: Number(n), end: Number(n), old: sideIdx === 0, quote: lineText(tr) });
       });
     });
   }
@@ -279,7 +304,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.ctrlKey && e.shiftKey) { e.preventDefault(); done(); return; }
   if (e.target.closest('textarea') || e.ctrlKey || e.altKey || e.metaKey) return;
   const all = [...content.querySelectorAll('[data-key]')];
-  const sections = [...content.querySelectorAll('.d2h-file-wrapper, .markdown > h1, .markdown > h2, .markdown > h3')];
+  const sections = [...content.querySelectorAll('.d2h-file-wrapper, .doc-header, .markdown > h1, .markdown > h2, .markdown > h3')];
   if (e.key === 'j' || e.key === 'k') {
     const el = move(all, e.key === 'j' ? 1 : -1);
     if (el) setFocus(el);
@@ -290,7 +315,7 @@ document.addEventListener('keydown', (e) => {
   } else if ((e.key === 'c' || e.key === 'Enter') && focused) {
     e.preventDefault();
     startComment(focused);
-  } else if (e.key === 'v' && doc.kind === 'diff') {
+  } else if (e.key === 'v' && hasDiff()) {
     toggleView();
   } else if (e.key === 't') {
     const names = [...$('#theme').options].map((o) => o.value);

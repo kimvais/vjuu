@@ -183,3 +183,6 @@ tr.revu-c td { padding: 0 8px; }
 #overall-box label { display: block; font-weight: 600; margin-bottom: 4px; }
 #overall { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
 #orphans { margin-top: 24px; }
+
+.doc + .doc { margin-top: 32px; }
+.doc-header { font: 600 14px/1.4 var(--mono); padding: 8px 12px; margin-bottom: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; max-width: 900px; }
