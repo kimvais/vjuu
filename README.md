@@ -1,6 +1,6 @@
 # vjuu
 
-A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
+A fast review window for agent handoffs, for Windows. When an agent would say "open X and review it", it runs
 `vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
@@ -71,8 +71,10 @@ Deleted diff lines are marked `(old)` and use the old file's line number.
 
 ## Install
 
+Windows 10 or 11 only (it uses WebView2, Win32 named pipes and DWM). Needs a Rust toolchain.
+
 ```
-cargo install --git https://github.com/kimvais/vjuu
+cargo install --locked --git https://github.com/kimvais/vjuu
 claude plugin marketplace add kimvais/vjuu
 claude plugin install vjuu@vjuu
 ```
