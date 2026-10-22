@@ -89,8 +89,8 @@ jobs:
     steps:
       - id: check
         env:
-          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: if [ -n "$TOKEN" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::HOMEBREW_TAP_TOKEN not set; skipping Homebrew"; fi
+          KEY: ${{ secrets.HOMEBREW_TAP_KEY }}
+        run: if [ -n "$KEY" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::HOMEBREW_TAP_KEY not set; skipping Homebrew"; fi
       - if: steps.check.outputs.ok == 'true'
         uses: actions/checkout@v5
       - if: steps.check.outputs.ok == 'true'
@@ -102,7 +102,8 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: kimvais/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # A write deploy key on homebrew-tap: scoped to that one repo and never expires.
+          ssh-key: ${{ secrets.HOMEBREW_TAP_KEY }}
           path: tap
       - if: steps.check.outputs.ok == 'true'
         name: Update the formula
