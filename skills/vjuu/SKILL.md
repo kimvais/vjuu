@@ -50,4 +50,4 @@ general comment
 
 If the session restarted or the output was lost, `vjuu last` prints the most recent review again.
 
-If `vjuu` is not on PATH, tell the user to install it: `cargo install --path C:\Users\k\p\vjuu`.
+If `vjuu` is not on PATH, tell the user to install it: `cargo install --git https://github.com/kimvais/vjuu` (needs Windows and a Rust toolchain).

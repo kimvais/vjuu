@@ -72,8 +72,8 @@ Deleted diff lines are marked `(old)` and use the old file's line number.
 ## Install
 
 ```
-cargo install --path .
-claude plugin marketplace add C:\Users\k\p\vjuu
+cargo install --git https://github.com/kimvais/vjuu
+claude plugin marketplace add kimvais/vjuu
 claude plugin install vjuu@vjuu
 ```
 
@@ -90,3 +90,7 @@ asking you to open files.
 
 UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56 base bundle, highlight.js
 11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Bundled libraries and fonts keep their own licenses, in [ui/vendor/licenses](ui/vendor/licenses): markdown-it and diff2html (MIT), highlight.js (BSD-3-Clause), Inter and JetBrains Mono (SIL Open Font License 1.1).

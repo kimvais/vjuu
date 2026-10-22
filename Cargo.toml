@@ -2,6 +2,9 @@
 name = "vjuu"
 version = "0.1.0"
 edition = "2024"
+description = "Fast review window for AI-agent handoffs: markdown, diffs and code with inline comments."
+license = "MIT"
+repository = "https://github.com/kimvais/vjuu"
 
 [dependencies]
 interprocess = "2.4.6"

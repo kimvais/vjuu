@@ -3,7 +3,8 @@
   "name": "vjuu",
   "description": "Fast review window with inline comments for agent handoffs.",
   "owner": {
-    "name": "Kimmo"
+    "name": "Kimmo Parviainen-Jalanko",
+    "url": "https://github.com/kimvais"
   },
   "plugins": [
     {
