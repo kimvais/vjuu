@@ -169,7 +169,7 @@
     .button + .textlink { margin-left: 24px; font-size: 15px; font-weight: 400; }
 
     /* Screenshots */
-    .shots { padding: 0 0 var(--section-y); }
+    .shots { margin: 0 0 40px; }
     .shot { margin: 0 0 48px; }
     .shot:last-child { margin-bottom: 0; }
     .shot img {
@@ -352,25 +352,22 @@
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Don't open the file. <span>Your agent already did.</span></h1>
         <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Done, and your comments go straight back to the agent.</p>
+        <div class="shots" role="group" aria-label="Screenshots">
+          <figure class="shot">
+            <img src="img/diff.png" width="2560" height="1600" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
+            <figcaption>A diff side by side, with a comment under the added line.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="img/markdown.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and a Done button at the bottom.">
+            <figcaption>A plan, with a comment on two of its lines.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="img/light.png" width="2560" height="1600" loading="lazy" alt="The same diff unified, in vjuu's light theme, with the comment under the added line.">
+            <figcaption>Unified, in light mode, if that's what you're into.</figcaption>
+          </figure>
+        </div>
         <a class="button" href="#install">Install</a>
         <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>Source on GitHub</a>
-      </div>
-    </section>
-
-    <section class="shots" aria-label="Screenshots">
-      <div class="column">
-        <figure class="shot">
-          <img src="img/diff.png" width="2560" height="1600" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
-          <figcaption>A diff side by side, with a comment under the added line.</figcaption>
-        </figure>
-        <figure class="shot">
-          <img src="img/markdown.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and a Done button at the bottom.">
-          <figcaption>A plan, with a comment on two of its lines.</figcaption>
-        </figure>
-        <figure class="shot">
-          <img src="img/light.png" width="2560" height="1600" loading="lazy" alt="The same diff unified, in vjuu's light theme, with the comment under the added line.">
-          <figcaption>Unified, in light mode, if that's what you're into.</figcaption>
-        </figure>
       </div>
     </section>
 
@@ -508,7 +505,7 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
 
     // Screenshots rotate every few seconds; hovering or focusing them holds the current one.
     {
-      const box = document.querySelector('.shots .column');
+      const box = document.querySelector('.shots');
       const shots = [...box.querySelectorAll('.shot')];
       const dots = document.createElement('div');
       dots.className = 'dots';
