@@ -117,6 +117,16 @@
     pre .dim { color: var(--ink-dim); }
 
     /* Header */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
+    }
+    /* Section links land below the sticky header, not under it. */
+    section[id] { scroll-margin-top: 88px; }
     .header .column {
       display: flex;
       align-items: center;
