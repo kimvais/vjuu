@@ -79,6 +79,8 @@ function render() {
       renderDiff(section, doc, i);
     } else if (doc.kind === 'code') {
       renderCode(section, doc, i);
+    } else if (doc.kind === 'html') {
+      renderHtml(section, doc, i);
     } else {
       // Diffs and code carry their own headers; markdown gets one when there is more than one document.
       if (req.docs.length > 1) section.innerHTML = `<div class="doc-header"></div>`;
@@ -93,6 +95,78 @@ function render() {
 function anchor(el, a) {
   el.dataset.key = keyOf(a);
   anchors.set(el.dataset.key, { el, a });
+}
+
+/** querySelectorAll over the content and the HTML pages framed in it, in document order. */
+const deep = (sel) => [...content.querySelectorAll(`${sel}, iframe`)]
+  .flatMap((e) => (e.tagName === 'IFRAME' ? [...(e.contentDocument?.querySelectorAll(sel) ?? [])] : [e]));
+const frameDocs = () => [...content.querySelectorAll('iframe')].map((f) => f.contentDocument).filter(Boolean);
+
+/** Elements of an HTML page that take a comment; hovering picks the innermost. */
+const HTML_BLOCKS = 'h1, h2, h3, h4, h5, h6, p, li, pre, blockquote, figcaption, dt, dd, th, td, img, summary, label, button';
+/** vjuu's own styles inside a framed page; the theme's colours are copied in by syncFrameTheme(). */
+const FRAME_CSS = `
+[data-key].hovered { cursor: pointer; background: var(--focus); border-radius: 4px; }
+[data-key].focused { background: var(--focus) !important; outline: 1px solid var(--accent); }
+.vjuu-c.comment { box-sizing: border-box; margin: 6px 0; padding: 8px 10px; display: flex; gap: 8px; align-items: flex-start;
+  flex-wrap: wrap; background: var(--comment-bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px;
+  font: 14px/1.5 var(--sans); white-space: normal; text-align: left; }
+.vjuu-c .text { flex: 1; white-space: pre-wrap; cursor: text; }
+.vjuu-c textarea { box-sizing: border-box; width: 100%; font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+.vjuu-c button { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 2px 10px; cursor: pointer; }`;
+const FRAME_VARS = ['--bg', '--fg', '--border', '--comment-bg', '--focus', '--accent', '--sans'];
+
+function renderHtml(section, doc, i) {
+  const header = document.createElement('div');
+  header.className = 'doc-header';
+  header.textContent = doc.name;
+  const frame = document.createElement('iframe');
+  frame.className = 'html-page';
+  // Same origin, so vjuu can add its comment layer; no allow-scripts, so the page's own scripts (and on* handlers)
+  // never run where they could reach window.ipc. It also blocks forms, popups and leaving through the top window.
+  frame.sandbox = 'allow-same-origin';
+  // Relative stylesheets and images resolve against the file's folder, served as files/<i>/. After the doctype,
+  // which must stay first or the page renders in quirks mode.
+  const base = `<base href="${new URL(`files/${i}/`, location.href)}">`;
+  frame.srcdoc = doc.text.replace(/^(\s*<!doctype[^>]*>)?/i, `$1${base}`);
+  frame.onload = () => {
+    wireFrame(frame.contentDocument, doc, i);
+    renderComments();
+  };
+  section.append(header, frame);
+  targets.push({ el: section, doc: i, file: doc.name });
+}
+
+function wireFrame(d, doc, i) {
+  const style = d.createElement('style');
+  style.textContent = FRAME_CSS;
+  d.head.append(style);
+  syncFrameTheme(d);
+  const headings = [...d.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+  // A page has no line numbers: the agent finds the quote in the source, with an id or heading to tell repeats apart.
+  const at = (el) => {
+    const id = el.closest('[id]:not(html, body)')?.id;
+    if (id) return `#${id}`;
+    const h = headings.findLast((h) => h !== el && h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return h ? `under "${h.textContent.trim()}"` : '';
+  };
+  d.querySelectorAll(HTML_BLOCKS).forEach((el, n) => {
+    const quote = el.tagName === 'IMG' ? `<img src="${el.getAttribute('src')}" alt="${el.alt}">` : el.innerText.trim();
+    anchor(el, { doc: i, part: n, file: doc.name, start: 0, end: 0, old: false, quote, at: at(el) });
+  });
+  d.addEventListener('mouseover', onHover);
+  d.documentElement.addEventListener('mouseleave', onLeave);
+  d.addEventListener('click', onClick);
+  d.addEventListener('keydown', onKey);
+  d.addEventListener('mouseup', onMouseUp);
+  d.addEventListener('selectionchange', onSelectionChange);
+}
+
+function syncFrameTheme(d) {
+  const style = getComputedStyle(document.documentElement);
+  for (const v of FRAME_VARS) d.documentElement.style.setProperty(v, style.getPropertyValue(v));
 }
 
 // SQL and INI are left out: they claim plain prose and command lines.
@@ -238,7 +312,7 @@ function renderDiff(section, doc, i) {
 }
 
 function renderComments() {
-  content.querySelectorAll('.vjuu-c').forEach((e) => e.remove());
+  deep('.vjuu-c').forEach((e) => e.remove());
   $('#orphans')?.remove();
   const orphans = [];
   for (const [key, c] of comments) {
@@ -256,7 +330,7 @@ function renderComments() {
   const n = [...comments.values()].filter((c) => c.text.trim()).length;
   $('#count').textContent = n ? `${n} comment${n > 1 ? 's' : ''}` : '';
   renderFileList();
-  content.querySelector('.vjuu-c textarea, #orphans textarea')?.focus();
+  deep('.vjuu-c textarea, #orphans textarea')[0]?.focus();
 }
 
 function renderFileList() {
@@ -351,7 +425,8 @@ scroller.addEventListener('scroll', () => {
 function place(el, box) {
   if (el.tagName !== 'TR') {
     box.classList.add('vjuu-c');
-    if (el.tagName === 'LI') el.append(box); else el.after(box);
+    // A div between list items or table cells breaks the list or table.
+    if (['LI', 'TD', 'TH'].includes(el.tagName)) el.append(box); else el.after(box);
     return;
   }
   const row = document.createElement('tr');
@@ -446,13 +521,25 @@ function commentOn(el, a) {
   c.editing = true;
   comments.set(key, c);
   getSelection().removeAllRanges();
+  frameDocs().forEach((d) => d.getSelection()?.removeAllRanges());
   selBtn.hidden = true;
   setFocus(el);
   renderComments();
 }
 
-/** Returns {el, a} for the lines the selection covers in one file, or null. */
+/** Returns {el, a} for the lines the selection covers in one file, or for text selected on an HTML page; or null. */
 function selectionAnchor() {
+  for (const d of frameDocs()) {
+    const sel = d.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) continue;
+    const node = sel.getRangeAt(0).endContainer;
+    const el = (node.nodeType === 1 ? node : node.parentElement)?.closest('[data-key]');
+    if (!el || el.closest('.vjuu-c')) return null;
+    const head = anchors.get(el.dataset.key).a;
+    const quote = sel.toString().trim();
+    // The quoted text, not the block, is what the comment is on: a separate comment from one on the whole block.
+    return { el, a: { ...head, part: `${head.part} ${quote}`, quote } };
+  }
   const sel = getSelection();
   if (sel.isCollapsed || !sel.rangeCount) return null;
   const range = sel.getRangeAt(0);
@@ -460,7 +547,7 @@ function selectionAnchor() {
   const first = keyed(range.startContainer);
   const last = keyed(range.endContainer);
   if (!first || !last || first.closest('.vjuu-c') || last.closest('.vjuu-c')) return null;
-  const all = [...content.querySelectorAll('[data-key]')];
+  const all = deep('[data-key]');
   const head = anchors.get(first.dataset.key).a;
   const span = all.slice(all.indexOf(first), all.indexOf(last) + 1)
     .map((el) => ({ el, a: anchors.get(el.dataset.key).a }))
@@ -487,17 +574,27 @@ selBtn.onclick = () => {
   const s = selectionAnchor();
   if (s) commentOn(s.el, s.a);
 };
-document.addEventListener('mouseup', () => setTimeout(() => {
-  const s = selectionAnchor();
-  selBtn.hidden = !s;
-  if (!s) return;
-  const r = getSelection().getRangeAt(0).getBoundingClientRect();
-  // The button lives in the scrolling area, so position it in that area's coordinates.
-  const area = scroller.getBoundingClientRect();
-  selBtn.style.top = `${r.bottom - area.top + scroller.scrollTop + 6}px`;
-  selBtn.style.left = `${Math.max(r.left - area.left + scroller.scrollLeft, 8)}px`;
-}));
-document.addEventListener('selectionchange', () => { if (getSelection().isCollapsed) selBtn.hidden = true; });
+function onMouseUp(e) {
+  const d = e.target.ownerDocument ?? e.target;
+  setTimeout(() => {
+    const s = selectionAnchor();
+    selBtn.hidden = !s;
+    if (!s) return;
+    const r = d.getSelection().getRangeAt(0).getBoundingClientRect();
+    // Text on a framed page is measured in the frame; the button lives in the scrolling area, so position it in that
+    // area's coordinates.
+    const frame = d.defaultView.frameElement?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const area = scroller.getBoundingClientRect();
+    selBtn.style.top = `${r.bottom + frame.top - area.top + scroller.scrollTop + 6}px`;
+    selBtn.style.left = `${Math.max(r.left + frame.left - area.left + scroller.scrollLeft, 8)}px`;
+  });
+}
+function onSelectionChange(e) {
+  // Fired on the document, and on a textarea for selections within it.
+  if ((e.target.ownerDocument ?? e.target).getSelection().isCollapsed) selBtn.hidden = true;
+}
+document.addEventListener('mouseup', onMouseUp);
+document.addEventListener('selectionchange', onSelectionChange);
 
 function setFocus(el) {
   focused?.classList.remove('focused');
@@ -520,26 +617,36 @@ function done() {
 
 // Highlight only the innermost line or block: that is what a click comments on.
 let hovered = null;
-content.addEventListener('mouseover', (e) => {
+function onHover(e) {
   const el = e.target.closest('.vjuu-c') ? null : e.target.closest('[data-key]');
   if (el === hovered) return;
   hovered?.classList.remove('hovered');
   hovered = el;
   el?.classList.add('hovered');
-});
-content.addEventListener('mouseleave', () => {
+}
+function onLeave() {
   hovered?.classList.remove('hovered');
   hovered = null;
-});
+}
+content.addEventListener('mouseover', onHover);
+content.addEventListener('mouseleave', onLeave);
 
 // Clicking content has no other purpose than commenting, so any click on a line or block starts one.
-content.addEventListener('click', (e) => {
+function onClick(e) {
+  const link = e.target.closest('a[href]');
+  // A link on a framed page would load in the frame and lose the comment layer; in-page ones still scroll.
+  if (link && link.ownerDocument !== document) {
+    e.preventDefault();
+    const href = link.getAttribute('href');
+    if (href.startsWith('#')) link.ownerDocument.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
+  }
   if (e.target.closest('.vjuu-c, a[href]')) return;
   // A drag that selected text is a range comment: the Comment button handles it.
-  if (!getSelection().isCollapsed) return;
+  if (!e.target.ownerDocument.getSelection().isCollapsed) return;
   const el = e.target.closest('[data-key]');
   if (el) startComment(el);
-});
+}
+content.addEventListener('click', onClick);
 
 /** Moves to the previous or next file, or between headings when there is only one file; lands on its first line. */
 function jumpFile(delta) {
@@ -547,16 +654,20 @@ function jumpFile(delta) {
   const list = files.length > 1 ? files : targets.filter((t) => t.heading);
   if (!list.length) return;
   // Start from the cursor when there is one, so the keys follow it rather than the scroll position.
-  const atOrBefore = (t) => t.el === focused
-    || t.el.compareDocumentPosition(focused) & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY);
+  // On a framed page, the frame stands in for the cursor: positions in two documents do not compare.
+  const at = focused?.ownerDocument.defaultView.frameElement ?? focused;
+  const atOrBefore = (t) => t.el === at
+    || t.el.compareDocumentPosition(at) & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY);
   const cur = focused ? list.findLastIndex(atOrBefore) : activeTarget(list);
   const next = list[Math.min(Math.max(cur + delta, 0), list.length - 1)];
   next.el.scrollIntoView({ block: 'start' });
-  const first = next.el.matches('[data-key]') ? next.el : next.el.querySelector('[data-key]');
+  const first = next.el.matches('[data-key]')
+    ? next.el
+    : next.el.querySelector('[data-key]') ?? next.el.querySelector('iframe')?.contentDocument?.querySelector('[data-key]');
   if (first) setFocus(first);
 }
 
-document.addEventListener('keydown', (e) => {
+function onKey(e) {
   const inField = e.target.closest('textarea, input, select');
   // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
   if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {
@@ -565,7 +676,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (inField || e.ctrlKey || e.altKey || e.metaKey) return;
-  const all = [...content.querySelectorAll('[data-key]')];
+  const all = deep('[data-key]');
   // Arrows and the vim-style letters do the same thing.
   const key = { ArrowDown: 'j', ArrowUp: 'k', ArrowRight: 'n', ArrowLeft: 'p' }[e.key] ?? e.key;
   if (key === 'j' || key === 'k') {
@@ -591,7 +702,8 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   e.preventDefault();
-});
+}
+document.addEventListener('keydown', onKey);
 
 function toggleView() {
   sideBySide = !sideBySide;
@@ -606,6 +718,7 @@ function setTheme(name) {
   theme = name;
   document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
   $('#theme').value = name;
+  frameDocs().forEach(syncFrameTheme);
   // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
   try { localStorage.setItem('vjuu-theme', name); } catch {}
 }

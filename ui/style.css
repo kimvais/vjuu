@@ -306,6 +306,9 @@ body.with-files main, body.with-files #overall-box { margin-left: 280px; }
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
+/* HTML pages scroll inside their frame, about one screen tall; white like a browser where the page sets no background. */
+iframe.html-page { display: block; width: 100%; height: calc(100vh - 200px); min-height: 300px; background: #fff; border: 1px solid var(--border); border-radius: 6px; }
+
 /* Source files: line numbers plus highlighted code. */
 .code-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--code-bg); }
 table.code { border-collapse: collapse; min-width: 100%; font: 13px/1.6 var(--mono); }

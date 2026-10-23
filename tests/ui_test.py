@@ -418,6 +418,91 @@ def test_markdown_html_is_not_rendered(page, url, work):
     assert page.evaluate('window.__pwned') is None
 
 
+_HTML = """<!doctype html>
+<html><head><link rel="stylesheet" href="site.css"></head><body>
+<h1>Title</h1>
+<section id="install"><p>Run it.</p><p>Then <b>check</b> it.</p></section>
+<h2>More</h2>
+<p>Plain</p>
+<ul><li>one</li><li>two</li></ul>
+<a href="other.html">away</a>
+<script>parent.__ran = 1</script><img src="missing.png" onerror="parent.__pwned = 1">
+</body></html>
+"""
+
+
+def test_html_page(page, url, work):
+    files = work / 'files' / '0'
+    files.mkdir(parents=True, exist_ok=True)
+    (files / 'site.css').write_text('p { color: rgb(1, 2, 3); }')
+    (work / 'doc.json').write_text(json.dumps({'docs': [{'name': 'site/index.html', 'kind': 'html', 'text': _HTML}]}))
+    page.goto(url)
+    frame = page.frame_locator('iframe')
+    frame.locator('[data-key]').first.wait_for()
+    inner = page.frames[1]
+    # The page's stylesheet loads relative to the file; it stays in standards mode; its scripts never run.
+    assert inner.evaluate("getComputedStyle(document.querySelector('p')).color") == 'rgb(1, 2, 3)'
+    assert inner.evaluate('document.compatMode') == 'CSS1Compat'
+    assert page.evaluate('[window.__ran, window.__pwned]') == [None, None]
+    frame.get_by_text('Run it.').click()
+    _comment(page, 'say how')
+    frame.get_by_text('two').click()
+    _comment(page, 'drop')
+    # A link neither comments nor leaves the page.
+    frame.get_by_text('away').click()
+    assert frame.locator('.vjuu-c').count() == 2
+    assert inner.url == 'about:srcdoc'
+    # Selected text is quoted on its own, under the nearest heading.
+    inner.evaluate("""() => {
+        const r = document.createRange();
+        r.selectNodeContents(document.querySelector('b'));
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        document.dispatchEvent(new MouseEvent('mouseup'));
+    }""")
+    page.locator('#sel-comment').wait_for(state='visible', timeout=5000)
+    page.keyboard.press('c')
+    _comment(page, 'how?')
+    # Theme colours reach the comment boxes inside the page.
+    page.keyboard.press('t')
+    page.keyboard.press('t')
+    assert inner.evaluate("getComputedStyle(document.querySelector('.vjuu-c')).backgroundColor") == 'rgb(46, 46, 46)'
+    review = _review(page)
+    assert review == {
+        'comments': [
+            {
+                'file': 'site/index.html',
+                'start': 0,
+                'end': 0,
+                'old': False,
+                'quote': 'Run it.',
+                'at': '#install',
+                'text': 'say how',
+            },
+            {
+                'file': 'site/index.html',
+                'start': 0,
+                'end': 0,
+                'old': False,
+                'quote': 'two',
+                'at': 'under "More"',
+                'text': 'drop',
+            },
+            {
+                'file': 'site/index.html',
+                'start': 0,
+                'end': 0,
+                'old': False,
+                'quote': 'check',
+                'at': '#install',
+                'text': 'how?',
+            },
+        ],
+        'overall': '',
+    }, review
+    page.evaluate('localStorage.removeItem("vjuu-theme")')
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
@@ -442,6 +527,7 @@ def main():
             test_comment_box_wraps_within_view,
             test_markdown_file_in_a_diff_uses_code_size,
             test_markdown_html_is_not_rendered,
+            test_html_page,
         ):
             if only and test.__name__ not in only:
                 continue

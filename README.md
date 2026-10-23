@@ -10,6 +10,7 @@ your comments come back to the agent as markdown on stdout, anchored to `file:li
 vjuu docs/design.md          # markdown
 vjuu a.md b.md change.diff   # several files in one window, stacked
 vjuu change.diff             # diff or patch file
+vjuu site/index.html         # HTML page, rendered with its stylesheets (its scripts do not run); file:// URLs work too
 vjuu src/main.rs             # any other file: line-numbered, syntax-highlighted source
 vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
 git show HEAD | vjuu -       # stdin; diff or markdown is detected
@@ -50,7 +51,8 @@ its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 | `Ctrl+Shift+Enter` | Done, from anywhere |
 
 Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
-rows) and click **Comment** or press `c`. Links still open; clicks inside a comment edit it.
+rows) and click **Comment** or press `c`. Links still open, except on HTML pages, where only in-page links work; clicks
+inside a comment edit it.
 
 Themes: **Light** (GitHub) and **Graphite** (Monokai code colours on neutral dark grey). **Auto** picks one from the
 system's light/dark setting. The choice is remembered.
@@ -69,7 +71,9 @@ The comment.
 General comment, if any.
 ```
 
-Deleted diff lines are marked `(old)` and use the old file's line number.
+Deleted diff lines are marked `(old)` and use the old file's line number. A rendered HTML page has no line numbers:
+its comments quote the text and say where it is, as `## site/index.html (#install)` (the nearest id) or
+`## site/index.html (under "Install")` (the nearest heading).
 
 ## Install
 
@@ -121,7 +125,8 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
   stderr, for startup measurements.
 
 UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56 base bundle, highlight.js
-11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu.
+11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu. For the same reason
+HTML pages load in an iframe sandboxed without scripts: vjuu adds the comment layer from outside.
 
 ## License
 

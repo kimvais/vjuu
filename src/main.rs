@@ -22,7 +22,7 @@ use wry::{WebContext, WebView, WebViewBuilder};
 use platform::{bring_to_front, pipe_name};
 use review::Review;
 
-const USAGE: &str = "usage: vjuu [--session <name>] <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup\n  <file>: markdown, a diff/patch, or any source file; several open in one window";
+const USAGE: &str = "usage: vjuu [--session <name>] <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup\n  <file>: markdown, a diff/patch, an HTML page (or file:// URL), or any source file; several open in one window";
 /// The skill that tells agents to run vjuu; built in, so it always matches this version.
 const SKILL: &str = include_str!("../skills/vjuu/SKILL.md");
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
@@ -172,7 +172,13 @@ fn request(docs: Vec<Doc>) -> Request {
     Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some(), session: None }
 }
 
-fn file_doc(path: &str) -> Doc {
+fn file_doc(arg: &str) -> Doc {
+    // A `file://` URL, as copied from a browser's address bar. A Windows path parses as a URL too, scheme `c`.
+    let local = url::Url::parse(arg).ok().filter(|u| u.scheme() == "file").map(|u| {
+        let path = u.to_file_path().unwrap_or_else(|()| fail(&format!("Not a local file: `{arg}`")));
+        path.to_string_lossy().into_owned()
+    });
+    let path = local.as_deref().unwrap_or(arg);
     let bytes = fs::read(path).unwrap_or_else(|e| fail(&format!("Cannot read `{path}`: {e}")));
     // Lenient with odd encodings (Latin-1 source, a binary byte or two): show the file rather than refuse it.
     let text = String::from_utf8_lossy(&bytes).into_owned();
@@ -180,14 +186,15 @@ fn file_doc(path: &str) -> Doc {
     Doc { name: path.into(), kind: kind_of(path, &text).into(), text, base }
 }
 
-/// Returns how a file is shown: "diff", "md", or "code" (line-numbered source; the UI picks the language).
-/// The extension wins; content decides only for diff-like text in other files and for stdin (no extension).
+/// Returns how a file is shown: "diff", "md", "html" (the rendered page), or "code" (line-numbered source; the UI
+/// picks the language). The extension wins; content decides only for diff-like text in other files and for stdin.
 fn kind_of(path: &str, text: &str) -> &'static str {
     let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
         "diff" | "patch" => "diff",
         "md" | "markdown" => "md",
         _ if is_diff(text) => "diff",
+        "html" | "htm" => "html",
         // Extensionless files (README, NOTES) are usually prose.
         "" => "md",
         _ => "code",
@@ -493,8 +500,8 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
             Some(r) => (Cow::Owned(serde_json::to_vec(r).expect("Request serialises")), "application/json"),
             None => return not_found(),
         },
-        // Relative images in markdown, as /files/<doc index>/<path>; app.js rewrites them.
-        // shortcut: no percent-decoding, so paths with spaces 404.
+        // Relative images in markdown, and an HTML page's stylesheets and images, as /files/<doc index>/<path>.
+        // shortcut: no percent-decoding, so paths with spaces 404; root-relative (/img/x.png) ones 404 too.
         _ => {
             let file = path.strip_prefix("/files/").and_then(|p| p.split_once('/')).and_then(|(i, rest)| {
                 let base =
@@ -502,9 +509,14 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
                 Some(base.join(rest))
             });
             match file.and_then(|f| fs::read(f).ok()) {
+                // Images are sniffed; stylesheets and SVG need their type.
                 Some(bytes) => (
                     Cow::Owned(bytes),
-                    if path.ends_with(".svg") { "image/svg+xml" } else { "application/octet-stream" },
+                    match Path::new(path).extension().and_then(|e| e.to_str()) {
+                        Some("svg") => "image/svg+xml",
+                        Some("css") => "text/css",
+                        _ => "application/octet-stream",
+                    },
                 ),
                 None => return not_found(),
             }
@@ -585,7 +597,7 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::{SKILL, install_skill, is_diff, kind_of, transcript_title};
+    use super::{SKILL, file_doc, install_skill, is_diff, kind_of, transcript_title};
     use std::fs;
 
     #[test]
@@ -594,6 +606,9 @@ mod tests {
             ("src/main.rs", "fn main() {}\n", "code"),
             ("notes.TXT", "plain\n", "code"),
             ("docs/plan.md", "# Plan\n", "md"),
+            ("site/index.HTML", "<!doctype html>\n", "html"),
+            ("old.htm", "<p>\n", "html"),
+            ("page.html.diff", "", "diff"),
             ("README", "# Title\n", "md"),
             ("change.patch", "", "diff"),
             ("saved.txt", "diff --git a/x b/x\n", "diff"),
@@ -605,6 +620,19 @@ mod tests {
         ] {
             assert_eq!(kind_of(path, text), kind, "{path}");
         }
+    }
+
+    #[test]
+    fn opens_file_urls() {
+        let path = std::env::temp_dir().join(format!("vjuu url {}.html", std::process::id()));
+        fs::write(&path, "<p>hi</p>").unwrap();
+        // Percent-encoded, as a browser shows it.
+        let doc = file_doc(url::Url::from_file_path(&path).unwrap().as_str());
+        assert_eq!(
+            (doc.name.as_str(), doc.kind.as_str(), doc.text.as_str()),
+            (path.to_str().unwrap(), "html", "<p>hi</p>")
+        );
+        fs::remove_file(&path).unwrap();
     }
 
     #[test]
