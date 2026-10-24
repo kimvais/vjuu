@@ -56,7 +56,6 @@ icons (KDE, or GNOME with the AppIndicator extension).
 | `Esc` | Cancel the comment being written |
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
-| `t` | Next theme: Auto, Light, Graphite |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+Shift+Enter` | Done, from anywhere |
 
@@ -64,8 +63,8 @@ Click any line or block to comment on it. To comment on a range, select text (ac
 rows) and click **Comment** or press `c`. Links still open, except on HTML pages, where only in-page links work; clicks
 inside a comment edit it.
 
-Themes: **Light** (GitHub) and **Graphite** (Monokai code colours on neutral dark grey). **Auto** picks one from the
-system's light/dark setting. The choice is remembered.
+Themes, picked in the settings (the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
+neutral dark grey). **Auto** picks one from the system's light/dark setting. The choice is remembered.
 
 ## Output
 
@@ -137,7 +136,7 @@ Each hook gives up after an hour, and Claude Code carries on as if vjuu were not
 
 ### Settings
 
-Click the gear in the title bar, or use the terminal:
+Click the gear in the title bar and **Apply** (Esc cancels), or use the terminal:
 
 ```
 vjuu config                  # open the settings panel

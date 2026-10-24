@@ -90,7 +90,7 @@ enum Msg {
     },
     Minimize,
     Maximize,
-    /// A toggle in the settings panel changed; saved at once.
+    /// The settings panel's Apply.
     Settings {
         config: config::Config,
     },
@@ -125,6 +125,8 @@ struct Session {
     started: Instant,
     /// The git context, kept to hand to the page again if it arrived before the page could take it.
     context: Option<String>,
+    /// The settings panel's Apply saved, so a settings-only window can say so when it closes.
+    applied: bool,
 }
 
 fn main() {
@@ -797,9 +799,14 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     s.latest = review;
                 }
             }
-            Event::UserEvent(AppEvent::Ui(_, Msg::Settings { config })) => {
-                if let Err(e) = config::save(&config) {
-                    eprintln!("Cannot save {}: {e}", config::path().display());
+            Event::UserEvent(AppEvent::Ui(id, Msg::Settings { config })) => {
+                match config::save(&config) {
+                    Ok(()) => {
+                        if let Some(s) = sessions.get_mut(&id) {
+                            s.applied = true;
+                        }
+                    }
+                    Err(e) => eprintln!("Cannot save {}: {e}", config::path().display()),
                 }
                 if !config.tray {
                     tray = None;
@@ -1017,6 +1024,7 @@ fn new_session(
         latest: Review::default(),
         started: Instant::now(),
         context: None,
+        applied: false,
     }
 }
 
@@ -1034,8 +1042,9 @@ fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
         None => (String::new(), false),
     };
     let md = match (save, only_settings) {
-        // Nothing to review: the toggles were saved as they changed.
-        (_, true) => "Settings saved.\n".into(),
+        // Nothing to review: Apply saved the settings, or Esc left them as they were.
+        (_, true) if s.applied => "Settings saved.\n".into(),
+        (_, true) => "Settings unchanged.\n".into(),
         (true, false) => save_review(&name, &s.latest),
         (false, false) => String::new(),
     };

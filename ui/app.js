@@ -74,16 +74,26 @@ async function openSettings() {
   const config = await (await fetch('config.json', { cache: 'no-store' })).json();
   for (const hook of HOOKS) settings.querySelector(`[name=${hook}]`).checked = config.hooks[hook];
   settings.querySelector('[name=tray]').checked = config.tray;
+  $('#theme').value = theme;
   settings.showModal();
 }
 
-settings.addEventListener('change', () => {
+/** Saves the panel and applies the theme; Esc closes it without either. */
+function applySettings() {
   const on = (name) => settings.querySelector(`[name=${name}]`).checked;
   post({ type: 'settings', config: { tray: on('tray'), hooks: Object.fromEntries(HOOKS.map((h) => [h, on(h)])) } });
+  setTheme($('#theme').value);
+  settings.close();
+}
+
+$('#theme').onchange = (e) => showTheme(e.target.value);
+settings.addEventListener('close', () => {
+  // After Esc, back to the remembered theme; after Apply, that is the new one.
+  showTheme(theme);
+  // A window opened only for the settings has nothing else to show.
+  if (req && !req.docs.length) done();
 });
-// A window opened only for the settings has nothing else to show.
-settings.addEventListener('close', () => { if (req && !req.docs.length) done(); });
-$('#settings-close').onclick = () => settings.close();
+$('#settings-apply').onclick = applySettings;
 $('#settings-open').onclick = openSettings;
 
 const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
@@ -859,9 +869,6 @@ function onKey(e) {
   } else if (e.key === 'f') {
     filesHidden = !filesHidden;
     renderFileList();
-  } else if (e.key === 't') {
-    const names = [...$('#theme').options].map((o) => o.value);
-    setTheme(names[(names.indexOf(theme) + 1) % names.length]);
   } else {
     return;
   }
@@ -880,11 +887,15 @@ let theme = 'auto';
 
 function setTheme(name) {
   theme = name;
-  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
-  $('#theme').value = name;
-  frameDocs().forEach(syncFrameTheme);
+  showTheme(name);
   // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
   try { localStorage.setItem('vjuu-theme', name); } catch {}
+}
+
+/** Colours the window in a theme without remembering it: the settings panel previews with this. */
+function showTheme(name) {
+  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
+  frameDocs().forEach(syncFrameTheme);
 }
 
 try { theme = localStorage.getItem('vjuu-theme') ?? 'auto'; } catch {}
@@ -893,7 +904,6 @@ if (theme === 'monokai') theme = 'graphite';
 if (![...$('#theme').options].some((o) => o.value === theme)) theme = 'auto';
 setTheme(theme);
 osDark.addEventListener('change', () => { if (theme === 'auto') setTheme('auto'); });
-$('#theme').onchange = (e) => { setTheme(e.target.value); e.target.blur(); };
 $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
