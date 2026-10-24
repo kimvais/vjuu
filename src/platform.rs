@@ -63,22 +63,30 @@ pub fn socket_may_be_stale() -> bool {
     !GenericNamespaced::is_supported()
 }
 
+/// Stops every child from inheriting our stdio handles; children get their own through `Stdio`.
+/// CreateProcess inherits every inheritable handle, not just the three it is given. A hook's stdout pipe would
+/// pass through its `vjuu` child into the resident instance that child starts, and Claude Code, waiting for EOF,
+/// would get it only when the resident instance exits.
+pub fn keep_stdio_private() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+        use windows_sys::Win32::System::Console::{
+            GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        };
+        for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            unsafe { SetHandleInformation(GetStdHandle(std_handle), HANDLE_FLAG_INHERIT, 0) };
+        }
+    }
+}
+
 /// Starts `command` detached from the caller: no shared stdio, and not killed with the caller's terminal.
 pub fn spawn_detached(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
-        use windows_sys::Win32::System::Console::{
-            GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
-        };
         const DETACHED_PROCESS: u32 = 0x8;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x200;
-        // CreateProcess inherits every inheritable handle, including our stdout pipe; the caller would then
-        // wait for EOF until the resident instance exits.
-        for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
-            unsafe { SetHandleInformation(GetStdHandle(std_handle), HANDLE_FLAG_INHERIT, 0) };
-        }
         command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
     }
     #[cfg(unix)]

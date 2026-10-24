@@ -139,6 +139,7 @@ struct Session {
 
 fn main() {
     let started = Instant::now();
+    platform::keep_stdio_private();
     let mut args: Vec<String> = env::args().skip(1).collect();
     // Only as the first argument, so it never eats a `--git` argument.
     let session = (args.len() > 1 && args[0] == "--session").then(|| args.drain(..2).nth(1).expect("checked length"));
