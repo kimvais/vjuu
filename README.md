@@ -214,7 +214,7 @@ A macOS binary downloaded by hand needs `xattr -d com.apple.quarantine vjuu` onc
 (Homebrew installs don't). To build from source you need a Rust toolchain, and on Linux also
 `libwebkit2gtk-4.1-dev` and `libgtk-3-dev`:
 ```
-cargo install --locked --git https://github.com/kimvais/vjuu
+cargo install --locked vjuu
 ```
 
 Then, however you installed it:

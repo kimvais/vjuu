@@ -5,6 +5,8 @@ edition = "2024"
 description = "Fast review window for AI-agent handoffs: markdown, diffs and code with inline comments."
 license = "MIT"
 repository = "https://github.com/kimvais/vjuu"
+# Only what the build reads; keeps site/ media and CI files out of the crate.
+include = ["/src", "/ui", "/themes", "/assets", "/skills", "/build.rs", "/README.md", "/LICENSE"]
 
 [package.metadata.deb]
 maintainer = "Kimmo Parviainen-Jalanko <kimvais@kimva.is>"
