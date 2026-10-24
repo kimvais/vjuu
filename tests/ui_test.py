@@ -590,6 +590,38 @@ def test_choice_keys(page, url, work):
     assert [c['answer'] for c in _review(page)['choices']] == ['', 'No']
 
 
+def test_settings(page, url, work):
+    (work / 'config.json').write_text(json.dumps({'hooks': {'plan': True, 'ask': False, 'turn': True}}))
+    msgs = lambda kind: [m for m in page.evaluate('window.__msgs || []') if m['type'] == kind]
+    # A first window opens on the panel, showing the saved settings, over its document.
+    (work / 'doc.json').write_text(
+        json.dumps({'docs': [{'name': 'a.md', 'kind': 'md', 'text': _MD}], 'settings': True})
+    )
+    page.goto(url)
+    page.wait_for_selector('#settings[open]')
+    checked = lambda: [page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn')]
+    assert checked() == [True, False, True]
+    # Review keys do nothing while it is open.
+    page.keyboard.press('Control+Enter')
+    assert msgs('done') == []
+    page.click('#settings [name=turn]')
+    assert msgs('settings')[-1]['config'] == {'hooks': {'plan': True, 'ask': False, 'turn': False}}
+    page.keyboard.press('Escape')
+    assert not page.is_visible('#settings') and msgs('done') == []
+    # The gear opens it again; closing it there leaves the review open.
+    page.click('#settings-open')
+    page.click('#settings-close')
+    assert msgs('done') == []
+    # `vjuu config`: a window with nothing but the panel finishes when it closes.
+    (work / 'doc.json').write_text(json.dumps({'docs': [], 'settings': True}))
+    page.goto(url)
+    page.wait_for_selector('#settings[open]')
+    page.click('#settings-close')
+    # A dialog's close event arrives as a task of its own.
+    page.wait_for_function("(window.__msgs || []).some((m) => m.type === 'done')", timeout=2000)
+    assert len(msgs('done')) == 1
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
@@ -617,6 +649,7 @@ def main():
             test_html_page,
             test_choices,
             test_choice_keys,
+            test_settings,
         ):
             if only and test.__name__ not in only:
                 continue

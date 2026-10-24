@@ -1,3 +1,4 @@
+mod config;
 mod platform;
 mod review;
 
@@ -22,7 +23,7 @@ use wry::{WebContext, WebView, WebViewBuilder};
 use platform::{bring_to_front, pipe_name};
 use review::Review;
 
-const USAGE: &str = "usage: vjuu [--session <name>] <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup\n  <file>: markdown, a diff/patch, an HTML page (or file:// URL), or any source file; several open in one window";
+const USAGE: &str = "usage: vjuu [--session <name>] <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup | vjuu config [list | <plan|ask|turn> <on|off>]\n  <file>: markdown, a diff/patch, an HTML page (or file:// URL), or any source file; several open in one window";
 /// The skill that tells agents to run vjuu; built in, so it always matches this version.
 const SKILL: &str = include_str!("../skills/vjuu/SKILL.md");
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
@@ -45,10 +46,16 @@ struct Request {
     /// The agent session that asked for the review, shown in the title bar.
     #[serde(default)]
     session: Option<String>,
+    /// Opens on the settings panel: once after a fresh install, and for `vjuu config`.
+    #[serde(default)]
+    settings: bool,
 }
 
 impl Request {
     fn name(&self) -> String {
+        if self.docs.is_empty() {
+            return "settings".into();
+        }
         self.docs.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ")
     }
 
@@ -79,6 +86,10 @@ enum Msg {
     },
     Minimize,
     Maximize,
+    /// A toggle in the settings panel changed; saved at once.
+    Settings {
+        config: config::Config,
+    },
 }
 
 enum AppEvent {
@@ -115,6 +126,9 @@ fn main() {
         ["last"] => print_last(),
         ["stop"] => stop(),
         ["setup"] => setup(),
+        ["config"] => settings_request(),
+        ["config", "list"] => print_config(),
+        ["config", key, value] => set_config(key, value),
         ["hook", "plan"] => hook_plan(),
         ["hook", "turn"] => hook_turn(),
         ["hook", "ask"] => hook_ask(),
@@ -137,6 +151,10 @@ fn main() {
         }
     };
     request.session = session.or_else(claude_session_title);
+    // A fresh install opens on the settings panel once; later windows pay only for checking that the file exists.
+    if !request.settings && !config::path().exists() && config::save(&config::Config::default()).is_ok() {
+        request.settings = true;
+    }
     if env::var_os("VJUU_COLD").is_none() {
         match Stream::connect(pipe_name()) {
             Ok(conn) => client(conn, &request, started),
@@ -178,6 +196,9 @@ fn transcript_title(transcript: &str) -> Option<String> {
 /// Claude Code's PreToolUse hook on ExitPlanMode: opens the plan in vjuu, and comments send it back for changes.
 /// Without comments it decides nothing, so Claude Code's own approval prompt follows and picks the next mode.
 fn hook_plan() -> ! {
+    if !config::load().hooks.plan {
+        process::exit(0)
+    }
     let event = hook_event();
     // Claude Code injects the plan file's path; without one there is nothing to anchor comments to.
     let Some(plan) = event["tool_input"]["planFilePath"].as_str().filter(|p| Path::new(p).is_file()) else {
@@ -192,6 +213,9 @@ fn hook_plan() -> ! {
 /// Claude Code's Stop hook: shows the diff of the files Claude edited this turn, and comments go back to Claude.
 /// Without edits, or without comments, it lets the turn end.
 fn hook_turn() -> ! {
+    if !config::load().hooks.turn {
+        process::exit(0)
+    }
     let event = hook_event();
     let Some(cwd) = event["cwd"].as_str() else { process::exit(0) };
     let transcript = event["transcript_path"].as_str().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
@@ -211,6 +235,9 @@ fn hook_turn() -> ! {
 /// Picks alone answer the tool; comments or unanswered questions go back to Claude as the whole review instead.
 /// Closing the window without answering leaves the questions to Claude Code's own picker.
 fn hook_ask() -> ! {
+    if !config::load().hooks.ask {
+        process::exit(0)
+    }
     let event = hook_event();
     let questions = event["tool_input"]["questions"].as_array().cloned().unwrap_or_default();
     // shortcut: a choice block picks one option, so multi-select questions stay in Claude Code's picker.
@@ -437,7 +464,24 @@ fn plan_decision(review: &str) -> Option<String> {
 }
 
 fn request(docs: Vec<Doc>) -> Request {
-    Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some(), session: None }
+    Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some(), session: None, settings: false }
+}
+
+/// Returns a window with no documents that shows only the settings panel.
+fn settings_request() -> Request {
+    Request { settings: true, ..request(Vec::new()) }
+}
+
+fn print_config() -> ! {
+    println!("# {}\n{}", config::path().display(), config::load().to_toml());
+    process::exit(0)
+}
+
+fn set_config(key: &str, value: &str) -> ! {
+    let mut config = config::load();
+    config.set(key, value).unwrap_or_else(|e| fail(&e));
+    config::save(&config).unwrap_or_else(|e| fail(&format!("Cannot save {}: {e}", config::path().display())));
+    process::exit(0)
 }
 
 fn file_doc(arg: &str) -> Doc {
@@ -599,6 +643,11 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     s.latest = review;
                 }
             }
+            Event::UserEvent(AppEvent::Ui(_, Msg::Settings { config })) => {
+                if let Err(e) = config::save(&config) {
+                    eprintln!("Cannot save {}: {e}", config::path().display());
+                }
+            }
             Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
             Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
                 if let Some(s) = sessions.get(&id) {
@@ -664,7 +713,7 @@ fn window_command(window: &Window, msg: Msg) {
         }
         Msg::Minimize => window.set_minimized(true),
         Msg::Maximize => window.set_maximized(!window.is_maximized()),
-        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready => {}
+        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Settings { .. } => {}
     }
 }
 
@@ -736,8 +785,16 @@ fn is_vjuu(url: &str) -> bool {
 /// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
 fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
     let Some(s) = sessions.remove(&id) else { return };
-    let name = s.slot.lock().expect("slot lock").as_ref().map(Request::name).unwrap_or_default();
-    let md = if save { save_review(&name, &s.latest) } else { String::new() };
+    let (name, only_settings) = match s.slot.lock().expect("slot lock").as_ref() {
+        Some(r) => (r.name(), r.docs.is_empty()),
+        None => (String::new(), false),
+    };
+    let md = match (save, only_settings) {
+        // Nothing to review: the toggles were saved as they changed.
+        (_, true) => "Settings saved.\n".into(),
+        (true, false) => save_review(&name, &s.latest),
+        (false, false) => String::new(),
+    };
     match s.reply {
         Some(Reply::Stdout) => {
             // Tear the webview down before exiting, or Chromium logs a window-class error to stderr.
@@ -777,6 +834,10 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
             (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2")
         }
         // A spare window has no document yet; the page waits for vjuuLoad().
+        // Read when the panel opens, so a change made with `vjuu config` meanwhile shows.
+        "/config.json" => {
+            (Cow::Owned(serde_json::to_vec(&config::load()).expect("Config serialises")), "application/json")
+        }
         "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
             Some(r) => (Cow::Owned(serde_json::to_vec(r).expect("Request serialises")), "application/json"),
             None => return not_found(),
@@ -841,8 +902,8 @@ fn print_last() -> ! {
     }
 }
 
-/// Installs the skill for each agent found in the home directory.
-fn setup() -> ! {
+/// Installs the skill for each agent found in the home directory; on a fresh install, then opens the settings.
+fn setup() -> Request {
     let home = env::home_dir().unwrap_or_else(|| fail("Cannot find the home directory."));
     let written = install_skill(&home).unwrap_or_else(|e| fail(&format!("Cannot install the skill: {e}")));
     if written.is_empty() {
@@ -851,7 +912,11 @@ fn setup() -> ! {
     for path in written {
         println!("Installed {}", path.display());
     }
-    process::exit(0)
+    // Written first, so the first review window does not show the panel a second time.
+    if config::path().exists() || config::save(&config::Config::default()).is_err() {
+        process::exit(0)
+    }
+    settings_request()
 }
 
 /// Writes the skill for Claude Code and Codex, where installed, and returns the files written.
