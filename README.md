@@ -1,5 +1,10 @@
 # [vjuu](https://vjuu.it)
 
+[![CI](https://github.com/kimvais/vjuu/actions/workflows/ci.yml/badge.svg)](https://github.com/kimvais/vjuu/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kimvais/vjuu)](https://github.com/kimvais/vjuu/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/kimvais/vjuu)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#install)
+
 A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
 `vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
