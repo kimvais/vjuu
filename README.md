@@ -21,6 +21,7 @@ vjuu last                    # print the most recent review again
 vjuu stop                    # stop the resident instance (before upgrading the exe)
 vjuu setup                   # install the skill for Claude Code and Codex
 vjuu config                  # settings: which Claude Code hooks open vjuu (see below)
+vjuu --help / vjuu --version # all of the above, briefly / the version
 ```
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to

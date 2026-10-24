@@ -25,7 +25,29 @@ use wry::{WebContext, WebView, WebViewBuilder};
 use platform::{bring_to_front, pipe_name};
 use review::Review;
 
-const USAGE: &str = "usage: vjuu [--session <name>] <file>... | vjuu - | vjuu --git [git diff args] | vjuu last | vjuu stop | vjuu setup | vjuu config [list | <plan|ask|turn> <on|off>]\n  <file>: markdown, a diff/patch, an HTML page (or file:// URL), or any source file; several open in one window";
+const HELP: &str = "\
+vjuu: a review window for agent handoffs. Comment on lines, click Done, and the review comes back on stdout.
+
+Usage:
+  vjuu <file>...                 Review files in one window: markdown, a diff or patch, an HTML page
+                                 (or file:// URL), or any source file
+  vjuu -                         Review stdin: a diff or markdown
+  vjuu --git [<git diff args>]   Review `git diff` in the current directory
+  vjuu --session <name> ...      Name the asking session in the title bar (automatic under Claude Code)
+  vjuu last                      Print the most recent review again
+
+  vjuu config                    Open the settings
+  vjuu config list               Print the settings and where they are saved
+  vjuu config <setting> <value>  Change one: plan, ask, turn, permission, tray or focus (on / off),
+                                 theme (a theme or auto), theme.light or theme.dark (a theme)
+  vjuu setup                     Install the skill for Claude Code and Codex
+  vjuu stop                      Stop the resident instance (before upgrading)
+  vjuu hook <name>               Claude Code hooks: plan, ask, turn or permission
+
+  vjuu -h, --help                Show this
+  vjuu -v, --version             Show the version
+
+More at https://vjuu.it";
 /// The skill that tells agents to run vjuu; built in, so it always matches this version.
 const SKILL: &str = include_str!("../skills/vjuu/SKILL.md");
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
@@ -144,6 +166,19 @@ fn main() {
     // Only as the first argument, so it never eats a `--git` argument.
     let session = (args.len() > 1 && args[0] == "--session").then(|| args.drain(..2).nth(1).expect("checked length"));
     let mut request = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+        ["-h" | "--help"] => {
+            println!("{HELP}");
+            process::exit(0)
+        }
+        ["-v" | "--version"] => {
+            println!("vjuu {}", env!("CARGO_PKG_VERSION"));
+            process::exit(0)
+        }
+        // Nothing to review: the help, but as an error, since a script calling vjuu so has a bug.
+        [] => {
+            eprintln!("{HELP}");
+            process::exit(2)
+        }
         ["last"] => print_last(),
         ["stop"] => stop(),
         ["setup"] => setup(),
@@ -164,11 +199,19 @@ fn main() {
                 Doc { name: "stdin".into(), kind: kind_of("", &text).into(), text, base: env::current_dir().ok() };
             request(vec![doc])
         }
-        ref paths @ [_, ..] if paths.iter().all(|p| !p.starts_with('-')) => {
+        // A command with the wrong arguments is not a file to open.
+        ref paths @ [first, ..]
+            if first != "config" && first != "hook" && paths.iter().all(|p| !p.starts_with('-')) =>
+        {
             request(paths.iter().map(|p| file_doc(p)).collect())
         }
-        _ => {
-            eprintln!("{USAGE}");
+        ref other => {
+            // The first option vjuu does not know, or the command's first wrong argument.
+            let wrong = other.iter().find(|a| a.starts_with('-')).or(other.get(1)).copied().unwrap_or(other[0]);
+            eprintln!(
+                "vjuu: cannot use `{wrong}` here (in `vjuu {}`).\nRun `vjuu --help` for usage.",
+                other.join(" ")
+            );
             process::exit(2)
         }
     };
