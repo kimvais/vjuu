@@ -1,6 +1,7 @@
 mod config;
 mod platform;
 mod review;
+mod theme;
 mod tray;
 
 use std::borrow::Cow;
@@ -97,6 +98,8 @@ enum Msg {
     Settings {
         config: config::Config,
     },
+    /// The settings panel's "Open themes folder".
+    Themes,
 }
 
 enum AppEvent {
@@ -616,6 +619,7 @@ fn set_config(key: &str, value: &str) -> ! {
     let mut config = config::load();
     config.set(key, value).unwrap_or_else(|e| fail(&e));
     config::save(&config).unwrap_or_else(|e| fail(&format!("Cannot save {}: {e}", config::path().display())));
+    theme::write_compiled(&config.theme).unwrap_or_else(|e| fail(&format!("Cannot compile the theme: {e}")));
     process::exit(0)
 }
 
@@ -823,6 +827,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     }
                     Err(e) => eprintln!("Cannot save {}: {e}", config::path().display()),
                 }
+                match theme::write_compiled(&config.theme) {
+                    // Every open window recolours, not only the one with the panel, and so does the spare.
+                    Ok(()) => sessions.values().chain(&spare).for_each(|s| {
+                        let _ = s.webview.evaluate_script("window.vjuuThemeSaved && vjuuThemeSaved()");
+                    }),
+                    Err(e) => eprintln!("Cannot compile the theme: {e}"),
+                }
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
@@ -970,6 +981,10 @@ fn window_command(window: &Window, msg: Msg) {
         }
         Msg::Minimize => window.set_minimized(true),
         Msg::Maximize => window.set_maximized(!window.is_maximized()),
+        Msg::Themes => {
+            let _ = theme::ensure_shipped();
+            platform::open_url(&theme::dir().to_string_lossy());
+        }
         Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Settings { .. } => {}
     }
 }
@@ -1101,11 +1116,21 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/vendor/jetbrains-mono.woff2" => {
             (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2")
         }
-        // A spare window has no document yet; the page waits for vjuuLoad().
-        // Read when the panel opens, so a change made with `vjuu config` meanwhile shows.
+        // Read when the panel opens, so a change made with `vjuu config` meanwhile shows; with the themes to pick from.
         "/config.json" => {
-            (Cow::Owned(serde_json::to_vec(&config::load()).expect("Config serialises")), "application/json")
+            let mut config = serde_json::to_value(config::load()).expect("Config serialises");
+            config["themes"] = serde_json::to_value(theme::list()).expect("themes serialise");
+            (Cow::Owned(config.to_string().into_bytes()), "application/json")
         }
+        "/theme.css" => (Cow::Owned(theme::compiled()), "text/css"),
+        // The settings panel's preview of one theme.
+        p if p.starts_with("/themes/") && p.ends_with(".css") => {
+            match theme::preview(&p["/themes/".len()..p.len() - ".css".len()]) {
+                Some(css) => (Cow::Owned(css.into_bytes()), "text/css"),
+                None => return not_found(),
+            }
+        }
+        // A spare window has no document yet; the page waits for vjuuLoad().
         "/doc.json" => match slot.lock().expect("slot lock").as_ref() {
             Some(r) => (Cow::Owned(serde_json::to_vec(r).expect("Request serialises")), "application/json"),
             None => return not_found(),
@@ -1132,7 +1157,12 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
             }
         }
     };
-    Response::builder().header("Content-Type", mime).body(body).expect("static response")
+    let mut response = Response::builder().header("Content-Type", mime);
+    // theme.css keeps its URL when Apply recompiles it; a cached copy would open new windows in the old theme.
+    if path == "/theme.css" {
+        response = response.header("Cache-Control", "no-store");
+    }
+    response.body(body).expect("static response")
 }
 
 fn reviews_dir() -> PathBuf {

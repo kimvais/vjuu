@@ -8,6 +8,9 @@
 <link rel="preload" href="vendor/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="vendor/diff2html.min.css">
 <link rel="stylesheet" href="style.css">
+<!-- After style.css, so a theme's colours win; compiled by vjuu from the themes folder. -->
+<link rel="stylesheet" href="theme.css" id="theme-css">
+<style id="theme-preview"></style>
 </head>
 <body>
 <!-- The window is frameless: this is its title bar. Empty space drags the window. -->
@@ -40,12 +43,12 @@
 </footer>
 <dialog id="settings">
   <h2>Settings</h2>
-  <label class="theme"><b>Theme</b>
-    <select id="theme">
-      <option value="auto">Auto</option>
-      <option value="light">Light</option>
-      <option value="graphite">Graphite</option>
-    </select></label>
+  <label class="theme"><b>Theme</b> <select id="theme"></select></label>
+  <div id="auto-themes">
+    <label class="theme">When the system is light <select id="theme-light"></select></label>
+    <label class="theme">When the system is dark <select id="theme-dark"></select></label>
+  </div>
+  <p class="cli"><button id="themes-open">Open themes folder</button> Copy a theme there to make your own.</p>
   <p>What vjuu opens for Claude Code:</p>
   <label><input type="checkbox" name="plan"><b>Plan review</b>
     <span>Open a finished plan before you approve it; comments send it back to Claude.</span></label>

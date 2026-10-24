@@ -3,7 +3,7 @@ use std::{fs, io};
 
 use serde::{Deserialize, Serialize};
 
-use crate::platform;
+use crate::{platform, theme};
 
 /// The settings file's first line, for whoever opens it by hand.
 const HEADER: &str = "# vjuu settings: change them with `vjuu config`, or the gear in the title bar.\n";
@@ -16,11 +16,28 @@ pub struct Config {
     /// before tables.
     pub tray: bool,
     pub hooks: Hooks,
+    pub theme: Theme,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { tray: true, hooks: Hooks::default() }
+        Self { tray: true, hooks: Hooks::default(), theme: Theme::default() }
+    }
+}
+
+/// Which themes (files in the themes folder, without `.css`) colour the windows.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Theme {
+    /// A theme, or "auto" to follow the OS between `light` and `dark`.
+    pub name: String,
+    pub light: String,
+    pub dark: String,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self { name: theme::AUTO.into(), light: "light".into(), dark: "graphite".into() }
     }
 }
 
@@ -43,18 +60,33 @@ impl Default for Hooks {
 impl Config {
     /// Switches one setting by its `vjuu config` name.
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), String> {
-        let on = match value {
-            "on" | "true" => true,
-            "off" | "false" => false,
-            _ => return Err(format!("Unknown value `{value}`: use on or off.")),
+        let on = || match value {
+            "on" | "true" => Ok(true),
+            "off" | "false" => Ok(false),
+            _ => Err(format!("Unknown value `{value}`: use on or off.")),
+        };
+        let theme = |auto_ok: bool| {
+            let themes: Vec<String> = theme::list().into_iter().map(|t| t.name).collect();
+            if (auto_ok && value == theme::AUTO) || themes.iter().any(|t| t == value) {
+                Ok(value.to_string())
+            } else {
+                Err(format!("Unknown theme `{value}`: use {}.", themes.join(", ")))
+            }
         };
         match key {
-            "plan" => self.hooks.plan = on,
-            "ask" => self.hooks.ask = on,
-            "turn" => self.hooks.turn = on,
-            "permission" => self.hooks.permission = on,
-            "tray" => self.tray = on,
-            _ => return Err(format!("Unknown setting `{key}`: use plan, ask, turn, permission or tray.")),
+            "plan" => self.hooks.plan = on()?,
+            "ask" => self.hooks.ask = on()?,
+            "turn" => self.hooks.turn = on()?,
+            "permission" => self.hooks.permission = on()?,
+            "tray" => self.tray = on()?,
+            "theme" => self.theme.name = theme(true)?,
+            "theme.light" => self.theme.light = theme(false)?,
+            "theme.dark" => self.theme.dark = theme(false)?,
+            _ => {
+                return Err(format!(
+                    "Unknown setting `{key}`: use plan, ask, turn, permission, tray, theme, theme.light or theme.dark."
+                ));
+            }
         }
         Ok(())
     }
@@ -92,7 +124,11 @@ mod tests {
         let config: Config = toml::from_str("[hooks]\nturn = false\n").unwrap();
         assert_eq!(
             config,
-            Config { tray: true, hooks: Hooks { plan: true, ask: true, turn: false, permission: true } }
+            Config {
+                tray: true,
+                hooks: Hooks { plan: true, ask: true, turn: false, permission: true },
+                theme: Theme::default()
+            }
         );
         assert_eq!(toml::from_str::<Config>("").unwrap(), Config::default());
     }
@@ -105,7 +141,10 @@ mod tests {
         let text = config.to_toml();
         assert_eq!(
             text,
-            format!("{HEADER}tray = false\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\n")
+            format!(
+                "{HEADER}tray = false\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\n\n\
+                 [theme]\nname = \"auto\"\nlight = \"light\"\ndark = \"graphite\"\n"
+            )
         );
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
     }
@@ -113,7 +152,10 @@ mod tests {
     #[test]
     fn rejects_unknown_settings_and_values() {
         let mut config = Config::default();
-        for (key, value) in [("theme", "on"), ("plan", "yes"), ("", "")] {
+        // A theme needs its file; "auto" is a pick for `theme` only.
+        for (key, value) in
+            [("theme", "on"), ("theme.dark", "auto"), ("theme.light", "../x"), ("plan", "yes"), ("", "")]
+        {
             assert!(config.set(key, value).is_err(), "{key} {value}");
         }
         assert_eq!(config, Config::default());

@@ -1,0 +1,35 @@
+/* vjuu theme: Light, after GitHub's. Copy this file under another name to make your own theme; vjuu reads only the
+   color-scheme and the --custom-properties. diff2html is recoloured through its --d2h-* variables. */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --border: #d1d9e0;
+  --accent: #0969da;
+  --accent-fg: #ffffff;
+  --comment-bg: #fff8c5;
+  --focus: rgba(9, 105, 218, 0.12);
+  --code-bg: #f6f8fa;
+  --hl-keyword: #cf222e;
+  --hl-string: #0a3069;
+  --hl-comment: #6e7781;
+  --hl-number: #0550ae;
+  --hl-title: #8250df;
+  --hl-type: #953800;
+  --hl-attr: #0550ae;
+  --hl-param: #1f2328;
+  --hl-meta: #6e7781;
+  --heading: #1f2328;
+  --chrome: #f3f3f3;
+  /* #a6e22e text is unreadable on a near-white title bar. */
+  --brand-text: #5c8a00;
+  --heading-3: #0550ae;
+  --inline-code: #953800;
+  /* A pick in a choice block: orange, apart from the blue cursor. Monokai's #fd971f is too pale on white. */
+  --pick: #bc4c00;
+  --pick-bg: rgba(251, 133, 0, 0.12);
+  --d2h-bg-color: var(--bg);
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+}

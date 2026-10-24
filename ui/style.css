@@ -2,7 +2,7 @@
 @font-face { font-family: "Inter"; src: url("vendor/inter.woff2") format("woff2"); font-weight: 100 900; }
 @font-face { font-family: "JetBrains Mono"; src: url("vendor/jetbrains-mono.woff2") format("woff2"); font-weight: 100 800; }
 
-/* Themes. app.js sets <html data-theme>; "Auto" resolves to light or graphite from the OS setting.
+/* The colours come from a theme (themes/*.css, compiled into theme.css by vjuu); these are what every theme shares.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
   /* vjuu's brand colour (Monokai green): window border, wordmark, Done. src/main.rs sets the border to the same value. */
@@ -14,91 +14,6 @@
 }
 /* Ligatures turn -> and == into glyphs; a review must show the source as written. */
 code, pre, .d2h-wrapper { font-variant-ligatures: none; }
-:root, [data-theme="light"] {
-  color-scheme: light;
-  --bg: #ffffff;
-  --fg: #1f2328;
-  --muted: #59636e;
-  --border: #d1d9e0;
-  --accent: #0969da;
-  --accent-fg: #ffffff;
-  --comment-bg: #fff8c5;
-  --focus: rgba(9, 105, 218, 0.12);
-  --code-bg: #f6f8fa;
-  --hl-keyword: #cf222e;
-  --hl-string: #0a3069;
-  --hl-comment: #6e7781;
-  --hl-number: #0550ae;
-  --hl-title: #8250df;
-  --hl-type: #953800;
-  --hl-attr: #0550ae;
-  --hl-param: #1f2328;
-  --hl-meta: #6e7781;
-  --heading: #1f2328;
-  --chrome: #f3f3f3;
-  /* #a6e22e text is unreadable on a near-white title bar. */
-  --brand-text: #5c8a00;
-  --heading-3: #0550ae;
-  --inline-code: #953800;
-  /* A pick in a choice block: orange, apart from the blue cursor. Monokai's #fd971f is too pale on white. */
-  --pick: #bc4c00;
-  --pick-bg: rgba(251, 133, 0, 0.12);
-  --d2h-bg-color: var(--bg);
-  --d2h-change-del-color: var(--d2h-del-bg-color);
-  --d2h-change-ins-color: var(--d2h-ins-bg-color);
-}
-/* Monokai's code colours on a neutral grey (no blue tint, unlike most dark themes). */
-[data-theme="graphite"] {
-  color-scheme: dark;
-  --bg: #1e1e1e;
-  --fg: #f8f8f2;
-  --muted: #9a9a9a;
-  --border: #3a3a3a;
-  --accent: #66d9ef;
-  --accent-fg: #1e1e1e;
-  --comment-bg: #2e2e2e;
-  --focus: rgba(248, 248, 242, 0.08);
-  --code-bg: #171717;
-  --hl-keyword: #f92672;
-  --hl-string: #e6db74;
-  --hl-comment: #75715e;
-  --hl-number: #ae81ff;
-  --hl-title: #a6e22e;
-  --hl-type: #66d9ef;
-  --hl-attr: #a6e22e;
-  --hl-param: #fd971f;
-  --hl-meta: #75715e;
-  --heading: #a6e22e;
-  --chrome: #141414;
-  --heading-3: #66d9ef;
-  --inline-code: #fd971f;
-  --pick: #fd971f;
-  --pick-bg: rgba(253, 151, 31, 0.14);
-  --d2h-bg-color: var(--bg);
-  --d2h-border-color: var(--border);
-  --d2h-dim-color: #75715e;
-  --d2h-line-border-color: var(--comment-bg);
-  --d2h-file-header-bg-color: var(--code-bg);
-  --d2h-file-header-border-color: var(--border);
-  --d2h-empty-placeholder-bg-color: var(--code-bg);
-  --d2h-empty-placeholder-border-color: var(--comment-bg);
-  --d2h-selected-color: var(--focus);
-  --d2h-ins-bg-color: rgba(46, 160, 67, 0.18);
-  --d2h-ins-border-color: rgba(46, 160, 67, 0.4);
-  --d2h-ins-highlight-bg-color: rgba(46, 160, 67, 0.45);
-  --d2h-ins-label-color: #3fb950;
-  --d2h-del-bg-color: rgba(255, 56, 86, 0.16); /* crimson-leaning: plain red reads orange on a dark background */
-  --d2h-del-border-color: rgba(255, 56, 86, 0.4);
-  --d2h-del-highlight-bg-color: rgba(255, 56, 86, 0.42);
-  --d2h-del-label-color: #ff5c74;
-  /* Changed lines use the same colours as plain added / removed ones, not a third (orange) colour. */
-  --d2h-change-del-color: var(--d2h-del-bg-color);
-  --d2h-change-ins-color: var(--d2h-ins-bg-color);
-  --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
-  --d2h-info-border-color: var(--border);
-  --d2h-change-label-color: #fd971f;
-  --d2h-moved-label-color: #66d9ef;
-}
 
 .hljs-keyword, .hljs-selector-tag, .hljs-doctag { color: var(--hl-keyword); }
 .hljs-string, .hljs-regexp, .hljs-char { color: var(--hl-string); }

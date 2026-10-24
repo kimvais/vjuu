@@ -70,31 +70,74 @@ async function load() {
 const settings = $('#settings');
 const HOOKS = ['plan', 'ask', 'turn', 'permission'];
 
+/** Fills a <select> with [value, label] options and picks one. */
+function fillSelect(select, options, value) {
+  select.replaceChildren(...options.map(([v, label]) => new Option(label, v)));
+  select.value = value;
+}
+
 async function openSettings() {
   const config = await (await fetch('config.json', { cache: 'no-store' })).json();
   for (const hook of HOOKS) settings.querySelector(`[name=${hook}]`).checked = config.hooks[hook];
   settings.querySelector('[name=tray]').checked = config.tray;
-  $('#theme').value = theme;
+  const names = config.themes.map((t) => [t.name, t.name]);
+  const of = (scheme) => config.themes.filter((t) => t.scheme === scheme).map((t) => [t.name, t.name]);
+  fillSelect($('#theme'), [['auto', 'Auto (follow the system)'], ...names], config.theme.name);
+  // A theme of the other scheme would do too, but would surprise; show it only when there is nothing else.
+  fillSelect($('#theme-light'), of('light').length ? of('light') : names, config.theme.light);
+  fillSelect($('#theme-dark'), of('dark').length ? of('dark') : names, config.theme.dark);
+  showAutoPicks();
   settings.showModal();
 }
 
-/** Saves the panel and applies the theme; Esc closes it without either. */
+const pickedTheme = () => ({ name: $('#theme').value, light: $('#theme-light').value, dark: $('#theme-dark').value });
+const showAutoPicks = () => { $('#auto-themes').hidden = $('#theme').value !== 'auto'; };
+
+/** Shows the picked theme over the saved one until Apply or Esc; previews are compiled by vjuu, one theme each. */
+async function previewTheme() {
+  showAutoPicks();
+  const t = pickedTheme();
+  const name = t.name === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? t.dark : t.light) : t.name;
+  const r = await fetch(`themes/${encodeURIComponent(name)}.css`, { cache: 'no-store' });
+  const css = r.ok ? await r.text() : '';
+  // Applied or cancelled while it loaded: too late to preview.
+  if (!settings.open) return;
+  $('#theme-preview').textContent = css;
+  frameDocs().forEach(syncFrameTheme);
+}
+
+/** Loads theme.css again, after an Apply compiled a new one. */
+function reloadTheme() {
+  const link = $('#theme-css');
+  link.onload = () => {
+    $('#theme-preview').textContent = '';
+    frameDocs().forEach(syncFrameTheme);
+  };
+  link.href = `theme.css?${Date.now()}`;
+}
+
+/** Saves the panel, theme included; Esc closes it without saving. */
 function applySettings() {
   const on = (name) => settings.querySelector(`[name=${name}]`).checked;
-  post({ type: 'settings', config: { tray: on('tray'), hooks: Object.fromEntries(HOOKS.map((h) => [h, on(h)])) } });
-  setTheme($('#theme').value);
+  const hooks = Object.fromEntries(HOOKS.map((h) => [h, on(h)]));
+  post({ type: 'settings', config: { tray: on('tray'), hooks, theme: pickedTheme() } });
+  // The preview stays up until vjuu has compiled the theme and the new theme.css has loaded.
   settings.close();
 }
 
-$('#theme').onchange = (e) => showTheme(e.target.value);
-settings.addEventListener('close', () => {
-  // After Esc, back to the remembered theme; after Apply, that is the new one.
-  showTheme(theme);
-  // A window opened for the settings shows only a sample behind them: nothing to review.
-  if (req?.sample) done();
+/** vjuu calls this in every open window once Apply has compiled a new theme. */
+window.vjuuThemeSaved = reloadTheme;
+
+for (const id of ['#theme', '#theme-light', '#theme-dark']) $(id).onchange = previewTheme;
+settings.addEventListener('cancel', () => {
+  $('#theme-preview').textContent = '';
+  frameDocs().forEach(syncFrameTheme);
 });
+// A window opened for the settings shows only a sample behind them: nothing to review.
+settings.addEventListener('close', () => { if (req?.sample) done(); });
 $('#settings-apply').onclick = applySettings;
 $('#settings-open').onclick = openSettings;
+$('#themes-open').onclick = () => post({ type: 'themes' });
 
 const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
 
@@ -882,28 +925,8 @@ function toggleView() {
   render();
 }
 
-const osDark = matchMedia('(prefers-color-scheme: dark)');
-let theme = 'auto';
-
-function setTheme(name) {
-  theme = name;
-  showTheme(name);
-  // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
-  try { localStorage.setItem('vjuu-theme', name); } catch {}
-}
-
-/** Colours the window in a theme without remembering it: the settings panel previews with this. */
-function showTheme(name) {
-  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
-  frameDocs().forEach(syncFrameTheme);
-}
-
-try { theme = localStorage.getItem('vjuu-theme') ?? 'auto'; } catch {}
-// Monokai was folded into Graphite; anything unknown falls back to Auto.
-if (theme === 'monokai') theme = 'graphite';
-if (![...$('#theme').options].some((o) => o.value === theme)) theme = 'auto';
-setTheme(theme);
-osDark.addEventListener('change', () => { if (theme === 'auto') setTheme('auto'); });
+// The compiled theme follows the OS by itself; framed pages copy its colours, so they need telling.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => frameDocs().forEach(syncFrameTheme));
 $('#view').onclick = toggleView;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
