@@ -1,0 +1,30 @@
+# vjuu
+
+> vjuu is a fast local review window for agent handoffs. When a coding agent (Claude Code, Codex) would tell the user to "open X and review it", it runs `vjuu X` instead: a window opens with the markdown, diff, source file or HTML page, the user comments on lines and clicks Done, and the comments come back to the agent on stdout as markdown anchored to `file:line`.
+
+`vjuu` blocks until the user clicks Done or closes the window, so agents should run it in the background and read its output when it exits. Every review is also saved, and `vjuu last` prints the most recent one again.
+
+Usage:
+
+```
+vjuu docs/design.md          # markdown
+vjuu a.md b.md change.diff   # several files in one window, stacked
+vjuu src/main.rs             # any other file: line-numbered, syntax-highlighted source
+vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
+git show HEAD | vjuu -       # stdin; diff or markdown is detected
+vjuu last                    # print the most recent review again
+vjuu setup                   # install the skill for Claude Code and Codex
+```
+
+Install: `brew install kimvais/tap/vjuu` (macOS), the apt repository at https://vjuu.it/apt (Debian, Ubuntu), `cargo install --locked vjuu`, or a release archive from GitHub. Then run `vjuu setup` once.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/kimvais/vjuu/main/README.md): usage, keys, output format, choice blocks, Claude Code hooks, settings, themes and install
+- [Agent skill](https://raw.githubusercontent.com/kimvais/vjuu/main/skills/vjuu/SKILL.md): the instructions `vjuu setup` installs for agents
+
+## Optional
+
+- [Source code](https://github.com/kimvais/vjuu): Rust, MIT licence
+- [Releases](https://github.com/kimvais/vjuu/releases): Windows, macOS and Linux binaries and `.deb` packages
+- [Demo video](https://www.youtube.com/watch?v=EqzmtuNQzv4): a Claude Code session answering a question, a plan and a diff in vjuu
