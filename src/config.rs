@@ -9,10 +9,19 @@ use crate::platform;
 const HEADER: &str = "# vjuu settings: change them with `vjuu config`, or the gear in the title bar.\n";
 
 /// What `config.toml` holds; a missing key keeps its default.
-#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    /// The tray icon, and a notification when a review opens behind other windows. First: TOML puts plain keys
+    /// before tables.
+    pub tray: bool,
     pub hooks: Hooks,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self { tray: true, hooks: Hooks::default() }
+    }
 }
 
 /// The Claude Code hooks, each switched on or off.
@@ -42,7 +51,8 @@ impl Config {
             "plan" => self.hooks.plan = on,
             "ask" => self.hooks.ask = on,
             "turn" => self.hooks.turn = on,
-            _ => return Err(format!("Unknown setting `{key}`: use plan, ask or turn.")),
+            "tray" => self.tray = on,
+            _ => return Err(format!("Unknown setting `{key}`: use plan, ask, turn or tray.")),
         }
         Ok(())
     }
@@ -78,7 +88,7 @@ mod tests {
     #[test]
     fn missing_keys_stay_on() {
         let config: Config = toml::from_str("[hooks]\nturn = false\n").unwrap();
-        assert_eq!(config, Config { hooks: Hooks { plan: true, ask: true, turn: false } });
+        assert_eq!(config, Config { tray: true, hooks: Hooks { plan: true, ask: true, turn: false } });
         assert_eq!(toml::from_str::<Config>("").unwrap(), Config::default());
     }
 
@@ -86,8 +96,9 @@ mod tests {
     fn round_trips_with_a_header() {
         let mut config = Config::default();
         config.set("ask", "off").unwrap();
+        config.set("tray", "off").unwrap();
         let text = config.to_toml();
-        assert_eq!(text, format!("{HEADER}[hooks]\nplan = true\nask = false\nturn = true\n"));
+        assert_eq!(text, format!("{HEADER}tray = false\n\n[hooks]\nplan = true\nask = false\nturn = true\n"));
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
     }
 

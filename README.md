@@ -33,6 +33,12 @@ resident instance that keeps a pre-warmed window. Later calls hand the document 
 pipe and the window appears almost at once. The spare window preloads fonts and renderers. The resident instance costs roughly 300 MB working set across
 its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 
+The resident instance has a tray icon. An orange dot on it means a review window is still open, and hovering it says
+how many. Click it to bring the oldest one forward; right-click it for the settings, or to stop vjuu. If a new window
+opens behind others (Windows refuses to hand over focus while you type elsewhere), a notification says so. Switch the
+icon and notifications off with `vjuu config tray off`. On Linux the icon needs a desktop that shows StatusNotifier
+icons (KDE, or GNOME with the AppIndicator extension).
+
 | Case | First paint |
 |------|-------------|
 | Markdown or diff, cold | ~400-450 ms |
@@ -130,7 +136,7 @@ Click the gear in the title bar, or use the terminal:
 ```
 vjuu config                  # open the settings panel
 vjuu config list             # print the settings and where the file is
-vjuu config turn off         # switch one: plan, ask or turn; on or off
+vjuu config turn off         # switch one: plan, ask, turn, or tray (the tray icon); on or off
 ```
 
 They live in `config.toml` in your config folder: `%APPDATA%\vjuu` on Windows, `~/.config/vjuu` on Linux (or
