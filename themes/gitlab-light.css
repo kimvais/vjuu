@@ -1,0 +1,52 @@
+/* vjuu theme: GitLab Light, after GitLab's Pajamas colours and its White syntax theme. Copy this file under another
+   name to make your own theme; vjuu reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #3a383f;
+  --muted: #737278;
+  --border: #dcdcde;
+  --accent: #1f75cb;
+  --accent-fg: #ffffff;
+  --comment-bg: #fdf1dd;
+  --focus: rgba(31, 117, 203, 0.12);
+  --code-bg: #fbfafd;
+  --hl-keyword: #3a383f;
+  --hl-string: #dd1144;
+  --hl-comment: #999988;
+  --hl-number: #009999;
+  --hl-title: #990000;
+  --hl-type: #445588;
+  --hl-attr: #008080;
+  --hl-param: #3a383f;
+  --hl-meta: #999999;
+  --heading: #3a383f;
+  --chrome: #ececef;
+  --heading-3: #1f75cb;
+  --inline-code: #8f4700;
+  --pick: #ab6100;
+  --pick-bg: rgba(171, 97, 0, 0.12);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #89888d;
+  --d2h-line-border-color: var(--border);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--border);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: #ecfdf0;
+  --d2h-ins-border-color: #c7f0d2;
+  --d2h-ins-highlight-bg-color: #c7f0d2;
+  --d2h-ins-label-color: #217645;
+  --d2h-del-bg-color: #fbe9eb;
+  --d2h-del-border-color: #fdd4cd;
+  --d2h-del-highlight-bg-color: #fac5cd;
+  --d2h-del-label-color: #c91c00;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: #e9f3fc;
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #ab6100;
+  --d2h-moved-label-color: #1f75cb;
+}

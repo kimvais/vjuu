@@ -1,0 +1,52 @@
+/* vjuu theme: GitLab Dark, after GitLab's dark mode and its Dark (Tomorrow Night) syntax theme. Copy this file under
+   another name to make your own theme; vjuu reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #18171d;
+  --fg: #ececef;
+  --muted: #a4a3a8;
+  --border: #3a383f;
+  --accent: #428fdc;
+  --accent-fg: #18171d;
+  --comment-bg: #33291b;
+  --focus: rgba(236, 236, 239, 0.08);
+  --code-bg: #1f1e24;
+  --hl-keyword: #b294bb;
+  --hl-string: #b5bd68;
+  --hl-comment: #969896;
+  --hl-number: #de935f;
+  --hl-title: #81a2be;
+  --hl-type: #f0c674;
+  --hl-attr: #8abeb7;
+  --hl-param: #ececef;
+  --hl-meta: #969896;
+  --heading: #ececef;
+  --chrome: #0b0a0f;
+  --heading-3: #428fdc;
+  --inline-code: #de935f;
+  --pick: #de935f;
+  --pick-bg: rgba(222, 147, 95, 0.14);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #89888d;
+  --d2h-line-border-color: var(--border);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--border);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(45, 161, 96, 0.18);
+  --d2h-ins-border-color: rgba(45, 161, 96, 0.4);
+  --d2h-ins-highlight-bg-color: rgba(45, 161, 96, 0.42);
+  --d2h-ins-label-color: #52b87a;
+  --d2h-del-bg-color: rgba(236, 89, 65, 0.16);
+  --d2h-del-border-color: rgba(236, 89, 65, 0.4);
+  --d2h-del-highlight-bg-color: rgba(236, 89, 65, 0.42);
+  --d2h-del-label-color: #f57f6c;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #de935f;
+  --d2h-moved-label-color: #428fdc;
+}

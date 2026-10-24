@@ -12,8 +12,23 @@ use serde::Serialize;
 use crate::{config, platform};
 
 /// Built in, and copied into the themes folder whenever one is missing; a user's edited copy is never overwritten.
-const SHIPPED: [(&str, &str); 2] =
-    [("light", include_str!("../themes/light.css")), ("graphite", include_str!("../themes/graphite.css"))];
+const SHIPPED: [(&str, &str); 15] = [
+    ("light", include_str!("../themes/light.css")),
+    ("graphite", include_str!("../themes/graphite.css")),
+    ("github-dark", include_str!("../themes/github-dark.css")),
+    ("gitlab-light", include_str!("../themes/gitlab-light.css")),
+    ("gitlab-dark", include_str!("../themes/gitlab-dark.css")),
+    ("dracula", include_str!("../themes/dracula.css")),
+    ("one-dark", include_str!("../themes/one-dark.css")),
+    ("nord", include_str!("../themes/nord.css")),
+    ("tokyo-night", include_str!("../themes/tokyo-night.css")),
+    ("solarized-light", include_str!("../themes/solarized-light.css")),
+    ("solarized-dark", include_str!("../themes/solarized-dark.css")),
+    ("gruvbox-light", include_str!("../themes/gruvbox-light.css")),
+    ("gruvbox-dark", include_str!("../themes/gruvbox-dark.css")),
+    ("catppuccin-latte", include_str!("../themes/catppuccin-latte.css")),
+    ("catppuccin-mocha", include_str!("../themes/catppuccin-mocha.css")),
+];
 
 /// The theme name that follows the OS between the light and the dark pick.
 pub const AUTO: &str = "auto";
@@ -184,9 +199,10 @@ mod tests {
             // Every declaration in a shipped theme is kept: one per line that ends in a semicolon.
             let lines = css.lines().filter(|l| l.trim_end().ends_with(';') || l.contains("; /*")).count();
             assert_eq!(parse(css).len(), lines, "{name}");
+            // Auto offers a theme by its scheme: a light theme saying nothing would be offered as dark.
+            let light = name.ends_with("light") || name.ends_with("latte");
+            assert_eq!(scheme(css), if light { "light" } else { "dark" }, "{name}");
         }
-        assert_eq!(scheme(SHIPPED[0].1), "light");
-        assert_eq!(scheme(SHIPPED[1].1), "dark");
     }
 
     #[test]

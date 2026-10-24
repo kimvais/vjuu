@@ -1,0 +1,52 @@
+/* vjuu theme: Catppuccin Mocha, after catppuccin.com. Copy this file under another name to make your own theme; vjuu
+   reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #1e1e2e;
+  --fg: #cdd6f4;
+  --muted: #a6adc8;
+  --border: #45475a;
+  --accent: #89b4fa;
+  --accent-fg: #1e1e2e;
+  --comment-bg: #313244;
+  --focus: rgba(205, 214, 244, 0.08);
+  --code-bg: #181825;
+  --hl-keyword: #cba6f7;
+  --hl-string: #a6e3a1;
+  --hl-comment: #9399b2;
+  --hl-number: #fab387;
+  --hl-title: #89b4fa;
+  --hl-type: #f9e2af;
+  --hl-attr: #94e2d5;
+  --hl-param: #eba0ac;
+  --hl-meta: #f5c2e7;
+  --heading: #cba6f7;
+  --chrome: #11111b;
+  --heading-3: #89b4fa;
+  --inline-code: #fab387;
+  --pick: #fab387;
+  --pick-bg: rgba(250, 179, 135, 0.14);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #6c7086;
+  --d2h-line-border-color: var(--comment-bg);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--comment-bg);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(166, 227, 161, 0.12);
+  --d2h-ins-border-color: rgba(166, 227, 161, 0.35);
+  --d2h-ins-highlight-bg-color: rgba(166, 227, 161, 0.3);
+  --d2h-ins-label-color: #a6e3a1;
+  --d2h-del-bg-color: rgba(243, 139, 168, 0.14);
+  --d2h-del-border-color: rgba(243, 139, 168, 0.4);
+  --d2h-del-highlight-bg-color: rgba(243, 139, 168, 0.35);
+  --d2h-del-label-color: #f38ba8;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #f9e2af;
+  --d2h-moved-label-color: #89dceb;
+}

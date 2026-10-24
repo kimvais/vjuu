@@ -1,0 +1,52 @@
+/* vjuu theme: Tokyo Night, after enkia's. Copy this file under another name to make your own theme; vjuu reads only
+   the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #1a1b26;
+  --fg: #c0caf5;
+  --muted: #737aa2;
+  --border: #292e42;
+  --accent: #7aa2f7;
+  --accent-fg: #1a1b26;
+  --comment-bg: #24283b;
+  --focus: rgba(192, 202, 245, 0.08);
+  --code-bg: #16161e;
+  --hl-keyword: #bb9af7;
+  --hl-string: #9ece6a;
+  --hl-comment: #565f89;
+  --hl-number: #ff9e64;
+  --hl-title: #7aa2f7;
+  --hl-type: #2ac3de;
+  --hl-attr: #73daca;
+  --hl-param: #e0af68;
+  --hl-meta: #565f89;
+  --heading: #7aa2f7;
+  --chrome: #13131a;
+  --heading-3: #bb9af7;
+  --inline-code: #ff9e64;
+  --pick: #ff9e64;
+  --pick-bg: rgba(255, 158, 100, 0.14);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #565f89;
+  --d2h-line-border-color: var(--comment-bg);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--comment-bg);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(158, 206, 106, 0.12);
+  --d2h-ins-border-color: rgba(158, 206, 106, 0.35);
+  --d2h-ins-highlight-bg-color: rgba(158, 206, 106, 0.3);
+  --d2h-ins-label-color: #9ece6a;
+  --d2h-del-bg-color: rgba(247, 118, 142, 0.14);
+  --d2h-del-border-color: rgba(247, 118, 142, 0.4);
+  --d2h-del-highlight-bg-color: rgba(247, 118, 142, 0.35);
+  --d2h-del-label-color: #f7768e;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #e0af68;
+  --d2h-moved-label-color: #7dcfff;
+}

@@ -132,8 +132,11 @@ rows) and click **Comment** or press `c`. Links still open, except on HTML pages
 inside a comment edit it.
 
 Themes, picked in the settings (`Ctrl+,`, or the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
-neutral dark grey), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
+neutral dark grey), GitHub Dark, GitLab Light and Dark, Dracula, One Dark, Nord, Tokyo Night, Solarized, Gruvbox and
+Catppuccin (each light and dark), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
 another while it is dark, and the dark one when the system does not say. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
+
+![vjuu in each shipped theme](site/img/themes.jpg)
 
 ## Output
 
@@ -220,7 +223,7 @@ They live in `config.toml` in your config folder: `%APPDATA%\vjuu` on Windows, `
 ### Themes
 
 A theme is a CSS file in the `themes` folder next to `config.toml`; **Open themes folder** in the settings takes you
-there. vjuu puts `light.css` and `graphite.css` in it, and puts them back if you delete them, but never overwrites them:
+there. vjuu puts its shipped themes (`light.css`, `graphite.css` and the others above) in it, and puts them back if you delete them, but never overwrites them:
 to get a newer shipped version, delete your copy. To make a theme, copy one under a new name and change its colours.
 It shows up in the settings the next time you open them.
 

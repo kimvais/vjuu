@@ -1,0 +1,52 @@
+/* vjuu theme: Dracula, after draculatheme.com. Copy this file under another name to make your own theme; vjuu reads
+   only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #282a36;
+  --fg: #f8f8f2;
+  --muted: #a0a5c3;
+  --border: #44475a;
+  --accent: #bd93f9;
+  --accent-fg: #282a36;
+  --comment-bg: #343746;
+  --focus: rgba(248, 248, 242, 0.08);
+  --code-bg: #21222c;
+  --hl-keyword: #ff79c6;
+  --hl-string: #f1fa8c;
+  --hl-comment: #6272a4;
+  --hl-number: #bd93f9;
+  --hl-title: #50fa7b;
+  --hl-type: #8be9fd;
+  --hl-attr: #50fa7b;
+  --hl-param: #ffb86c;
+  --hl-meta: #6272a4;
+  --heading: #bd93f9;
+  --chrome: #191a21;
+  --heading-3: #8be9fd;
+  --inline-code: #ffb86c;
+  --pick: #ffb86c;
+  --pick-bg: rgba(255, 184, 108, 0.14);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #6272a4;
+  --d2h-line-border-color: var(--comment-bg);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--comment-bg);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(80, 250, 123, 0.12);
+  --d2h-ins-border-color: rgba(80, 250, 123, 0.35);
+  --d2h-ins-highlight-bg-color: rgba(80, 250, 123, 0.3);
+  --d2h-ins-label-color: #50fa7b;
+  --d2h-del-bg-color: rgba(255, 85, 85, 0.14);
+  --d2h-del-border-color: rgba(255, 85, 85, 0.4);
+  --d2h-del-highlight-bg-color: rgba(255, 85, 85, 0.38);
+  --d2h-del-label-color: #ff5555;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #ffb86c;
+  --d2h-moved-label-color: #8be9fd;
+}
