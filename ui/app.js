@@ -8,6 +8,8 @@ const scroller = $('#scroll');
 /** {docs: [{name, kind, text}], autoclose, session} */
 let req;
 let sideBySide = false;
+/** A document with changes since an earlier version shows them, not the whole document, until toggled. */
+let showChanges = true;
 let focused = null;
 /** key -> {el, a}: every commentable element of the current render. */
 let anchors = new Map();
@@ -60,7 +62,10 @@ async function load() {
   $('#session').textContent = req.session ?? '';
   $('#name').textContent = req.docs.map((x) => x.name).join(', ');
   $('#view').hidden = !hasDiff();
-  const renderers = new Set(req.docs.map((x) => ({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind]).filter(Boolean));
+  $('#changes').hidden = !hasChanges();
+  const renderers = new Set(req.docs
+    .flatMap((x) => [({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind], x.changes && RENDERERS[2]])
+    .filter(Boolean));
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
   if (req.settings) openSettings();
@@ -153,7 +158,8 @@ async function openHelp() {
 $('#settings-open').onclick = openSettings;
 $('#themes-open').onclick = () => post({ type: 'themes' });
 
-const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
+const hasChanges = () => req.docs.some((x) => x.changes);
+const hasDiff = () => req.docs.some((x) => x.kind === 'diff') || hasChanges();
 
 function render() {
   anchors = new Map();
@@ -164,7 +170,9 @@ function render() {
     const section = document.createElement('section');
     section.className = 'doc';
     content.append(section);
-    if (doc.kind === 'diff') {
+    if (doc.changes && showChanges) {
+      renderDiff(section, { ...doc, text: doc.changes }, i);
+    } else if (doc.kind === 'diff') {
       renderDiff(section, doc, i);
     } else if (doc.kind === 'code') {
       renderCode(section, doc, i);
@@ -509,6 +517,8 @@ function renderDiff(section, doc, i) {
         const n2 = num.querySelector('.line-num2')?.textContent.trim();
         const n1 = num.querySelector('.line-num1')?.textContent.trim();
         if (!n1 && !n2) continue;
+        // Where comments on the earlier version go.
+        if (n1) tr.dataset.oldLine = n1;
         const line = Number(n2 || n1);
         anchor(tr, { doc: i, part, file, start: line, end: line, old: !n2, quote: lineText(tr) });
       }
@@ -518,6 +528,7 @@ function renderDiff(section, doc, i) {
       side.querySelectorAll('tbody tr').forEach((tr, idx) => {
         tr.dataset.idx = idx;
         const n = tr.querySelector('.d2h-code-side-linenumber')?.textContent.trim();
+        if (n && sideIdx === 0) tr.dataset.oldLine = n;
         // Left side: only deleted lines; unchanged lines are commented on the right.
         if (!n || (sideIdx === 0 && !tr.cells[1].classList.contains('d2h-del'))) return;
         anchor(tr, { doc: i, part, file, start: Number(n), end: Number(n), old: sideIdx === 0, quote: lineText(tr) });
@@ -529,6 +540,8 @@ function renderDiff(section, doc, i) {
 function renderComments() {
   deep('.vjuu-c').forEach((e) => e.remove());
   $('#orphans')?.remove();
+  $('#earlier')?.remove();
+  renderEarlier();
   const orphans = [];
   for (const [key, c] of comments) {
     const box = commentBox(key, c);
@@ -546,6 +559,43 @@ function renderComments() {
   $('#count').textContent = n ? `${n} comment${n > 1 ? 's' : ''}` : '';
   renderFileList();
   deep('.vjuu-c textarea, #orphans textarea')[0]?.focus();
+}
+
+/**
+ * Shows the last review's comments, read-only: on their line of the earlier version where the changes show it,
+ * otherwise listed above the documents.
+ */
+function renderEarlier() {
+  const sections = content.querySelectorAll(':scope > section.doc');
+  const unplaced = [];
+  for (const c of req.earlier ?? []) {
+    const box = document.createElement('div');
+    box.className = 'comment earlier';
+    box.title = 'From the last review; Claude has read it';
+    const text = document.createElement('div');
+    text.className = 'text';
+    text.textContent = c.text;
+    box.append(text);
+    const i = req.docs.findIndex((d) => d.name === c.file);
+    // A comment on a deleted line was on the version before the earlier one: its number means nothing here.
+    const row = i >= 0 && req.docs[i].changes && showChanges && !c.old
+      ? sections[i]?.querySelector(`tr[data-old-line="${c.end}"]`) : null;
+    if (row) {
+      place(row, box);
+      continue;
+    }
+    const quote = document.createElement('blockquote');
+    quote.textContent = c.quote;
+    box.prepend(quote);
+    box.classList.add('vjuu-c');
+    unplaced.push(box);
+  }
+  if (!unplaced.length) return;
+  const div = document.createElement('div');
+  div.id = 'earlier';
+  div.innerHTML = '<h3>Comments from the last review</h3>';
+  div.append(...unplaced);
+  content.prepend(div);
 }
 
 function renderFileList() {
@@ -934,6 +984,8 @@ function onKey(e) {
     if (el) startComment(el);
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
+  } else if (e.key === 'd' && hasChanges()) {
+    toggleChanges();
   } else if (e.key === 'f') {
     filesHidden = !filesHidden;
     renderFileList();
@@ -950,9 +1002,16 @@ function toggleView() {
   render();
 }
 
+function toggleChanges() {
+  showChanges = !showChanges;
+  $('#changes').textContent = showChanges ? 'Full file' : 'Changes';
+  render();
+}
+
 // The compiled theme follows the OS by itself; framed pages copy its colours, so they need telling.
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => frameDocs().forEach(syncFrameTheme));
 $('#view').onclick = toggleView;
+$('#changes').onclick = toggleChanges;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
 
