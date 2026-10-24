@@ -22,8 +22,6 @@
   --hl-meta: #6e7781;
   --heading: #1f2328;
   --chrome: #f3f3f3;
-  /* #a6e22e text is unreadable on a near-white title bar. */
-  --brand-text: #5c8a00;
   --heading-3: #0550ae;
   --inline-code: #953800;
   /* A pick in a choice block: orange, apart from the blue cursor. Monokai's #fd971f is too pale on white. */

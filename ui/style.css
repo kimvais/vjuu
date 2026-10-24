@@ -5,10 +5,9 @@
 /* The colours come from a theme (themes/*.css, compiled into theme.css by vjuu); these are what every theme shares.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
-  /* vjuu's brand colour (Monokai green): window border, wordmark, Done. src/main.rs sets the border to the same value. */
+  /* vjuu's brand colour (Monokai green): window border, logo, Done. src/main.rs sets the border to the same value. */
   --brand: #a6e22e;
   --brand-fg: #272822;
-  --brand-text: #a6e22e;
   --sans: "Inter", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", Consolas, monospace;
 }
@@ -64,7 +63,7 @@ button, select {
   font-size: 13px;
   user-select: none;
 }
-#brand { font-weight: 700; color: var(--brand-text); letter-spacing: -0.02em; }
+#brand { height: 22px; width: 22px; flex: none; }
 #titlebar select, #titlebar > button { padding: 1px 10px; }
 #settings-open { font-size: 15px; line-height: 1; padding: 3px 7px; }
 /* Without our own window controls on macOS and Linux, the gear is the last thing in the bar. */
