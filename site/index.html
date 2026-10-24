@@ -188,10 +188,14 @@
     .shots { margin: 0 0 40px; }
     .shot { margin: 0 0 48px; }
     .shot:last-child { margin-bottom: 0; }
-    .shot img {
+    .shot img, .shot video {
       display: block;
       width: 100%;
       height: auto;
+      /* The demo is wider than the 16:10 screenshots; letterboxed, every slide is the same size. */
+      aspect-ratio: 16 / 10;
+      object-fit: contain;
+      background: var(--black);
       border: 1px solid var(--line);
       border-radius: var(--radius-card);
     }
@@ -217,6 +221,13 @@
       justify-content: space-between;
       padding: 0 12px;
       pointer-events: none;
+      /* Above the video, which the browser may draw on a layer of its own. */
+      position: relative;
+      z-index: 1;
+    }
+    /* With room beside the column, the arrows sit there instead of over the slide. */
+    @media (min-width: 1160px) {
+      .arrows { margin: 0 -60px; padding: 0; }
     }
     .arrows button {
       width: 44px;
@@ -367,7 +378,11 @@
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Don't open the file. <span>Your agent already did.</span></h1>
         <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Done, and your comments go straight back to the agent.</p>
-        <div class="shots" role="group" aria-label="Screenshots">
+        <div class="shots" role="group" aria-label="Demo and screenshots">
+          <figure class="shot">
+            <video src="img/demo.mp4" poster="img/demo.jpg" width="1920" height="1008" autoplay muted loop playsinline aria-label="A Claude Code session in plan mode. Its question opens in vjuu and is answered with a click; the plan opens in vjuu and gets a comment, and Claude revises it; after the code is written, the diff opens in vjuu, a comment asks for a docstring, and Claude adds it."></video>
+            <figcaption>A real Claude Code session: a question, a plan and a diff, each answered in vjuu. <a class="textlink" href="https://www.youtube.com/watch?v=EqzmtuNQzv4">Watch on YouTube</a></figcaption>
+          </figure>
           <figure class="shot">
             <img src="img/diff.png" width="2560" height="1600" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
             <figcaption>A diff side by side, with a comment under the added line.</figcaption>
@@ -518,10 +533,14 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
       }
     }
 
-    // Screenshots rotate every few seconds; hovering or focusing them holds the current one.
+    // Slides rotate every few seconds; hovering or focusing them holds the current one. The demo video plays from the
+    // start whenever it comes up and hands over when it ends. It is silent, so it plays with reduced motion too, but
+    // then with controls to pause it.
     {
       const box = document.querySelector('.shots');
       const shots = [...box.querySelectorAll('.shot')];
+      const demo = box.querySelector('video');
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const dots = document.createElement('div');
       dots.className = 'dots';
       let current = 0;
@@ -530,19 +549,28 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
         current = i;
         shots.forEach((shot, k) => shot.classList.toggle('current', k === i));
         [...dots.children].forEach((dot, k) => dot.setAttribute('aria-current', k === i));
+        demo.pause();
+        if (shots[i].contains(demo)) {
+          demo.currentTime = 0;
+          demo.play().catch(() => {});
+        }
       };
+      demo.loop = false;
+      demo.controls = still;
+      demo.addEventListener('ended', () => { if (!held) show((current + 1) % shots.length); });
       shots.forEach((shot, i) => {
         // Hidden layers would otherwise never come into view to trigger loading.
-        shot.querySelector('img').loading = 'eager';
+        const img = shot.querySelector('img');
+        if (img) img.loading = 'eager';
         const dot = document.createElement('button');
         dot.type = 'button';
-        dot.setAttribute('aria-label', `Screenshot ${i + 1} of ${shots.length}`);
+        dot.setAttribute('aria-label', `Slide ${i + 1} of ${shots.length}`);
         dot.onclick = () => show(i);
         dots.append(dot);
       });
       const arrows = document.createElement('div');
       arrows.className = 'arrows';
-      for (const [label, glyph, step] of [['Previous screenshot', '‹', -1], ['Next screenshot', '›', 1]]) {
+      for (const [label, glyph, step] of [['Previous slide', '‹', -1], ['Next slide', '›', 1]]) {
         const arrow = document.createElement('button');
         arrow.type = 'button';
         arrow.setAttribute('aria-label', label);
@@ -560,7 +588,10 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
       box.addEventListener('focusin', () => { held = true; });
       box.addEventListener('focusout', () => { held = false; });
       if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        setInterval(() => { if (!held) show((current + 1) % shots.length); }, 5000);
+        // The demo moves on by itself when it ends, or here if it ended while held.
+        setInterval(() => {
+          if (!held && (!shots[current].contains(demo) || demo.ended)) show((current + 1) % shots.length);
+        }, 5000);
       }
     }
 
