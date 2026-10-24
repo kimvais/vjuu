@@ -1,0 +1,4 @@
+# Link the C runtime into vjuu.exe: a clean Windows has no VCRUNTIME140.dll (the Visual C++ Redistributable), and
+# winget's validation, like a fresh machine, could not start the exe without it.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
