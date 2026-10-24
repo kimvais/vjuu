@@ -3,11 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>vjuu: a review window for agent handoffs</title>
+  <title>vjuu: a review window for Claude Code and Codex</title>
   <link rel="icon" href="favicon.ico" sizes="48x48">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <meta name="description" content="When an agent would ask you to open a file and review it, it runs vjuu instead. You comment on lines, click Done, and your comments go back to the agent.">
+  <link rel="canonical" href="https://vjuu.it/">
+  <meta name="description" content="A fast local review window for Claude Code and Codex. Your agent opens the markdown or diff in vjuu; you comment on lines, and the comments go back to it.">
+  <meta name="theme-color" content="#000000">
+  <!-- Link previews (Slack, LinkedIn, X, ...). Absolute URLs: crawlers do not resolve relative ones. -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://vjuu.it/">
+  <meta property="og:site_name" content="vjuu">
+  <meta property="og:title" content="vjuu: a review window for Claude Code and Codex">
+  <meta property="og:description" content="Don't open the file. Your agent already did. Comment on lines, click Done, and your comments go back to the agent.">
+  <meta property="og:image" content="https://vjuu.it/img/demo.jpg">
+  <meta property="og:image:width" content="1920">
+  <meta property="og:image:height" content="1008">
+  <meta property="og:image:alt" content="A Claude Code session beside vjuu, which shows the diff of the turn with a Done button.">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "vjuu",
+      "url": "https://vjuu.it/",
+      "description": "A fast local review window for Claude Code and Codex: comment on an agent's markdown, diffs and source, and the comments go back to the agent.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Windows, macOS, Linux",
+      "license": "https://opensource.org/licenses/MIT",
+      "codeRepository": "https://github.com/kimvais/vjuu",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "author": { "@type": "Person", "name": "Kimmo Parviainen-Jalanko" }
+    }
+  </script>
   <style>
     /* Self-hosted, so the page makes no third-party requests. */
     @font-face {
