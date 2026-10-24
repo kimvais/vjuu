@@ -41,6 +41,12 @@ class _QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def end_headers(self):
+        # As vjuu serves it: theme.css changes under the same URL when a theme is applied.
+        if self.path.split('?')[0] == '/theme.css':
+            self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
+
 
 def _serve(work):
     server = ThreadingHTTPServer(('127.0.0.1', 0), partial(_QuietHandler, directory=str(work)))

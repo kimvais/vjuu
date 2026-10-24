@@ -1157,7 +1157,12 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
             }
         }
     };
-    Response::builder().header("Content-Type", mime).body(body).expect("static response")
+    let mut response = Response::builder().header("Content-Type", mime);
+    // theme.css keeps its URL when Apply recompiles it; a cached copy would open new windows in the old theme.
+    if path == "/theme.css" {
+        response = response.header("Cache-Control", "no-store");
+    }
+    response.body(body).expect("static response")
 }
 
 fn reviews_dir() -> PathBuf {
