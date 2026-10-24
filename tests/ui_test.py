@@ -591,7 +591,7 @@ def test_choice_keys(page, url, work):
 
 
 def test_settings(page, url, work):
-    (work / 'config.json').write_text(json.dumps({'hooks': {'plan': True, 'ask': False, 'turn': True}}))
+    (work / 'config.json').write_text(json.dumps({'tray': True, 'hooks': {'plan': True, 'ask': False, 'turn': True}}))
     msgs = lambda kind: [m for m in page.evaluate('window.__msgs || []') if m['type'] == kind]
     # A first window opens on the panel, showing the saved settings, over its document.
     (work / 'doc.json').write_text(
@@ -599,13 +599,13 @@ def test_settings(page, url, work):
     )
     page.goto(url)
     page.wait_for_selector('#settings[open]')
-    checked = lambda: [page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn')]
-    assert checked() == [True, False, True]
+    checked = lambda: [page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn', 'tray')]
+    assert checked() == [True, False, True, True]
     # Review keys do nothing while it is open.
     page.keyboard.press('Control+Enter')
     assert msgs('done') == []
     page.click('#settings [name=turn]')
-    assert msgs('settings')[-1]['config'] == {'hooks': {'plan': True, 'ask': False, 'turn': False}}
+    assert msgs('settings')[-1]['config'] == {'tray': True, 'hooks': {'plan': True, 'ask': False, 'turn': False}}
     page.keyboard.press('Escape')
     assert not page.is_visible('#settings') and msgs('done') == []
     # The gear opens it again; closing it there leaves the review open.

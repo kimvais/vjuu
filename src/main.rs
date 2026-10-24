@@ -1,6 +1,7 @@
 mod config;
 mod platform;
 mod review;
+mod tray;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -14,7 +15,7 @@ use std::{env, fs, thread};
 use interprocess::local_socket::{ListenerOptions, Stream, prelude::*};
 use serde::{Deserialize, Serialize};
 use tao::dpi::LogicalSize;
-use tao::event::{Event, WindowEvent};
+use tao::event::{Event, StartCause, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{ResizeDirection, Window, WindowBuilder, WindowId};
 use wry::http::Response;
@@ -93,8 +94,10 @@ enum Msg {
 }
 
 enum AppEvent {
-    Open(Request, Stream),
+    /// A window to show; the stream is the client waiting for its review, None when vjuu opened it itself.
+    Open(Request, Option<Stream>),
     Ui(WindowId, Msg),
+    Tray(tray::Action),
 }
 
 /// Where a finished review goes.
@@ -591,7 +594,7 @@ fn listen(proxy: EventLoopProxy<AppEvent>) {
             }
             match serde_json::from_str::<Request>(&line) {
                 Ok(request) => {
-                    let _ = proxy.send_event(AppEvent::Open(request, reader.into_inner()));
+                    let _ = proxy.send_event(AppEvent::Open(request, Some(reader.into_inner())));
                 }
                 Err(e) => eprintln!("Bad request: {e}"),
             }
@@ -608,6 +611,18 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let mut sessions: HashMap<WindowId, Session> = HashMap::new();
     let mut spare: Option<Session> = None;
     let mut spare_due = None;
+    // Only the resident instance has a tray: it outlives the windows and holds every session's.
+    let resident = initial.is_none();
+    let mut tray: Option<tray::Tray> = None;
+    // How many waiting windows the tray shows; MAX makes a new tray icon catch up.
+    let mut shown = usize::MAX;
+    let tray_proxy = Arc::new(Mutex::new(proxy.clone()));
+    let new_tray = move || {
+        let proxy = tray_proxy.clone();
+        tray::Tray::new(move |action| {
+            let _ = proxy.lock().expect("proxy lock").send_event(AppEvent::Tray(action));
+        })
+    };
     match initial {
         Some(request) => {
             let title = request.title();
@@ -625,11 +640,23 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     }
     event_loop.run(move |event, target, control_flow| {
         match event {
+            // macOS wants the tray made once the loop runs; the other platforms do not mind.
+            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(),
+            Event::UserEvent(AppEvent::Tray(tray::Action::Oldest)) => {
+                if let Some(s) = sessions.values().min_by_key(|s| s.started) {
+                    s.window.set_minimized(false);
+                    bring_to_front(&s.window, &s.webview);
+                }
+            }
+            Event::UserEvent(AppEvent::Tray(tray::Action::Settings)) => {
+                let _ = proxy.send_event(AppEvent::Open(settings_request(), None));
+            }
+            Event::UserEvent(AppEvent::Tray(tray::Action::Stop)) => process::exit(0),
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let title = request.title();
                 let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
                 *s.slot.lock().expect("slot lock") = Some(request);
-                s.reply = Some(Reply::Client(conn));
+                s.reply = conn.map(Reply::Client);
                 s.started = Instant::now();
                 s.window.set_title(&title);
                 let _ = s.webview.evaluate_script("window.vjuuLoad && vjuuLoad()");
@@ -647,11 +674,21 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 if let Err(e) = config::save(&config) {
                     eprintln!("Cannot save {}: {e}", config::path().display());
                 }
+                if !config.tray {
+                    tray = None;
+                } else if resident && tray.is_none() {
+                    tray = new_tray();
+                    shown = usize::MAX;
+                }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
             Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
                 if let Some(s) = sessions.get(&id) {
                     bring_to_front(&s.window, &s.webview);
+                    // The OS kept it behind (focus-stealing prevention, or typing elsewhere): say so.
+                    if tray.is_some() && !s.window.is_focused() {
+                        notify(s.window.title());
+                    }
                 }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Rendered)) => {
@@ -679,6 +716,12 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             _ => {}
         }
+        if let Some(tray) = &tray
+            && sessions.len() != shown
+        {
+            tray.show_waiting(sessions.len());
+            shown = sessions.len();
+        }
         if spare.is_none() && spare_due.is_some_and(|due| due <= Instant::now()) {
             spare = Some(new_session(target, &proxy, &mut context, None));
             spare_due = None;
@@ -688,6 +731,15 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             None => ControlFlow::Wait,
         };
     })
+}
+
+/// Shows a system notification that a review window is waiting, without holding up the event loop.
+/// shortcut: on Windows the toast is credited to PowerShell, as vjuu registers no app id of its own.
+fn notify(title: String) {
+    thread::spawn(move || {
+        let body = title.strip_prefix("vjuu: ").unwrap_or(&title);
+        let _ = notify_rust::Notification::new().summary("vjuu is waiting for you").body(body).show();
+    });
 }
 
 /// Moves, resizes, minimises or maximises a frameless window for the page's title bar and edges.

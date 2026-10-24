@@ -73,12 +73,13 @@ const HOOKS = ['plan', 'ask', 'turn'];
 async function openSettings() {
   const config = await (await fetch('config.json', { cache: 'no-store' })).json();
   for (const hook of HOOKS) settings.querySelector(`[name=${hook}]`).checked = config.hooks[hook];
+  settings.querySelector('[name=tray]').checked = config.tray;
   settings.showModal();
 }
 
 settings.addEventListener('change', () => {
-  const hooks = Object.fromEntries(HOOKS.map((h) => [h, settings.querySelector(`[name=${h}]`).checked]));
-  post({ type: 'settings', config: { hooks } });
+  const on = (name) => settings.querySelector(`[name=${name}]`).checked;
+  post({ type: 'settings', config: { tray: on('tray'), hooks: Object.fromEntries(HOOKS.map((h) => [h, on(h)])) } });
 });
 // A window opened only for the settings has nothing else to show.
 settings.addEventListener('close', () => { if (req && !req.docs.length) done(); });
