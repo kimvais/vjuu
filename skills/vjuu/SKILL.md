@@ -1,6 +1,6 @@
 ---
 name: vjuu
-description: Use whenever you would ask the user to open, read, look over or review a file, document, plan, spec, diff, patch, commit or branch, and when the user says "let me review", "show me", "/vjuu" or "review it in vjuu". Opens the content in the vjuu window, where the user comments on lines; the comments come back as the command's output.
+description: Use whenever you would ask the user to open, read, look over or review a file, document, plan, spec, diff, patch, commit or branch, and when the user says "let me review", "show me", "/vjuu" or "review it in vjuu". Opens the content in the vjuu window, where the user comments on lines and picks between options you offer; the comments and picks come back as the command's output.
 ---
 
 # vjuu
@@ -8,6 +8,22 @@ description: Use whenever you would ask the user to open, read, look over or rev
 `vjuu` shows a markdown file or a diff in a window where the user leaves line comments. It blocks
 until they click Done, then prints the review as markdown on stdout. Use it instead of saying "open X
 and review it" or pasting long content into chat for review.
+
+## Offer choices as buttons
+
+When the user has to pick between options, put them in a `choice` block. vjuu shows each option as a button, and
+the pick comes back with the review:
+
+````
+```choice
+How should vjuu handle artifacts?
+1. Snapshot (recommended): small change, one frozen state
+2. Live page: interactive, much bigger
+```
+````
+
+List items (`- `, `1. `, `1:`) are the options; any other line is the question. Text before the first `: ` is the
+label that comes back, the rest is shown as the explanation. One block per question.
 
 ## Run it
 
@@ -36,6 +52,9 @@ Output looks like:
 ```
 # Review: docs/plan.md (2 comments)
 
+## Choice: How should vjuu handle artifacts?
+Snapshot (recommended)
+
 ## docs/plan.md:12-14
 > quoted lines the comment is on
 
@@ -45,6 +64,8 @@ the user's comment
 general comment
 ```
 
+- `## Choice: <question>` is followed by the label the user picked, or `No answer.`: ask again rather than pick
+  for them.
 - Each `## file:line` section is one comment; `(old)` means a deleted line, numbered in the old file.
 - A rendered HTML page has no line numbers: `## site/index.html (#install)` or `(under "Install")` names the nearest
   id or heading. Find the quoted text in the source near it.

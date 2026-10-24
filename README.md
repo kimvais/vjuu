@@ -75,6 +75,27 @@ Deleted diff lines are marked `(old)` and use the old file's line number. A rend
 its comments quote the text and say where it is, as `## site/index.html (#install)` (the nearest id) or
 `## site/index.html (under "Install")` (the nearest heading).
 
+### Choices
+
+A ```` ```choice ```` block in a markdown document shows its list items as buttons; the other lines are the question.
+Text before the first `: ` is the label, the rest an explanation. Click a button to pick it, click it again to take the
+pick back. Picks come first in the review:
+
+````
+```choice
+How should vjuu handle artifacts?
+1. Snapshot (recommended): small change, one frozen state
+2. Live page: interactive, much bigger
+```
+````
+
+```
+## Choice: How should vjuu handle artifacts?
+Snapshot (recommended)
+```
+
+An unanswered choice reads `No answer.`
+
 ## Install
 
 Runs on Windows 10/11 (WebView2), Linux (WebKitGTK 4.1: Debian 12+, Ubuntu 22.04+) and macOS (WKWebView). On

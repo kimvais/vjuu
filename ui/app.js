@@ -16,6 +16,8 @@ let targets = [];
 let filesHidden = false;
 /** key -> {doc, file, start, end, old, quote, text, editing}. Survives re-renders. */
 const comments = new Map();
+/** key -> {question, answer}: the ```choice blocks of the markdown documents, in order. Survives re-renders. */
+const choices = new Map();
 
 // The doc index keeps two documents with the same name apart, and part (the file's position in a diff) the same
 // file shown twice in one diff, as in `git log -p`.
@@ -284,6 +286,9 @@ function renderMarkdown(section, doc, i) {
       .join('\n');
   };
   const md = window.markdownit({ linkify: true, highlight });
+  const fence = md.renderer.rules.fence;
+  md.renderer.rules.fence = (tokens, idx, ...rest) =>
+    tokens[idx].info.trim() === 'choice' ? choiceHtml(tokens[idx]) : fence(tokens, idx, ...rest);
   const lines = doc.text.split(/\r?\n/);
   const tokens = md.parse(doc.text, {});
   for (const t of tokens) {
@@ -301,12 +306,48 @@ function renderMarkdown(section, doc, i) {
   for (const h of article.querySelectorAll('h1, h2, h3')) {
     targets.push({ el: h, doc: i, file: doc.name, heading: h.textContent, level: Number(h.tagName[1]) });
   }
+  for (const el of article.querySelectorAll('.choice')) {
+    el.dataset.choice = `${i}\n${el.dataset.map}`;
+    const c = choices.get(el.dataset.choice) ?? { question: el.querySelector('.question').textContent, answer: '' };
+    choices.set(el.dataset.choice, c);
+    showPick(el, c);
+  }
   for (const el of article.querySelectorAll('[data-map]')) {
     const [from, to] = el.dataset.map.split(',').map(Number);
     let end = to;
     while (end > from + 1 && !lines[end - 1].trim()) end--;
     anchor(el, { doc: i, file: doc.name, start: from + 1, end, old: false, quote: lines.slice(from, end).join('\n') });
   }
+}
+
+const OPTION = /^(?:[-*]|\d+[.):])\s+(.*)$/;
+
+/** Renders a ```choice block: its list items ("- ", "1. ", "2:") are the options, the other lines the question. */
+function choiceHtml(t) {
+  // Agent output, rendered with html off elsewhere: escape quotes too, as text goes into attributes.
+  const esc = (s) => escapeHtml(s).replace(/"/g, '&quot;');
+  const lines = t.content.split('\n').map((l) => l.trim()).filter(Boolean);
+  const question = lines.filter((l) => !OPTION.test(l)).join(' ');
+  const buttons = lines.map((l) => l.match(OPTION)?.[1]).filter(Boolean).map((option) => {
+    // "Label: why"; the label is what goes back with the review.
+    const [label, ...why] = option.split(/:\s+/);
+    const detail = why.length ? `<span>${esc(why.join(': '))}</span>` : '';
+    return `<button data-label="${esc(label)}"><b>${esc(label)}</b>${detail}</button>`;
+  });
+  return `<div class="choice" data-map="${t.map.join(',')}"><p class="question">${esc(question)}</p>${buttons.join('')}</div>`;
+}
+
+function showPick(el, c) {
+  for (const b of el.querySelectorAll('button')) b.classList.toggle('picked', b.dataset.label === c.answer);
+}
+
+/** Picks an option of a choice block; picking it again takes the pick back. */
+function pick(button) {
+  const el = button.closest('.choice');
+  const c = choices.get(el.dataset.choice);
+  c.answer = c.answer === button.dataset.label ? '' : button.dataset.label;
+  showPick(el, c);
+  post({ type: 'state', review: review() });
 }
 
 function renderCode(section, doc, i) {
@@ -589,7 +630,9 @@ function commentBox(key, c) {
 /** Returns the review as sent to vjuu: saved comments, plus what is typed in any comment still open. */
 function review() {
   const sent = [...comments.values()].map(({ draft, ...c }) => ({ ...c, text: (c.editing ? draft ?? c.text : c.text).trim() }));
-  return { comments: sent.filter((c) => c.text), overall: overall.value };
+  const r = { comments: sent.filter((c) => c.text), overall: overall.value };
+  if (choices.size) r.choices = [...choices.values()];
+  return r;
 }
 
 function changed() {
@@ -720,6 +763,11 @@ content.addEventListener('mouseleave', onLeave);
 
 // Clicking content has no other purpose than commenting, so any click on a line or block starts one.
 function onClick(e) {
+  const option = e.target.closest('.choice button');
+  if (option) {
+    pick(option);
+    return;
+  }
   const link = e.target.closest('a[href]');
   // A link on a framed page would load in the frame and lose the comment layer; in-page ones still scroll.
   if (link && link.ownerDocument !== document) {
