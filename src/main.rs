@@ -203,8 +203,9 @@ fn plan_decision(review: &str) -> Option<String> {
         return None;
     }
     let reason = format!(
-        "The user reviewed the plan in vjuu and wants changes. Act on each comment, update the plan file, \
-         then call ExitPlanMode again.\n\n{review}"
+        "The user reviewed the plan in vjuu. Act on each comment that asks for a change, update the plan file, \
+         then call ExitPlanMode again. If no comment asks for a change (\"LGTM\"), call ExitPlanMode again \
+         right away.\n\n{review}"
     );
     let output = serde_json::json!({
         "hookSpecificOutput": {

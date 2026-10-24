@@ -101,7 +101,8 @@ An unanswered choice reads `No answer.`
 ## Plan review
 
 When Claude Code finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Done**, and Claude
-gets your comments, revises the plan and asks again. Click **Done** without comments, or close the window, and Claude
+gets your comments, revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back
+once more; click **Done** again without comments to go on. Click **Done** without comments, or close the window, and Claude
 Code's own approval prompt follows as usual. That prompt is where you choose how Claude continues.
 
 The vjuu plugin turns this on itself. With `vjuu setup` instead, add the hook to `~/.claude/settings.json`:
