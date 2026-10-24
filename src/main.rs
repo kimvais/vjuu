@@ -90,7 +90,7 @@ enum Msg {
     },
     Minimize,
     Maximize,
-    /// A toggle in the settings panel changed; saved at once.
+    /// The settings panel's Apply.
     Settings {
         config: config::Config,
     },
@@ -1034,7 +1034,7 @@ fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
         None => (String::new(), false),
     };
     let md = match (save, only_settings) {
-        // Nothing to review: the toggles were saved as they changed.
+        // Nothing to review: Apply already saved the settings.
         (_, true) => "Settings saved.\n".into(),
         (true, false) => save_review(&name, &s.latest),
         (false, false) => String::new(),

@@ -16,11 +16,6 @@
   <span id="session"></span>
   <span id="context"></span>
   <span id="name"></span>
-  <select id="theme" title="Theme (t)">
-    <option value="auto">Auto</option>
-    <option value="light">Light</option>
-    <option value="graphite">Graphite</option>
-  </select>
   <button id="view" hidden title="Toggle unified / side-by-side (v)">Side-by-side</button>
   <button id="settings-open" title="Settings">&#x2699;</button>
   <div id="window-controls">
@@ -45,7 +40,13 @@
 </footer>
 <dialog id="settings">
   <h2>Settings</h2>
-  <p>What vjuu opens for Claude Code. Changes are saved right away.</p>
+  <label class="theme"><b>Theme</b>
+    <select id="theme">
+      <option value="auto">Auto</option>
+      <option value="light">Light</option>
+      <option value="graphite">Graphite</option>
+    </select></label>
+  <p>What vjuu opens for Claude Code:</p>
   <label><input type="checkbox" name="plan"><b>Plan review</b>
     <span>Open a finished plan before you approve it; comments send it back to Claude.</span></label>
   <label><input type="checkbox" name="ask"><b>Questions</b>
@@ -57,7 +58,7 @@
   <label><input type="checkbox" name="tray"><b>Tray icon and notifications</b>
     <span>Show what is waiting in the tray, and notify when a window opens behind others.</span></label>
   <p class="cli">Also <code>vjuu config</code> in a terminal.</p>
-  <button id="settings-close">Close</button>
+  <button id="settings-apply" title="Esc cancels">Apply</button>
 </dialog>
 <!-- Resize handles: the webview covers the window, so its edges have to be handled here. -->
 <div class="edge" data-dir="n"></div><div class="edge" data-dir="s"></div>

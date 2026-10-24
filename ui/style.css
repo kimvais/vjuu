@@ -163,7 +163,9 @@ button, select {
 #settings label span { grid-column: 2; color: var(--muted); }
 #settings input { grid-row: span 2; margin-top: 4px; accent-color: var(--accent); }
 #settings .cli { margin: 16px 0 0; font-size: 13px; }
-#settings-close { float: right; margin-top: -26px; }
+#settings label.theme { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 16px; }
+#settings-apply { float: right; margin-top: -26px; padding: 4px 18px; background: var(--brand); border-color: var(--brand);
+  color: var(--brand-fg); font-weight: 700; }
 #window-controls { display: flex; align-self: stretch; margin-left: 4px; }
 #window-controls button {
   width: 46px;

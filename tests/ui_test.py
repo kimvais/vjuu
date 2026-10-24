@@ -55,6 +55,15 @@ def _review(page):
     return review
 
 
+def _set_theme(work, page, name):
+    """Picks a theme in the settings panel and applies it."""
+    (work / 'config.json').write_text(json.dumps({'tray': True, 'hooks': {}}))
+    page.click('#settings-open')
+    page.wait_for_selector('#settings[open]')
+    page.select_option('#theme', name)
+    page.click('#settings-apply')
+
+
 def _comment(page, text):
     page.keyboard.type(text)
     page.keyboard.press('Control+Enter')
@@ -133,15 +142,20 @@ def test_highlighting_and_themes(page, url, work):
     assert page.locator('pre code .hljs-built_in').inner_text() == 'print'
     theme = lambda: page.evaluate('[document.documentElement.dataset.theme, localStorage.getItem("vjuu-theme")]')
     assert theme() == ['light', 'auto']  # headless Edge reports a light OS
+    # The theme moved to the settings: a stray `t` no longer changes it.
     page.keyboard.press('t')
+    assert theme() == ['light', 'auto']
+    _set_theme(work, page, 'light')
     assert theme() == ['light', 'light']
-    page.keyboard.press('t')
+    # Picked but not applied: Esc keeps the old theme.
+    page.click('#settings-open')
+    page.wait_for_selector('#settings[open]')
+    page.select_option('#theme', 'graphite')
+    page.keyboard.press('Escape')
+    assert theme() == ['light', 'light']
+    _set_theme(work, page, 'graphite')
     assert theme() == ['graphite', 'graphite']
     assert page.evaluate('getComputedStyle(document.body).backgroundColor') == 'rgb(30, 30, 30)'
-    page.keyboard.press('t')  # wraps around
-    assert theme() == ['light', 'auto']
-    page.select_option('#theme', 'graphite')
-    assert theme() == ['graphite', 'graphite']
     # The choice survives into the next window.
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     assert theme() == ['graphite', 'graphite']
@@ -482,8 +496,7 @@ def test_html_page(page, url, work):
     page.keyboard.press('c')
     _comment(page, 'how?')
     # Theme colours reach the comment boxes inside the page.
-    page.keyboard.press('t')
-    page.keyboard.press('t')
+    _set_theme(work, page, 'graphite')
     assert inner.evaluate("getComputedStyle(document.querySelector('.vjuu-c')).backgroundColor") == 'rgb(46, 46, 46)'
     review = _review(page)
     assert review == {
@@ -606,22 +619,27 @@ def test_settings(page, url, work):
     # Review keys do nothing while it is open.
     page.keyboard.press('Control+Enter')
     assert msgs('done') == []
+    # Nothing is saved until Apply; Esc throws the change away.
     page.click('#settings [name=turn]')
+    assert msgs('settings') == []
+    page.keyboard.press('Escape')
+    assert not page.is_visible('#settings') and msgs('settings') == [] and msgs('done') == []
+    # The gear opens it again with the saved settings; Apply saves and leaves the review open.
+    page.click('#settings-open')
+    page.wait_for_selector('#settings[open]')
+    assert checked() == [True, False, True, False, True]
+    page.click('#settings [name=turn]')
+    page.click('#settings-apply')
     assert msgs('settings')[-1]['config'] == {
         'tray': True,
         'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False},
     }
-    page.keyboard.press('Escape')
     assert not page.is_visible('#settings') and msgs('done') == []
-    # The gear opens it again; closing it there leaves the review open.
-    page.click('#settings-open')
-    page.click('#settings-close')
-    assert msgs('done') == []
     # `vjuu config`: a window with nothing but the panel finishes when it closes.
     (work / 'doc.json').write_text(json.dumps({'docs': [], 'settings': True}))
     page.goto(url)
     page.wait_for_selector('#settings[open]')
-    page.click('#settings-close')
+    page.click('#settings-apply')
     # A dialog's close event arrives as a task of its own.
     page.wait_for_function("(window.__msgs || []).some((m) => m.type === 'done')", timeout=2000)
     assert len(msgs('done')) == 1
