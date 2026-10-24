@@ -527,7 +527,8 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
     }
 
     // Slides rotate every few seconds; hovering or focusing them holds the current one. The demo video plays from the
-    // start whenever it comes up and hands over when it ends; with reduced motion it waits, with controls, instead.
+    // start whenever it comes up and hands over when it ends. It is silent, so it plays with reduced motion too, but
+    // then with controls to pause it.
     {
       const box = document.querySelector('.shots');
       const shots = [...box.querySelectorAll('.shot')];
@@ -542,7 +543,7 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
         shots.forEach((shot, k) => shot.classList.toggle('current', k === i));
         [...dots.children].forEach((dot, k) => dot.setAttribute('aria-current', k === i));
         demo.pause();
-        if (!still && shots[i].contains(demo)) {
+        if (shots[i].contains(demo)) {
           demo.currentTime = 0;
           demo.play().catch(() => {});
         }
