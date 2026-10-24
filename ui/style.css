@@ -124,6 +124,7 @@ body.maximized .edge { display: none; }
   font-size: 13px;
 }
 #hint { color: var(--muted); }
+/* The theme's accent, not the brand green, so the main action matches the rest of the theme. */
 #done { margin-left: auto; padding: 5px 22px; background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 700; }
 #done:hover { filter: brightness(1.08); }
 /* Keycaps, in buttons and the help. */
