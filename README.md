@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/kimvais/vjuu/actions/workflows/ci.yml/badge.svg)](https://github.com/kimvais/vjuu/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/kimvais/vjuu)](https://github.com/kimvais/vjuu/releases/latest)
+[![crates.io](https://img.shields.io/crates/v/vjuu)](https://crates.io/crates/vjuu)
 [![License: MIT](https://img.shields.io/github/license/kimvais/vjuu)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#install)
 
@@ -10,6 +11,42 @@ A fast review window for agent handoffs. When an agent would say "open X and rev
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
 [![A Claude Code session where a question, a plan and a diff each open in vjuu and get answered there](site/img/demo.gif)](https://www.youtube.com/watch?v=EqzmtuNQzv4)
+
+## Install
+
+Runs on Windows 10/11 (WebView2), Linux (WebKitGTK 4.1: Debian 12+, Ubuntu 22.04+) and macOS (WKWebView). On
+Windows the window is frameless with its own title bar; macOS and Linux keep the native frame. macOS builds are
+compiled and tested in CI but not by hand, and are not signed or notarised.
+
+| | Install |
+|---|---|
+| Windows | a `.zip` from [GitHub Releases](https://github.com/kimvais/vjuu/releases), or `cargo` (below). `winget install vjuu` once the [winget package](https://github.com/microsoft/winget-pkgs/pull/459293) is approved by Microsoft |
+| macOS | `brew install kimvais/tap/vjuu` |
+| Debian, Ubuntu | add the apt source below once, then `sudo apt install vjuu` |
+| Anything else | a `.zip`, `.tar.gz` or `.deb` from [GitHub Releases](https://github.com/kimvais/vjuu/releases) |
+
+```
+curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
+sudo apt update && sudo apt install vjuu
+```
+
+A macOS binary downloaded by hand needs `xattr -d com.apple.quarantine vjuu` once, since it is not notarised
+(Homebrew installs don't). To build from source you need a Rust toolchain, and on Linux also
+`libwebkit2gtk-4.1-dev` and `libgtk-3-dev`:
+```
+cargo install --locked vjuu
+```
+
+Then, however you installed it:
+```
+vjuu setup
+```
+
+It installs the `vjuu` skill, which tells agents to run `vjuu` in the background instead of asking you to open
+files, for Claude Code (`~/.claude/skills`) and Codex (`~/.agents/skills`), whichever you have. Run it again after
+an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@vjuu` after
+`claude plugin marketplace add kimvais/vjuu`); use one or the other, not both.
 
 ## Usage
 
@@ -190,42 +227,6 @@ still switch them:
   }
 }
 ```
-
-## Install
-
-Runs on Windows 10/11 (WebView2), Linux (WebKitGTK 4.1: Debian 12+, Ubuntu 22.04+) and macOS (WKWebView). On
-Windows the window is frameless with its own title bar; macOS and Linux keep the native frame. macOS builds are
-compiled and tested in CI but not by hand, and are not signed or notarised.
-
-| | Install |
-|---|---|
-| Windows | a `.zip` from [GitHub Releases](https://github.com/kimvais/vjuu/releases), or `cargo` (below). `winget install vjuu` once the [winget package](https://github.com/microsoft/winget-pkgs/pull/459293) is approved by Microsoft |
-| macOS | `brew install kimvais/tap/vjuu` |
-| Debian, Ubuntu | add the apt source below once, then `sudo apt install vjuu` |
-| Anything else | a `.zip`, `.tar.gz` or `.deb` from [GitHub Releases](https://github.com/kimvais/vjuu/releases) |
-
-```
-curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
-sudo apt update && sudo apt install vjuu
-```
-
-A macOS binary downloaded by hand needs `xattr -d com.apple.quarantine vjuu` once, since it is not notarised
-(Homebrew installs don't). To build from source you need a Rust toolchain, and on Linux also
-`libwebkit2gtk-4.1-dev` and `libgtk-3-dev`:
-```
-cargo install --locked vjuu
-```
-
-Then, however you installed it:
-```
-vjuu setup
-```
-
-It installs the `vjuu` skill, which tells agents to run `vjuu` in the background instead of asking you to open
-files, for Claude Code (`~/.claude/skills`) and Codex (`~/.agents/skills`), whichever you have. Run it again after
-an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@vjuu` after
-`claude plugin marketplace add kimvais/vjuu`); use one or the other, not both.
 
 ## Development
 
