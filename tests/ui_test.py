@@ -169,7 +169,7 @@ def test_highlighting_and_themes(page, url, work):
     assert _background(page) == _WHITE
     # The panel lists the themes; the light and dark picks show only for Auto.
     (work / 'config.json').write_text(json.dumps(_CONFIG))
-    page.click('#settings-open')
+    page.keyboard.press('s')
     page.wait_for_selector('#settings[open]')
     options = page.eval_on_selector_all('#theme option', 'os => os.map((o) => o.value)')
     assert options == ['auto', 'graphite', 'light'] and page.is_visible('#auto-themes')

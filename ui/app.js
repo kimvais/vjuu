@@ -913,6 +913,8 @@ function onKey(e) {
   } else if (e.key === 'f') {
     filesHidden = !filesHidden;
     renderFileList();
+  } else if (e.key === 's') {
+    openSettings();
   } else {
     return;
   }
