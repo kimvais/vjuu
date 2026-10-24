@@ -53,11 +53,14 @@ struct Request {
     /// Opens on the settings panel: once after a fresh install, and for `vjuu config`.
     #[serde(default)]
     settings: bool,
+    /// The documents are only a sample behind the settings panel: closing the panel closes the window, unreviewed.
+    #[serde(default)]
+    sample: bool,
 }
 
 impl Request {
     fn name(&self) -> String {
-        if self.docs.is_empty() {
+        if self.sample {
             return "settings".into();
         }
         self.docs.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ")
@@ -584,12 +587,24 @@ fn plan_decision(review: &str) -> Option<String> {
 
 fn request(docs: Vec<Doc>) -> Request {
     let autoclose = env::var_os("VJUU_AUTOCLOSE").is_some();
-    Request { docs, autoclose, session: None, cwd: env::current_dir().ok(), settings: false }
+    Request { docs, autoclose, session: None, cwd: env::current_dir().ok(), settings: false, sample: false }
 }
 
-/// Returns a window with no documents that shows only the settings panel.
+/// Returns a window for the settings panel alone, with vjuu's README and a sample diff behind it, so a theme preview
+/// shows markdown, code and diff colours.
 fn settings_request() -> Request {
-    Request { settings: true, ..request(Vec::new()) }
+    let doc = |name: &str, kind: &str, text: &str| Doc {
+        name: name.into(),
+        kind: kind.into(),
+        text: text.into(),
+        base: None,
+    };
+    // The diff first: the modal panel blocks scrolling, so only the top of the window shows.
+    let docs = vec![
+        doc("sample.diff", "diff", include_str!("sample.diff")),
+        doc("README.md", "md", include_str!("../README.md")),
+    ];
+    Request { settings: true, sample: true, ..request(docs) }
 }
 
 fn print_config() -> ! {
@@ -1038,7 +1053,7 @@ fn is_vjuu(url: &str) -> bool {
 fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
     let Some(s) = sessions.remove(&id) else { return };
     let (name, only_settings) = match s.slot.lock().expect("slot lock").as_ref() {
-        Some(r) => (r.name(), r.docs.is_empty()),
+        Some(r) => (r.name(), r.sample),
         None => (String::new(), false),
     };
     let md = match (save, only_settings) {

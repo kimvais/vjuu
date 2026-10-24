@@ -637,10 +637,12 @@ def test_settings(page, url, work):
         'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False},
     }
     assert not page.is_visible('#settings') and msgs('done') == []
-    # `vjuu config`: a window with nothing but the panel finishes when it closes.
-    (work / 'doc.json').write_text(json.dumps({'docs': [], 'settings': True}))
+    # `vjuu config`: the panel over a sample to preview themes on; the window finishes when the panel closes.
+    sample = [{'name': 'README.md', 'kind': 'md', 'text': _MD}, {'name': 'sample.diff', 'kind': 'diff', 'text': _DIFF}]
+    (work / 'doc.json').write_text(json.dumps({'docs': sample, 'settings': True, 'sample': True}))
     page.goto(url)
     page.wait_for_selector('#settings[open]')
+    assert page.locator('.d2h-file-wrapper').count() == 1 and page.locator('article.markdown h1').count() == 1
     page.click('#settings-apply')
     # A dialog's close event arrives as a task of its own.
     page.wait_for_function("(window.__msgs || []).some((m) => m.type === 'done')", timeout=2000)
