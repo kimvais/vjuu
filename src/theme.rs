@@ -96,9 +96,10 @@ fn parse(css: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// When in doubt, the mode is dark: a theme is light only if it says so.
 fn scheme(css: &str) -> String {
     let declared = parse(css).into_iter().find(|(k, _)| k == "color-scheme").map(|(_, v)| v);
-    if declared.is_some_and(|v| v.contains("dark")) { "dark" } else { "light" }.to_string()
+    if declared.is_some_and(|v| v.contains("light") && !v.contains("dark")) { "light" } else { "dark" }.to_string()
 }
 
 fn block(declarations: &[(String, String)]) -> String {
@@ -111,18 +112,19 @@ pub fn preview(name: &str) -> Option<String> {
 }
 
 /// Returns the stylesheet for the settings' theme; a theme that cannot be read falls back to the shipped default.
+/// When in doubt, the mode is dark: the fallback is Graphite, and Auto is dark unless the OS asks for light.
 pub fn compile(theme: &config::Theme) -> String {
     let pick = |name: &str, fallback: &str| declarations(name).or_else(|| declarations(fallback)).unwrap_or_default();
     let header = "/* Compiled by vjuu from its themes folder; change the theme in the settings, not here. */\n";
     if theme.name == AUTO {
         let (light, dark) = (pick(&theme.light, "light"), pick(&theme.dark, "graphite"));
         format!(
-            "{header}:root {{\n{}}}\n@media (prefers-color-scheme: dark) {{\n:root {{\n{}}}\n}}\n",
-            block(&light),
-            block(&dark)
+            "{header}:root {{\n{}}}\n@media (prefers-color-scheme: light) {{\n:root {{\n{}}}\n}}\n",
+            block(&dark),
+            block(&light)
         )
     } else {
-        format!("{header}:root {{\n{}}}\n", block(&pick(&theme.name, "light")))
+        format!("{header}:root {{\n{}}}\n", block(&pick(&theme.name, "graphite")))
     }
 }
 
@@ -171,7 +173,9 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
         );
         assert_eq!(scheme(css), "dark");
-        assert_eq!(scheme(":root { --bg: #fff; }"), "light", "light unless it says dark");
+        assert_eq!(scheme(":root { --bg: #fff; }"), "dark", "dark unless it says light");
+        assert_eq!(scheme(":root { color-scheme: light; }"), "light");
+        assert_eq!(scheme(":root { color-scheme: light dark; }"), "dark");
     }
 
     #[test]
@@ -196,12 +200,13 @@ mod tests {
     fn auto_compiles_both_picks_behind_a_media_query() {
         let theme = config::Theme { name: AUTO.into(), light: "light".into(), dark: "graphite".into() };
         let css = compile(&theme);
-        let (light, dark) = css.split_once("@media (prefers-color-scheme: dark)").unwrap();
-        assert!(light.contains("--bg: #ffffff;") && dark.contains("--bg: #1e1e1e;"), "{css}");
-        // A fixed pick, and a missing one falling back to the shipped default.
-        let fixed = compile(&config::Theme { name: "graphite".into(), ..theme });
-        assert!(fixed.contains("--bg: #1e1e1e;") && !fixed.contains("@media"), "{fixed}");
+        // Dark unless the OS asks for light.
+        let (dark, light) = css.split_once("@media (prefers-color-scheme: light)").unwrap();
+        assert!(dark.contains("--bg: #1e1e1e;") && light.contains("--bg: #ffffff;"), "{css}");
+        // A fixed pick, and a missing one falling back to the shipped dark theme.
+        let fixed = compile(&config::Theme { name: "light".into(), ..theme });
+        assert!(fixed.contains("--bg: #ffffff;") && !fixed.contains("@media"), "{fixed}");
         let missing = compile(&config::Theme { name: "nope".into(), light: String::new(), dark: String::new() });
-        assert!(missing.contains("--bg: #ffffff;"), "{missing}");
+        assert!(missing.contains("--bg: #1e1e1e;"), "{missing}");
     }
 }
