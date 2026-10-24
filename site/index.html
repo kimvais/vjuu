@@ -372,6 +372,7 @@
       color: var(--ink-dim);
       font-size: 14px;
     }
+    .flag { height: 1em; width: auto; margin-left: 0.4em; vertical-align: -0.125em; }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition-duration: 0s !important; }
@@ -494,7 +495,7 @@ Add a test for this one.</pre>
             <dt><svg class="icon" aria-hidden="true"><use href="#windows"/></svg>Windows</dt>
             <dd>
               <pre class="pending">winget install vjuu</pre>
-              <p>Not yet: the <a class="textlink" href="https://github.com/microsoft/winget-pkgs/pull/459293">winget package</a> is waiting for Microsoft's approval. Until then, <a class="textlink" href="#anything-else">install it with cargo or from a <code>.zip</code></a>.</p>
+              <p>Not yet: the <a class="textlink" href="https://github.com/microsoft/winget-pkgs/pull/460998">winget package</a> is waiting for Microsoft's approval. Until then, <a class="textlink" href="#anything-else">install it with cargo or from a <code>.zip</code></a>.</p>
             </dd>
           </div>
           <div>
@@ -531,7 +532,7 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
 
   <footer class="footer">
     <div class="column">
-      <span>© 2026 Kimmo Parviainen-Jalanko · MIT licence</span>
+      <span>© 2026 Kimmo Parviainen-Jalanko · MIT licence · Made in Finland<svg class="flag" viewBox="0 0 18 11" width="18" height="11" aria-hidden="true"><rect width="18" height="11" fill="#fff"/><path d="M5 0h3v11H5zM0 4h18v3H0z" fill="#002f6c"/></svg><svg class="flag" viewBox="0 0 30 20" width="30" height="20" aria-hidden="true"><defs><path id="eu-star" d="M0-1.111.25-.343h.807l-.653.474.249.769L0 .425l-.653.474.249-.769-.653-.474h.807z" fill="#fc0"/></defs><rect width="30" height="20" fill="#039"/><use href="#eu-star" x="15" y="3.333"/><use href="#eu-star" x="18.333" y="4.226"/><use href="#eu-star" x="20.774" y="6.667"/><use href="#eu-star" x="21.667" y="10"/><use href="#eu-star" x="20.774" y="13.333"/><use href="#eu-star" x="18.333" y="15.774"/><use href="#eu-star" x="15" y="16.667"/><use href="#eu-star" x="11.667" y="15.774"/><use href="#eu-star" x="9.226" y="13.333"/><use href="#eu-star" x="8.333" y="10"/><use href="#eu-star" x="9.226" y="6.667"/><use href="#eu-star" x="11.667" y="4.226"/></svg></span>
       <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>GitHub</a>
     </div>
   </footer>

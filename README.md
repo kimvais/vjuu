@@ -24,7 +24,7 @@ compiled and tested in CI but not by hand.
 winget install vjuu
 ```
 
-Not yet: the [winget package](https://github.com/microsoft/winget-pkgs/pull/459293) is waiting for Microsoft's
+Not yet: the [winget package](https://github.com/microsoft/winget-pkgs/pull/460998) is waiting for Microsoft's
 approval. Until then, use cargo or a `.zip` (below).
 
 ### macOS
