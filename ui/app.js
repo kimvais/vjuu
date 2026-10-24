@@ -897,6 +897,12 @@ function onKey(e) {
     openHelp();
     return;
   }
+  // The platform's settings key: Ctrl+, (Cmd+, on macOS), also while typing.
+  if (e.key === ',' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+    e.preventDefault();
+    openSettings();
+    return;
+  }
   const inField = e.target.closest('textarea, input, select');
   // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
   if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {
@@ -931,8 +937,6 @@ function onKey(e) {
   } else if (e.key === 'f') {
     filesHidden = !filesHidden;
     renderFileList();
-  } else if (e.key === 's') {
-    openSettings();
   } else {
     return;
   }

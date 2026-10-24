@@ -122,7 +122,7 @@ notification when the tray is on.
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
-| `s` | Settings |
+| `Ctrl+,` (`⌘,` on macOS) | Settings |
 | `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
 | `F1` | Help: the version and these keys |
 
@@ -130,7 +130,7 @@ Click any line or block to comment on it. To comment on a range, select text (ac
 rows) and click **Comment** or press `c`. Links still open, except on HTML pages, where only in-page links work; clicks
 inside a comment edit it.
 
-Themes, picked in the settings (`s`, or the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
+Themes, picked in the settings (`Ctrl+,`, or the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
 neutral dark grey), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
 another while it is dark, and the dark one when the system does not say. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
 

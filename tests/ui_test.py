@@ -170,7 +170,10 @@ def test_highlighting_and_themes(page, url, work):
     assert _background(page) == _WHITE
     # The panel lists the themes; the light and dark picks show only for Auto.
     (work / 'config.json').write_text(json.dumps(_CONFIG))
-    page.keyboard.press('s')
+    page.keyboard.press('s')  # a typo, not the settings key
+    page.wait_for_timeout(200)  # the panel opens after fetching config.json
+    assert not page.is_visible('#settings')
+    page.keyboard.press('Control+,')
     page.wait_for_selector('#settings[open]')
     options = page.eval_on_selector_all('#theme option', 'os => os.map((o) => o.value)')
     assert options == ['auto', 'graphite', 'light'] and page.is_visible('#auto-themes')
@@ -679,7 +682,7 @@ def test_help(page, url, work):
     page.wait_for_selector('#help[open]')
     assert page.inner_text('#version') == _CONFIG['version']
     assert page.evaluate("document.querySelector('#help img').naturalWidth") > 0
-    page.keyboard.press('s')
+    page.keyboard.press('Control+,')
     assert not page.is_visible('#settings')
     page.keyboard.press('Escape')
     assert not page.is_visible('#help')
