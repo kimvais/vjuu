@@ -63,8 +63,27 @@ async function load() {
   const renderers = new Set(req.docs.map((x) => ({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind]).filter(Boolean));
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
+  if (req.settings) openSettings();
   requestAnimationFrame(() => post({ type: req.autoclose ? 'rendered' : 'ready' }));
 }
+
+const settings = $('#settings');
+const HOOKS = ['plan', 'ask', 'turn'];
+
+async function openSettings() {
+  const config = await (await fetch('config.json', { cache: 'no-store' })).json();
+  for (const hook of HOOKS) settings.querySelector(`[name=${hook}]`).checked = config.hooks[hook];
+  settings.showModal();
+}
+
+settings.addEventListener('change', () => {
+  const hooks = Object.fromEntries(HOOKS.map((h) => [h, settings.querySelector(`[name=${h}]`).checked]));
+  post({ type: 'settings', config: { hooks } });
+});
+// A window opened only for the settings has nothing else to show.
+settings.addEventListener('close', () => { if (req && !req.docs.length) done(); });
+$('#settings-close').onclick = () => settings.close();
+$('#settings-open').onclick = openSettings;
 
 const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
 
@@ -803,6 +822,8 @@ function jumpFile(delta) {
 }
 
 function onKey(e) {
+  // The dialog takes its own keys: Tab, Space and Esc.
+  if (settings.open) return;
   const inField = e.target.closest('textarea, input, select');
   // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
   if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {

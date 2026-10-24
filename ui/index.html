@@ -21,6 +21,7 @@
     <option value="graphite">Graphite</option>
   </select>
   <button id="view" hidden title="Toggle unified / side-by-side (v)">Side-by-side</button>
+  <button id="settings-open" title="Settings">&#x2699;</button>
   <div id="window-controls">
     <button data-cmd="minimize" title="Minimize">&#xE921;</button>
     <button data-cmd="maximize" id="max" title="Maximize">&#xE922;</button>
@@ -41,6 +42,18 @@
   <span id="hint">&uarr;&darr; move &middot; Enter or click to comment &middot; &larr;&rarr; files &middot; Ctrl+Enter done</span>
   <button id="done" title="Ctrl+Enter">Done</button>
 </footer>
+<dialog id="settings">
+  <h2>Settings</h2>
+  <p>What vjuu opens for Claude Code. Changes are saved right away.</p>
+  <label><input type="checkbox" name="plan"><b>Plan review</b>
+    <span>Open a finished plan before you approve it; comments send it back to Claude.</span></label>
+  <label><input type="checkbox" name="ask"><b>Questions</b>
+    <span>Answer Claude's questions here instead of the terminal picker.</span></label>
+  <label><input type="checkbox" name="turn"><b>Turn review</b>
+    <span>After each turn with edits, open the diff of what Claude changed.</span></label>
+  <p class="cli">Also <code>vjuu config</code> in a terminal.</p>
+  <button id="settings-close">Close</button>
+</dialog>
 <!-- Resize handles: the webview covers the window, so its edges have to be handled here. -->
 <div class="edge" data-dir="n"></div><div class="edge" data-dir="s"></div>
 <div class="edge" data-dir="e"></div><div class="edge" data-dir="w"></div>

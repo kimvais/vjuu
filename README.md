@@ -18,9 +18,7 @@ vjuu --session "fix login" plan.md  # name the asking session in the title bar (
 vjuu last                    # print the most recent review again
 vjuu stop                    # stop the resident instance (before upgrading the exe)
 vjuu setup                   # install the skill for Claude Code and Codex
-vjuu hook plan               # Claude Code hook: review a plan before approving it (see below)
-vjuu hook turn               # Claude Code hook: review what Claude changed at the end of each turn (see below)
-vjuu hook ask                # Claude Code hook: answer Claude's questions in vjuu (see below)
+vjuu config                  # settings: which Claude Code hooks open vjuu (see below)
 ```
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to
@@ -100,50 +98,54 @@ Snapshot (recommended)
 
 An unanswered choice reads `No answer.`
 
-## Plan review
+## Claude Code hooks
 
-When Claude Code finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Done**, and Claude
-gets your comments, revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back
-once more; click **Done** again without comments to go on. Click **Done** without comments, or close the window, and Claude
-Code's own approval prompt follows as usual. That prompt is where you choose how Claude continues.
+The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All three are on by default.
+The first vjuu window after a fresh install opens on the settings panel, where you can switch each one off.
 
-The vjuu plugin turns this on itself. With `vjuu setup` instead, add the hook to `~/.claude/settings.json`:
+**Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Done**, and
+Claude revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back once more.
+Click **Done** without comments, or close the window, and Claude Code's own approval prompt follows as usual. That
+prompt is where you choose how Claude continues.
+
+**Questions.** When Claude asks you something (its `AskUserQuestion` tool), the questions open in vjuu as buttons,
+under the message that led to them. Pick an answer to each and click **Done**, and they go to Claude as if picked in the
+terminal. Comment anywhere, or leave a question unanswered, and Claude gets your picks and comments to read instead, so
+you can answer in your own words. Nothing times out. Close the window without picking, and Claude Code's own picker
+asks. Questions that take several answers stay in that picker, as vjuu's buttons pick one.
+
+**Turn review.** When Claude finishes a turn in which it edited files, the diff of those files opens in vjuu, new files
+included. Comment and click **Done**, and Claude acts on your comments straight away. Click **Done** without comments
+and the turn ends. Turns without edits, and edits outside the git repository, open nothing. The diff is the files'
+uncommitted changes, so changes an earlier turn made to the same files show too.
+
+Each hook gives up after an hour, and Claude Code carries on as if vjuu were not there.
+
+### Settings
+
+Click the gear in the title bar, or use the terminal:
+
+```
+vjuu config                  # open the settings panel
+vjuu config list             # print the settings and where the file is
+vjuu config turn off         # switch one: plan, ask or turn; on or off
+```
+
+They live in `config.toml` in your config folder: `%APPDATA%\vjuu` on Windows, `~/.config/vjuu` on Linux (or
+`$XDG_CONFIG_HOME/vjuu`), `~/Library/Application Support/vjuu` on macOS. A missing setting counts as on.
+
+### Without the plugin
+
+`vjuu setup` installs only the skill. To get the hooks too, add them to `~/.claude/settings.json`; the settings above
+still switch them:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
-      { "matcher": "ExitPlanMode", "hooks": [{ "type": "command", "command": "vjuu hook plan", "timeout": 3600 }] }
-    ]
-  }
-}
-```
-
-After an hour the hook gives up and the normal prompt appears.
-
-## Questions
-
-When Claude asks you something (its `AskUserQuestion` tool), the questions open in vjuu as buttons, under the message
-that led to them. Pick an answer to each and click **Done**, and they go to Claude as if picked in the terminal. Comment
-anywhere, or leave a question unanswered, and Claude gets your picks and comments to read instead, so you can answer in
-your own words. Nothing times out. Close the window without picking, and Claude Code's own picker asks. Questions that
-take several answers stay in that picker, as vjuu's buttons pick one.
-
-The vjuu plugin turns this on itself. With `vjuu setup` instead, add a second `PreToolUse` entry next to the one for
-plans: `{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "vjuu hook ask", "timeout": 3600 }] }`.
-
-## Turn review
-
-When Claude Code finishes a turn in which it edited files, the diff of those files opens in vjuu, new files included.
-Comment and click **Done**, and Claude acts on your comments straight away. Click **Done** without comments and the turn
-ends. Turns without edits, and edits outside the git repository, open nothing.
-
-The diff is the files' uncommitted changes, so changes an earlier turn made to the same files show too. It opens after
-every turn with edits, so it is off by default. To turn it on, add this to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
+      { "matcher": "ExitPlanMode", "hooks": [{ "type": "command", "command": "vjuu hook plan", "timeout": 3600 }] },
+      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "vjuu hook ask", "timeout": 3600 }] }
+    ],
     "Stop": [{ "hooks": [{ "type": "command", "command": "vjuu hook turn", "timeout": 3600 }] }]
   }
 }

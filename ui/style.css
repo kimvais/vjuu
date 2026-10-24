@@ -151,6 +151,19 @@ button, select {
 }
 #brand { font-weight: 700; color: var(--brand-text); letter-spacing: -0.02em; }
 #titlebar select, #titlebar > button { padding: 1px 10px; }
+#settings-open { font-size: 15px; line-height: 1; padding: 3px 7px; }
+/* Without our own window controls on macOS and Linux, the gear is the last thing in the bar. */
+.native-frame #settings-open { margin-right: 10px; }
+#settings { max-width: 460px; padding: 20px 24px; color: var(--fg); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 14px; }
+#settings::backdrop { background: rgb(0 0 0 / 35%); }
+#settings h2 { margin: 0 0 4px; font-size: 18px; }
+#settings p { margin: 0 0 14px; color: var(--muted); }
+#settings label { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; margin-bottom: 12px; cursor: pointer; }
+#settings label span { grid-column: 2; color: var(--muted); }
+#settings input { grid-row: span 2; margin-top: 4px; accent-color: var(--accent); }
+#settings .cli { margin: 16px 0 0; font-size: 13px; }
+#settings-close { float: right; margin-top: -26px; }
 #window-controls { display: flex; align-self: stretch; margin-left: 4px; }
 #window-controls button {
   width: 46px;

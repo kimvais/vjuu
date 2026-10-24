@@ -31,6 +31,19 @@ pub fn data_dir() -> PathBuf {
     base.unwrap_or_else(env::temp_dir).join("vjuu")
 }
 
+/// Returns where vjuu keeps its settings: the platform's usual (on Windows, roaming) config folder.
+pub fn config_dir() -> PathBuf {
+    #[cfg(windows)]
+    let base = env::var_os("APPDATA").map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    let base = env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"));
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let base = env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")));
+    base.unwrap_or_else(env::temp_dir).join("vjuu")
+}
+
 /// Returns the per-user socket the resident instance listens on.
 pub fn pipe_name() -> Name<'static> {
     // shortcut: default pipe/socket permissions; fine on a single-user machine, restrict them if shared.

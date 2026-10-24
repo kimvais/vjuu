@@ -1,5 +1,5 @@
 {
-  "description": "Review Claude Code plans and answer its questions in vjuu",
+  "description": "Review Claude Code plans, questions and each turn's edits in vjuu; switch each with `vjuu config`",
   "hooks": {
     "PreToolUse": [
       {
@@ -10,6 +10,7 @@
         "matcher": "AskUserQuestion",
         "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "ask"], "timeout": 3600 }]
       }
-    ]
+    ],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "turn"], "timeout": 3600 }] }]
   }
 }
