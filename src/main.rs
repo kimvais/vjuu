@@ -115,6 +115,7 @@ fn main() {
         ["last"] => print_last(),
         ["stop"] => stop(),
         ["setup"] => setup(),
+        ["hook", "plan"] => hook_plan(),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -146,7 +147,11 @@ fn main() {
 
 /// Returns the name given with `/rename` to the Claude Code session running us.
 fn claude_session_title() -> Option<String> {
-    let id = env::var("CLAUDE_CODE_SESSION_ID").ok()?;
+    session_title(&env::var("CLAUDE_CODE_SESSION_ID").ok()?)
+}
+
+/// Returns the `/rename` name of the Claude Code session with this id.
+fn session_title(id: &str) -> Option<String> {
     let root = env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
         env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude"))
     })?;
@@ -166,6 +171,49 @@ fn transcript_title(transcript: &str) -> Option<String> {
     transcript.lines().rev().filter(|l| l.contains("customTitle")).find_map(|l| {
         serde_json::from_str::<serde_json::Value>(l).ok()?.get("customTitle")?.as_str().map(String::from)
     })
+}
+
+/// Claude Code's PreToolUse hook on ExitPlanMode: opens the plan in vjuu, and comments send it back for changes.
+/// Without comments it decides nothing, so Claude Code's own approval prompt follows and picks the next mode.
+fn hook_plan() -> ! {
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    // Anything unexpected falls through to the normal prompt rather than blocking the plan.
+    let event: serde_json::Value = serde_json::from_str(&input).unwrap_or_default();
+    // Claude Code injects the plan file's path; without one there is nothing to anchor comments to.
+    let Some(plan) = event["tool_input"]["planFilePath"].as_str().filter(|p| Path::new(p).is_file()) else {
+        process::exit(0)
+    };
+    let Ok(exe) = env::current_exe() else { process::exit(0) };
+    let mut vjuu = Command::new(exe);
+    if let Some(title) = event["session_id"].as_str().and_then(session_title) {
+        vjuu.args(["--session", &title]);
+    }
+    let review = vjuu.arg(plan).stdin(process::Stdio::null()).output().map(|o| o.stdout).unwrap_or_default();
+    if let Some(decision) = plan_decision(&String::from_utf8_lossy(&review)) {
+        println!("{decision}");
+    }
+    process::exit(0)
+}
+
+/// Returns the hook output that rejects the plan with the review as the reason, or None when there is nothing to act on.
+fn plan_decision(review: &str) -> Option<String> {
+    let review = review.trim();
+    if review.is_empty() || review.ends_with("\nNo comments.") {
+        return None;
+    }
+    let reason = format!(
+        "The user reviewed the plan in vjuu and wants changes. Act on each comment, update the plan file, \
+         then call ExitPlanMode again.\n\n{review}"
+    );
+    let output = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    });
+    Some(output.to_string())
 }
 
 fn request(docs: Vec<Doc>) -> Request {
@@ -610,8 +658,22 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::{SKILL, file_doc, install_skill, is_diff, is_vjuu, kind_of, transcript_title};
+    use super::{SKILL, file_doc, install_skill, is_diff, is_vjuu, kind_of, plan_decision, transcript_title};
     use std::fs;
+
+    #[test]
+    fn plan_comments_reject_the_plan() {
+        // Closed without comments, or vjuu failed: leave it to Claude Code's own prompt.
+        for review in ["", "# Review: plan.md\nNo comments.\n"] {
+            assert_eq!(plan_decision(review), None, "{review:?}");
+        }
+        let review = "# Review: plan.md (1 comment)\n\n## plan.md:3\n> Step 2\n\nSkip this step.\n";
+        let decision: serde_json::Value = serde_json::from_str(&plan_decision(review).unwrap()).unwrap();
+        assert_eq!(decision["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        assert_eq!(decision["hookSpecificOutput"]["permissionDecision"], "deny");
+        let reason = decision["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
+        assert!(reason.ends_with(review.trim()), "{reason}");
+    }
 
     #[test]
     fn file_kinds() {
