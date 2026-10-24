@@ -572,6 +572,9 @@ def test_choice_keys(page, url, work):
     # The only choice block in the review: digits pick without moving the cursor there.
     page.keyboard.press('2')
     assert answer() == 'Live page'
+    # Picks are orange, apart from the blue cursor.
+    picked = "getComputedStyle(document.querySelector('.choice button.picked')).borderTopColor"
+    assert page.evaluate(picked) == 'rgb(188, 76, 0)'
     page.keyboard.press('2')  # again: taken back
     assert answer() == ''
     page.keyboard.press('7')  # no such option
