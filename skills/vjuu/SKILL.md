@@ -1,6 +1,6 @@
 ---
 name: vjuu
-description: Use whenever you would ask the user to open, read, look over or review a file, document, plan, spec, diff, patch, commit or branch, and when the user says "let me review", "show me", "/vjuu" or "review it in vjuu". Opens the content in the vjuu window, where the user comments on lines and picks between options you offer; the comments and picks come back as the command's output.
+description: Use whenever you would ask the user to open, read, look over or review a file, document, plan, spec, diff, patch, commit or branch, and when the user says "let me review", "show me", "/vjuu" or "review it in vjuu". MUST also be used whenever your reply to the user would be longer than 20 lines: write it to a markdown file and open that in vjuu instead of printing it. Opens the content in the vjuu window, where the user comments on lines and picks between options you offer; the comments and picks come back as the command's output.
 ---
 
 # vjuu
@@ -8,6 +8,12 @@ description: Use whenever you would ask the user to open, read, look over or rev
 `vjuu` shows a markdown file or a diff in a window where the user leaves line comments. It blocks
 until they click Done, then prints the review as markdown on stdout. Use it instead of saying "open X
 and review it" or pasting long content into chat for review.
+
+## Replies longer than 20 lines
+
+If what you are about to say to the user runs past 20 lines, you MUST NOT print it. Write it to a `.md` file (in
+your scratch or temp directory, not the repository), run `vjuu` on it, and say in one line that it is open. Code
+blocks, tables and lists count towards the 20 lines. Short replies stay in chat.
 
 ## Offer choices as buttons
 
