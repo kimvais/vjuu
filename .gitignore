@@ -1,2 +1,5 @@
 target/
-.crates-token
+# Secrets kept in dotfiles: .env, .github_token, .api-key and the like.
+.*env
+.*token
+.*key
