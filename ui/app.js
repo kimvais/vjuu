@@ -68,7 +68,7 @@ async function load() {
 }
 
 const settings = $('#settings');
-const HOOKS = ['plan', 'ask', 'turn'];
+const HOOKS = ['plan', 'ask', 'turn', 'permission'];
 
 async function openSettings() {
   const config = await (await fetch('config.json', { cache: 'no-store' })).json();

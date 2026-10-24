@@ -108,7 +108,7 @@ An unanswered choice reads `No answer.`
 
 ## Claude Code hooks
 
-The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All three are on by default.
+The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All four are on by default.
 The first vjuu window after a fresh install opens on the settings panel, where you can switch each one off.
 
 **Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Done**, and
@@ -127,6 +127,12 @@ included. Comment and click **Done**, and Claude acts on your comments straight 
 and the turn ends. Turns without edits, and edits outside the git repository, open nothing. The diff is the files'
 uncommitted changes, so changes an earlier turn made to the same files show too.
 
+**Permission prompts.** When Claude Code would ask whether Claude may run a command, edit a file or use another tool,
+the request opens in vjuu: the command in full, the edit as a diff. Pick **Allow**, **Always allow** (Claude Code's
+suggested rule, such as every `npm test` from now on) or **Deny**. Comment without a pick, and it is denied with your
+comment as the reason, so Claude can try another way; a comment next to **Allow** does not reach Claude. Close the
+window without picking, and Claude Code's own prompt asks. Plans and questions keep their own windows.
+
 Each hook gives up after an hour, and Claude Code carries on as if vjuu were not there.
 
 ### Settings
@@ -136,7 +142,7 @@ Click the gear in the title bar, or use the terminal:
 ```
 vjuu config                  # open the settings panel
 vjuu config list             # print the settings and where the file is
-vjuu config turn off         # switch one: plan, ask, turn, or tray (the tray icon); on or off
+vjuu config turn off         # switch one: plan, ask, turn, permission, or tray; on or off
 ```
 
 They live in `config.toml` in your config folder: `%APPDATA%\vjuu` on Windows, `~/.config/vjuu` on Linux (or
@@ -154,6 +160,7 @@ still switch them:
       { "matcher": "ExitPlanMode", "hooks": [{ "type": "command", "command": "vjuu hook plan", "timeout": 3600 }] },
       { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "vjuu hook ask", "timeout": 3600 }] }
     ],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "vjuu hook permission", "timeout": 3600 }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "vjuu hook turn", "timeout": 3600 }] }]
   }
 }

@@ -135,6 +135,7 @@ fn main() {
         ["hook", "plan"] => hook_plan(),
         ["hook", "turn"] => hook_turn(),
         ["hook", "ask"] => hook_ask(),
+        ["hook", "permission"] => hook_permission(),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -310,21 +311,7 @@ fn ask_decision(tool_input: &serde_json::Value, review: &str) -> Option<String> 
     if !has_comments(review) {
         return None;
     }
-    // vjuu shows a question's lines joined by spaces.
-    let squash = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut picks = HashMap::new();
-    let mut other_comments = false;
-    let mut lines = review.lines();
-    while let Some(line) = lines.next() {
-        if let Some(question) = line.strip_prefix("## Choice: ") {
-            let answer = lines.next().unwrap_or_default();
-            if answer != "No answer." {
-                picks.insert(squash(question), answer.to_string());
-            }
-        } else if line.starts_with("## ") {
-            other_comments = true;
-        }
-    }
+    let (picks, other_comments) = picks(review);
     let questions = tool_input["questions"].as_array().into_iter().flatten();
     let answers: Option<serde_json::Map<String, serde_json::Value>> = questions
         .map(|q| {
@@ -352,6 +339,126 @@ fn ask_decision(tool_input: &serde_json::Value, review: &str) -> Option<String> 
         }
     };
     Some(serde_json::json!({ "hookSpecificOutput": output }).to_string())
+}
+
+/// Returns a review's choice picks, keyed by the question with its whitespace squashed, and whether it has other comments.
+fn picks(review: &str) -> (HashMap<String, String>, bool) {
+    let mut picks = HashMap::new();
+    let mut other_comments = false;
+    let mut lines = review.lines();
+    while let Some(line) = lines.next() {
+        if let Some(question) = line.strip_prefix("## Choice: ") {
+            let answer = lines.next().unwrap_or_default();
+            if answer != "No answer." {
+                picks.insert(squash(question), answer.to_string());
+            }
+        } else if line.starts_with("## ") {
+            other_comments = true;
+        }
+    }
+    (picks, other_comments)
+}
+
+/// vjuu shows a choice question's lines joined by spaces.
+fn squash(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+const PERMISSION_QUESTION: &str = "Allow this?";
+
+/// Claude Code's PermissionRequest hook: asks Allow / Deny in vjuu, under what Claude wants to do.
+/// A pick decides; comments without one deny, with the comments as the reason; nothing leaves the terminal prompt.
+fn hook_permission() -> ! {
+    if !config::load().hooks.permission {
+        process::exit(0)
+    }
+    let event = hook_event();
+    // Their own hooks already showed these, and the plan's terminal prompt is where the next mode is picked.
+    if matches!(event["tool_name"].as_str(), Some("ExitPlanMode" | "AskUserQuestion")) {
+        process::exit(0)
+    }
+    let path = env::temp_dir().join(format!("vjuu-permission-{}.md", event["session_id"].as_str().unwrap_or("none")));
+    if fs::write(&path, permission_markdown(&event)).is_err() {
+        process::exit(0)
+    }
+    if let Some(decision) = permission_decision(&event, &review_in_child(&event, &path)) {
+        println!("{decision}");
+    }
+    process::exit(0)
+}
+
+/// Returns the markdown vjuu shows for a permission request: what the tool would do, then Allow / Deny buttons.
+fn permission_markdown(event: &serde_json::Value) -> String {
+    let tool = event["tool_name"].as_str().unwrap_or("a tool");
+    let input = &event["tool_input"];
+    let text = |key: &str| input[key].as_str().unwrap_or_default();
+    let mut md = format!("# Claude wants to use {tool}\n\n");
+    match tool {
+        "Bash" | "PowerShell" => {
+            if !text("description").is_empty() {
+                md += &format!("{}\n\n", text("description"));
+            }
+            md += &fence(if tool == "Bash" { "sh" } else { "powershell" }, text("command"));
+        }
+        "Edit" => {
+            let lines = |prefix: &str, s: &str| s.lines().map(|l| format!("{prefix}{l}\n")).collect::<String>();
+            md += &format!("`{}`\n\n", text("file_path"));
+            md += &fence("diff", &(lines("-", text("old_string")) + &lines("+", text("new_string"))));
+        }
+        "Write" => {
+            md += &format!("`{}`\n\n", text("file_path"));
+            let ext = Path::new(text("file_path")).extension().and_then(|e| e.to_str()).unwrap_or_default();
+            md += &fence(ext, text("content"));
+        }
+        _ => md += &fence("json", &serde_json::to_string_pretty(input).unwrap_or_default()),
+    }
+    md += &format!("\n```choice\n{PERMISSION_QUESTION}\n- Allow: just this once\n");
+    // Claude Code's own suggestion, e.g. a rule for every `npm test` from now on.
+    let rules: Vec<String> = event["permission_suggestions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|s| s["rules"].as_array().cloned().unwrap_or_default())
+        .map(|r| match r["ruleContent"].as_str() {
+            Some(content) => format!("`{}({content})`", r["toolName"].as_str().unwrap_or_default()),
+            None => format!("`{}`", r["toolName"].as_str().unwrap_or_default()),
+        })
+        .collect();
+    if !rules.is_empty() {
+        md += &format!("- Always allow: {}\n", rules.join(", "));
+    }
+    md += "- Deny: comment to tell Claude why\n```\n";
+    md
+}
+
+/// Returns `text` in a fenced code block whose fence is longer than any backtick run inside it.
+fn fence(lang: &str, text: &str) -> String {
+    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let ticks = "`".repeat(longest.max(2) + 1);
+    format!("{ticks}{lang}\n{}\n{ticks}\n", text.trim_end())
+}
+
+/// Returns the PermissionRequest hook output for a review, or None when the user decided nothing there.
+fn permission_decision(event: &serde_json::Value, review: &str) -> Option<String> {
+    if !has_comments(review) {
+        return None;
+    }
+    let (picks, _) = picks(review);
+    let decision = match picks.get(PERMISSION_QUESTION).map(String::as_str) {
+        Some("Allow") => serde_json::json!({ "behavior": "allow" }),
+        Some("Always allow") => {
+            serde_json::json!({ "behavior": "allow", "updatedPermissions": event["permission_suggestions"] })
+        }
+        // Deny, or comments without a pick.
+        _ => serde_json::json!({
+            "behavior": "deny",
+            "message": format!("The user denied this in vjuu.\n\n{}", review.trim()),
+        }),
+    };
+    Some(
+        serde_json::json!({ "hookSpecificOutput": { "hookEventName": "PermissionRequest", "decision": decision } })
+            .to_string(),
+    )
 }
 
 /// Returns a hook's JSON event from stdin; anything unexpected is Null, so the hook falls through and decides nothing.
@@ -999,7 +1106,66 @@ mod tests {
         SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
         last_assistant_text, plan_decision, transcript_title, turn_diff, turn_feedback,
     };
+    use super::{fence, permission_decision, permission_markdown};
     use std::fs;
+
+    fn bash_request() -> serde_json::Value {
+        serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": { "command": "npm test", "description": "Run the tests" },
+            "permission_suggestions": [{ "type": "addRules", "behavior": "allow", "destination": "localSettings",
+                "rules": [{ "toolName": "Bash", "ruleContent": "npm test:*" }] }],
+        })
+    }
+
+    #[test]
+    fn permission_requests_show_what_the_tool_would_do() {
+        assert_eq!(
+            permission_markdown(&bash_request()),
+            "# Claude wants to use Bash\n\nRun the tests\n\n```sh\nnpm test\n```\n\
+             \n```choice\nAllow this?\n- Allow: just this once\n- Always allow: `Bash(npm test:*)`\n\
+             - Deny: comment to tell Claude why\n```\n"
+        );
+        let edit = serde_json::json!({ "tool_name": "Edit",
+            "tool_input": { "file_path": "a.rs", "old_string": "x\ny", "new_string": "z" } });
+        let md = permission_markdown(&edit);
+        assert!(md.starts_with("# Claude wants to use Edit\n\n`a.rs`\n\n```diff\n-x\n-y\n+z\n```\n"), "{md}");
+        // No suggestion, no "Always allow".
+        assert!(!md.contains("Always allow"), "{md}");
+        let other = permission_markdown(&serde_json::json!({ "tool_name": "WebFetch", "tool_input": { "url": "u" } }));
+        assert!(other.contains("```json\n{\n  \"url\": \"u\"\n}\n```"), "{other}");
+    }
+
+    #[test]
+    fn fences_outlast_backticks_inside() {
+        assert_eq!(fence("sh", "ls\n"), "```sh\nls\n```\n");
+        assert_eq!(fence("md", "a ```b``` c"), "````md\na ```b``` c\n````\n");
+    }
+
+    #[test]
+    fn permission_picks_decide() {
+        let event = bash_request();
+        let decide = |review: &str| {
+            permission_decision(&event, review).map(|d| serde_json::from_str::<serde_json::Value>(&d).unwrap())
+        };
+        assert_eq!(decide("# Review: p.md\nNo comments.\n"), None);
+        assert_eq!(decide(""), None);
+        let picked = |answer: &str| format!("# Review: p.md\n\n## Choice: Allow this?\n{answer}\n");
+        let decision = |review: &str| decide(review).unwrap()["hookSpecificOutput"]["decision"].clone();
+        assert_eq!(decision(&picked("Allow")), serde_json::json!({ "behavior": "allow" }));
+        assert_eq!(
+            decision(&picked("Always allow")),
+            serde_json::json!({ "behavior": "allow", "updatedPermissions": event["permission_suggestions"] })
+        );
+        let because = "# Review: p.md (1 comment)\n\n## p.md:5\n> npm test\n\nRun only the unit tests.\n";
+        for review in [picked("Deny"), because.to_string()] {
+            let out = decide(&review).unwrap();
+            assert_eq!(out["hookSpecificOutput"]["hookEventName"], "PermissionRequest");
+            assert_eq!(out["hookSpecificOutput"]["decision"]["behavior"], "deny", "{review}");
+            let message = out["hookSpecificOutput"]["decision"]["message"].as_str().unwrap();
+            assert!(message.ends_with(review.trim()), "{message}");
+        }
+    }
     use std::process::Command;
 
     fn questions() -> serde_json::Value {
