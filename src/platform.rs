@@ -80,6 +80,20 @@ pub fn keep_stdio_private() {
     }
 }
 
+/// Whether vjuu shares no console with anyone: double-clicked (Windows made it a console of its own) or started
+/// with none, as winget's validator may. Run from a terminal, the shell shares it. Never elsewhere: Finder and file
+/// managers open a terminal.
+pub fn own_console() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Console::GetConsoleProcessList;
+        let mut ids = [0u32; 2];
+        unsafe { GetConsoleProcessList(ids.as_mut_ptr(), ids.len() as u32) <= 1 }
+    }
+    #[cfg(not(windows))]
+    false
+}
+
 /// Starts `command` detached from the caller: no shared stdio, and not killed with the caller's terminal.
 pub fn spawn_detached(command: &mut Command) {
     #[cfg(windows)]
