@@ -20,6 +20,7 @@ vjuu stop                    # stop the resident instance (before upgrading the 
 vjuu setup                   # install the skill for Claude Code and Codex
 vjuu hook plan               # Claude Code hook: review a plan before approving it (see below)
 vjuu hook turn               # Claude Code hook: review what Claude changed at the end of each turn (see below)
+vjuu hook ask                # Claude Code hook: answer Claude's questions in vjuu (see below)
 ```
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to
@@ -119,6 +120,17 @@ The vjuu plugin turns this on itself. With `vjuu setup` instead, add the hook to
 ```
 
 After an hour the hook gives up and the normal prompt appears.
+
+## Questions
+
+When Claude asks you something (its `AskUserQuestion` tool), the questions open in vjuu as buttons, under the message
+that led to them. Pick an answer to each and click **Done**, and they go to Claude as if picked in the terminal. Comment
+anywhere, or leave a question unanswered, and Claude gets your picks and comments to read instead, so you can answer in
+your own words. Nothing times out. Close the window without picking, and Claude Code's own picker asks. Questions that
+take several answers stay in that picker, as vjuu's buttons pick one.
+
+The vjuu plugin turns this on itself. With `vjuu setup` instead, add a second `PreToolUse` entry next to the one for
+plans: `{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "vjuu hook ask", "timeout": 3600 }] }`.
 
 ## Turn review
 

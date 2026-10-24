@@ -1,10 +1,14 @@
 {
-  "description": "Review Claude Code plans in vjuu before approving them",
+  "description": "Review Claude Code plans and answer its questions in vjuu",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "ExitPlanMode",
         "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "plan"], "timeout": 3600 }]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "ask"], "timeout": 3600 }]
       }
     ]
   }

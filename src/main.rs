@@ -117,6 +117,7 @@ fn main() {
         ["setup"] => setup(),
         ["hook", "plan"] => hook_plan(),
         ["hook", "turn"] => hook_turn(),
+        ["hook", "ask"] => hook_ask(),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -204,6 +205,123 @@ fn hook_turn() -> ! {
         println!("{feedback}");
     }
     process::exit(0)
+}
+
+/// Claude Code's PreToolUse hook on AskUserQuestion: asks the questions in vjuu, under Claude's last message.
+/// Picks alone answer the tool; comments or unanswered questions go back to Claude as the whole review instead.
+/// Closing the window without answering leaves the questions to Claude Code's own picker.
+fn hook_ask() -> ! {
+    let event = hook_event();
+    let questions = event["tool_input"]["questions"].as_array().cloned().unwrap_or_default();
+    // shortcut: a choice block picks one option, so multi-select questions stay in Claude Code's picker.
+    if questions.is_empty() || questions.iter().any(|q| q["multiSelect"] == true) {
+        process::exit(0)
+    }
+    let transcript = event["transcript_path"].as_str().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
+    let md = ask_markdown(last_assistant_text(&transcript).as_deref(), &questions);
+    let path = env::temp_dir().join(format!("vjuu-ask-{}.md", event["session_id"].as_str().unwrap_or("none")));
+    if fs::write(&path, md).is_err() {
+        process::exit(0)
+    }
+    if let Some(decision) = ask_decision(&event["tool_input"], &review_in_child(&event, &path)) {
+        println!("{decision}");
+    }
+    process::exit(0)
+}
+
+/// Returns the text of Claude's latest message in this turn, the context its questions refer to.
+/// shortcut: Claude Code's transcript format is undocumented; lines it does not recognise are skipped.
+fn last_assistant_text(transcript: &str) -> Option<String> {
+    for line in transcript.lines().rev() {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+        if entry["type"] == "user" && entry["origin"]["kind"] == "human" {
+            return None;
+        }
+        if entry["type"] != "assistant" {
+            continue;
+        }
+        let blocks = entry["message"]["content"].as_array().into_iter().flatten();
+        let text: Vec<&str> = blocks.filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect();
+        if !text.is_empty() {
+            return Some(text.join("\n\n"));
+        }
+    }
+    None
+}
+
+/// Returns the markdown vjuu shows for AskUserQuestion: the context, then one choice block per question.
+fn ask_markdown(context: Option<&str>, questions: &[serde_json::Value]) -> String {
+    let mut md = String::new();
+    if let Some(context) = context {
+        md += &format!("{}\n\n---\n\n", context.trim());
+    }
+    md += "_Pick an answer to each question, or comment to answer in your own words._\n";
+    for q in questions {
+        if let Some(header) = q["header"].as_str().filter(|h| !h.is_empty()) {
+            md += &format!("\n### {header}\n");
+        }
+        md += &format!("\n```choice\n{}\n", q["question"].as_str().unwrap_or_default());
+        for option in q["options"].as_array().into_iter().flatten() {
+            // shortcut: a label containing ": " is cut short there, as the block reads "label: description".
+            let label = option["label"].as_str().unwrap_or_default();
+            match option["description"].as_str().filter(|d| !d.is_empty()) {
+                Some(description) => md += &format!("- {label}: {description}\n"),
+                None => md += &format!("- {label}\n"),
+            }
+        }
+        md += "```\n";
+    }
+    md
+}
+
+/// Returns the hook output for a review of AskUserQuestion: the answers when every question was picked and nothing
+/// else said, otherwise the whole review for Claude to read; None when the user answered nothing.
+fn ask_decision(tool_input: &serde_json::Value, review: &str) -> Option<String> {
+    if !has_comments(review) {
+        return None;
+    }
+    // vjuu shows a question's lines joined by spaces.
+    let squash = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut picks = HashMap::new();
+    let mut other_comments = false;
+    let mut lines = review.lines();
+    while let Some(line) = lines.next() {
+        if let Some(question) = line.strip_prefix("## Choice: ") {
+            let answer = lines.next().unwrap_or_default();
+            if answer != "No answer." {
+                picks.insert(squash(question), answer.to_string());
+            }
+        } else if line.starts_with("## ") {
+            other_comments = true;
+        }
+    }
+    let questions = tool_input["questions"].as_array().into_iter().flatten();
+    let answers: Option<serde_json::Map<String, serde_json::Value>> = questions
+        .map(|q| {
+            let question = q["question"].as_str()?;
+            Some((question.to_string(), picks.get(&squash(question))?.clone().into()))
+        })
+        .collect();
+    let output = match answers {
+        Some(answers) if !other_comments => {
+            let mut input = tool_input.clone();
+            input["answers"] = answers.into();
+            serde_json::json!({ "hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": input })
+        }
+        _ => {
+            let reason = format!(
+                "The user answered in vjuu instead of the question picker. Use their picks and comments below, and \
+                 ask again only about what is still open.\n\n{}",
+                review.trim()
+            );
+            serde_json::json!({
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            })
+        }
+    };
+    Some(serde_json::json!({ "hookSpecificOutput": output }).to_string())
 }
 
 /// Returns a hook's JSON event from stdin; anything unexpected is Null, so the hook falls through and decides nothing.
@@ -761,11 +879,73 @@ fn fail(msg: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::{
-        SKILL, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of, plan_decision, transcript_title,
-        turn_diff, turn_feedback,
+        SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
+        last_assistant_text, plan_decision, transcript_title, turn_diff, turn_feedback,
     };
     use std::fs;
     use std::process::Command;
+
+    fn questions() -> serde_json::Value {
+        serde_json::json!({ "questions": [
+            { "question": "Which framework?", "header": "Framework", "multiSelect": false, "options": [
+                { "label": "React", "description": "Component library" }, { "label": "Vue", "description": "" } ] },
+            { "question": "Ship\n now?", "header": "", "options": [ { "label": "Yes" }, { "label": "No" } ] },
+        ] })
+    }
+
+    #[test]
+    fn questions_become_choice_blocks_under_the_context() {
+        let md = ask_markdown(Some("I found two options.\n"), questions()["questions"].as_array().unwrap());
+        assert_eq!(
+            md,
+            "I found two options.\n\n---\n\n\
+             _Pick an answer to each question, or comment to answer in your own words._\n\
+             \n### Framework\n\n```choice\nWhich framework?\n- React: Component library\n- Vue\n```\n\
+             \n```choice\nShip\n now?\n- Yes\n- No\n```\n"
+        );
+    }
+
+    #[test]
+    fn picks_answer_the_tool_and_comments_go_to_claude() {
+        let input = questions();
+        let decide = |review: &str| -> Option<serde_json::Value> {
+            ask_decision(&input, review).map(|d| serde_json::from_str::<serde_json::Value>(&d).unwrap())
+        };
+        // Closed without a pick: Claude Code's picker asks instead.
+        assert_eq!(decide("# Review: ask.md\nNo comments.\n"), None);
+        assert_eq!(decide(""), None);
+
+        let picked = "# Review: ask.md\n\n## Choice: Which framework?\nVue\n\n## Choice: Ship now?\nNo\n";
+        let mut expected = input.clone();
+        expected["answers"] = serde_json::json!({ "Which framework?": "Vue", "Ship\n now?": "No" });
+        assert_eq!(
+            decide(picked),
+            Some(serde_json::json!({ "hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": expected } }))
+        );
+
+        let commented = format!("{picked}\n## ask.md:9\n> - Vue\n\nVue 3 only.\n");
+        let unanswered =
+            "# Review: ask.md\n\n## Choice: Which framework?\nReact\n\n## Choice: Ship now?\nNo answer.\n";
+        for review in [commented.as_str(), unanswered] {
+            let out = decide(review).unwrap();
+            assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny", "{review}");
+            let reason = out["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
+            assert!(reason.ends_with(review.trim()), "{reason}");
+        }
+    }
+
+    #[test]
+    fn context_is_the_latest_message_this_turn() {
+        let said = |text: &str| {
+            format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{text}"}}]}}}}"#)
+        };
+        let ask = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"AskUserQuestion"}]}}"#;
+        let prompt = r#"{"type":"user","origin":{"kind":"human"},"message":{"content":"go"}}"#;
+        let transcript = [said("earlier"), prompt.into(), said("first"), said("latest"), ask.into()].join("\n");
+        assert_eq!(last_assistant_text(&transcript).as_deref(), Some("latest"));
+        assert_eq!(last_assistant_text(&[said("earlier"), prompt.into()].join("\n")), None);
+    }
 
     #[test]
     fn edits_since_the_last_prompt() {
