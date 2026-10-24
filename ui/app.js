@@ -814,7 +814,14 @@ function onKey(e) {
   const all = deep('[data-key]');
   // Arrows and the vim-style letters do the same thing.
   const key = { ArrowDown: 'j', ArrowUp: 'k', ArrowRight: 'n', ArrowLeft: 'p' }[e.key] ?? e.key;
-  if (key === 'j' || key === 'k') {
+  // Digits pick an option of the choice block under the cursor, or of the only one in the review.
+  const blocks = content.querySelectorAll('.choice');
+  const choice = focused?.closest('.choice') ?? (blocks.length === 1 ? blocks[0] : null);
+  if (/^[1-9]$/.test(key) && choice) {
+    const option = choice.querySelectorAll('button')[key - 1];
+    if (!option) return;
+    pick(option);
+  } else if (key === 'j' || key === 'k') {
     const el = move(all, key === 'j' ? 1 : -1);
     if (el) setFocus(el);
   } else if (key === 'n' || key === 'p') {
