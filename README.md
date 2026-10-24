@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#install)
 
 A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
-`vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
+`vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Submit & continue**, and
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
 [![A Claude Code session where a question, a plan and a diff each open in vjuu and get answered there](site/img/demo.gif)](https://www.youtube.com/watch?v=EqzmtuNQzv4)
@@ -85,7 +85,7 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |
 | `vjuu --help`, `vjuu --version` | all of the above, briefly; the version |
 
-`vjuu` blocks until you click **Done** or close the window. Every review is also saved to
+`vjuu` blocks until you click **Submit & continue** or close the window. Every review is also saved to
 `%LOCALAPPDATA%\vjuu\reviews\`, so a later session can pick it up with `vjuu last`.
 
 ## Why it opens fast
@@ -118,18 +118,20 @@ notification when the tray is on.
 | `↑` / `↓` (or `k` / `j`) | Previous / next line or block |
 | `←` / `→` (or `p` / `n`) | Previous / next file; with a single markdown file, previous / next heading |
 | `Enter` (or `c`) | Comment on the current line, or on the selected text |
-| `Ctrl+Enter` | In a comment: save it. Anywhere else: **Done** |
-| `Esc` | Cancel the comment being written |
+| `Ctrl+Enter` | In a comment: save it. In the settings: **Apply**. Anywhere else: **Submit & continue** |
+| `Esc` | Cancel the comment being written; close the settings or the help |
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
-| `Ctrl+Shift+Enter` | Done, from anywhere |
+| `Ctrl+,` (`⌘,` on macOS) | Settings |
+| `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
+| `F1` | Help: the version and these keys |
 
 Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
 rows) and click **Comment** or press `c`. Links still open, except on HTML pages, where only in-page links work; clicks
 inside a comment edit it.
 
-Themes, picked in the settings (the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
+Themes, picked in the settings (`Ctrl+,`, or the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
 neutral dark grey), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
 another while it is dark, and the dark one when the system does not say. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
 
@@ -177,19 +179,19 @@ An unanswered choice reads `No answer.`
 The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All four are on by default.
 The first vjuu window after a fresh install opens on the settings panel, where you can switch each one off.
 
-**Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Done**, and
+**Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Submit & continue**, and
 Claude revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back once more.
-Click **Done** without comments, or close the window, and Claude Code's own approval prompt follows as usual. That
+Click **Submit & continue** without comments, or close the window, and Claude Code's own approval prompt follows as usual. That
 prompt is where you choose how Claude continues.
 
 **Questions.** When Claude asks you something (its `AskUserQuestion` tool), the questions open in vjuu as buttons,
-under the message that led to them. Pick an answer to each and click **Done**, and they go to Claude as if picked in the
+under the message that led to them. Pick an answer to each and click **Submit & continue**, and they go to Claude as if picked in the
 terminal. Comment anywhere, or leave a question unanswered, and Claude gets your picks and comments to read instead, so
 you can answer in your own words. Nothing times out. Close the window without picking, and Claude Code's own picker
 asks. Questions that take several answers stay in that picker, as vjuu's buttons pick one.
 
 **Turn review.** When Claude finishes a turn in which it edited files, the diff of those files opens in vjuu, new files
-included. Comment and click **Done**, and Claude acts on your comments straight away. Click **Done** without comments
+included. Comment and click **Submit & continue**, and Claude acts on your comments straight away. Click **Submit & continue** without comments
 and the turn ends. Turns without edits, and edits outside the git repository, open nothing. The diff is the files'
 uncommitted changes, so changes an earlier turn made to the same files show too.
 

@@ -137,6 +137,19 @@ settings.addEventListener('cancel', () => {
 // A window opened for the settings shows only a sample behind them: nothing to review.
 settings.addEventListener('close', () => { if (req?.sample) done(); });
 $('#settings-apply').onclick = applySettings;
+settings.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !e.ctrlKey) return;
+  // Not on to the document, where Ctrl+Enter would submit the review once the panel has closed.
+  e.preventDefault();
+  e.stopPropagation();
+  applySettings();
+});
+
+const help = $('#help');
+async function openHelp() {
+  $('#version').textContent = (await (await fetch('config.json', { cache: 'no-store' })).json()).version;
+  help.showModal();
+}
 $('#settings-open').onclick = openSettings;
 $('#themes-open').onclick = () => post({ type: 'themes' });
 
@@ -669,8 +682,8 @@ function commentBox(key, c) {
   const ta = document.createElement('textarea');
   ta.value = c.draft ?? c.text;
   ta.rows = 3;
-  ta.placeholder = `Comment on ${c.file}:${c.start}${c.end !== c.start ? `-${c.end}` : ''} (Ctrl+Enter to save, Esc to cancel)`;
-  // Text still being typed counts too: Done or closing the window must not drop it.
+  ta.placeholder = `Comment on ${c.file}:${c.start}${c.end !== c.start ? `-${c.end}` : ''} `;
+  // Text still being typed counts too: Submit & continue or closing the window must not drop it.
   ta.oninput = () => {
     c.draft = ta.value;
     post({ type: 'state', review: review() });
@@ -692,10 +705,10 @@ function commentBox(key, c) {
     if (e.key === 'Escape') { e.preventDefault(); cancel(); }
   };
   const saveBtn = document.createElement('button');
-  saveBtn.textContent = 'Save';
+  saveBtn.innerHTML = 'Save <kbd>Ctrl</kbd><kbd>Enter</kbd>';
   saveBtn.onclick = save;
   const cancelBtn = document.createElement('button');
-  cancelBtn.textContent = 'Cancel';
+  cancelBtn.innerHTML = 'Cancel <kbd>Esc</kbd>';
   cancelBtn.onclick = cancel;
   box.append(ta, saveBtn, cancelBtn);
   return box;
@@ -877,8 +890,19 @@ function jumpFile(delta) {
 }
 
 function onKey(e) {
-  // The dialog takes its own keys: Tab, Space and Esc.
-  if (settings.open) return;
+  // The dialogs take their own keys: Tab, Space and Esc.
+  if (settings.open || help.open) return;
+  if (e.key === 'F1') {
+    e.preventDefault();
+    openHelp();
+    return;
+  }
+  // The platform's settings key: Ctrl+, (Cmd+, on macOS), also while typing.
+  if (e.key === ',' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+    e.preventDefault();
+    openSettings();
+    return;
+  }
   const inField = e.target.closest('textarea, input, select');
   // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
   if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {

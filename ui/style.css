@@ -5,7 +5,7 @@
 /* The colours come from a theme (themes/*.css, compiled into theme.css by vjuu); these are what every theme shares.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
-  /* vjuu's brand colour (Monokai green): window border, logo, Done. src/main.rs sets the border to the same value. */
+  /* vjuu's brand colour (Monokai green): window border, logo, Submit & continue. src/main.rs sets the border to the same value. */
   --brand: #a6e22e;
   --brand-fg: #272822;
   --sans: "Inter", "Segoe UI", system-ui, sans-serif;
@@ -126,6 +126,18 @@ body.maximized .edge { display: none; }
 #hint { color: var(--muted); }
 #done { margin-left: auto; padding: 5px 22px; background: var(--brand); border-color: var(--brand); color: var(--brand-fg); font-weight: 700; }
 #done:hover { filter: brightness(1.08); }
+/* Keycaps, in buttons and the help. */
+kbd { display: inline-block; min-width: 1.6em; padding: 0 5px; border: 1px solid currentColor; border-bottom-width: 2px;
+  border-radius: 4px; font-family: inherit; font-size: 11px; line-height: 1.5; font-weight: 600; text-align: center; opacity: 0.75; }
+button kbd { margin-left: 3px; }
+button kbd:first-of-type { margin-left: 8px; }
+#help { max-width: 560px; padding: 20px 24px; color: var(--fg); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 14px; }
+#help::backdrop { background: rgb(0 0 0 / 35%); }
+#help h2 { display: flex; gap: 10px; align-items: center; margin: 0 0 14px; font-size: 18px; }
+#version { color: var(--muted); font-weight: 400; font-size: 14px; }
+#help td { padding: 4px 16px 4px 0; vertical-align: top; }
+#help td:first-child { white-space: nowrap; }
 
 main { padding: 24px 24px 24px 48px; }
 /* Rendered markdown documents. Always `article.markdown`: diff2html puts a `markdown` class on highlighted lines of .md files. */
