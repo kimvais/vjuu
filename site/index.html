@@ -258,7 +258,7 @@
     @media (min-width: 1160px) {
       .arrows { margin: 0 -60px; padding: 0; }
     }
-    .arrows button, .strip-nav button {
+    .arrows button {
       width: 44px;
       height: 44px;
       padding: 0;
@@ -272,11 +272,12 @@
       pointer-events: auto;
       transition: background-color var(--dur-wipe) var(--glide);
     }
-    .arrows button:hover, .strip-nav button:hover { background: rgba(0, 0, 0, 0.85); }
+    .arrows button:hover { background: rgba(0, 0, 0, 0.85); }
 
     /* Themes: a strip of thumbnails, four at a time (two on a phone), that scrolls sideways. */
-    .themes { padding-top: 0; }
+    .strip-box { display: grid; container-type: inline-size; }
     .strip {
+      grid-area: 1 / 1;
       display: grid;
       grid-auto-flow: column;
       grid-auto-columns: calc((100% - 3 * 16px) / 4);
@@ -298,7 +299,11 @@
       border-radius: var(--radius-card);
     }
     .strip figcaption { margin-top: 10px; color: var(--ink-dim); font-size: 15px; }
-    .strip-nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    /* The carousel's arrows, over the thumbnails (16:10) rather than their captions. */
+    .strip-box .arrows { aspect-ratio: auto; height: calc((100cqw - 3 * 16px) / 4 * 10 / 16); }
+    @media (max-width: 720px) {
+      .strip-box .arrows { height: calc((100cqw - 16px) / 2 * 10 / 16); }
+    }
     .dots { display: flex; gap: 4px; margin: 8px 0 0 -10px; }
     .dots button {
       width: 28px;
@@ -319,10 +324,12 @@
     }
     .dots button[aria-current="true"]::before { background: var(--ink); }
 
+    /* Sections alternate black and raised black by position, so moving one keeps the rhythm. */
+    main > section:nth-child(even) { background: var(--black-raised); }
+    main > section:nth-child(even) pre { background: var(--black); }
+
     /* How it works */
     .how { padding: var(--section-y) 0; }
-    /* Raised like Install, so the sections below the screenshots alternate. */
-    .why { background: var(--black-raised); }
     .why .bonus { max-width: 40em; margin: 32px 0 0; text-wrap: pretty; }
     .story { max-width: 40em; }
     .story p { margin: 0 0 20px; text-wrap: pretty; }
@@ -354,9 +361,7 @@
     .panel p { margin: 0; font-size: 16px; line-height: 1.6; }
     .panel .eyebrow { margin-bottom: 12px; font-size: 11px; }
 
-    /* Install: the raised black gives the page its one change of rhythm. */
-    .install { padding: var(--section-y) 0; background: var(--black-raised); }
-    .install pre { background: var(--black); }
+    .install { padding: var(--section-y) 0; }
     /* A command that does not work yet: shown, but greyed out and without a Copy button. */
     .install pre.pending { opacity: 0.4; }
     /* minmax(0, ...): long commands scroll inside their box instead of widening the page. */
@@ -459,6 +464,50 @@
       </div>
     </section>
 
+    <section class="install" id="install" aria-labelledby="install-title">
+      <div class="column">
+        <p class="eyebrow">Install</p>
+        <h2 id="install-title">Windows, macOS and Linux.</h2>
+        <p class="lede">Uses the system web view: WebView2 on Windows, WKWebView on macOS, WebKitGTK 4.1 on Linux (Debian 12+, Ubuntu 22.04+).</p>
+        <dl class="platforms">
+          <div>
+            <dt><svg class="icon" aria-hidden="true"><use href="#windows"/></svg>Windows</dt>
+            <dd>
+              <pre class="pending">winget install vjuu</pre>
+              <p>Not yet: the <a class="textlink" href="https://github.com/microsoft/winget-pkgs/pull/460998">winget package</a> is waiting for Microsoft's approval. Until then, <a class="textlink" href="#anything-else">install it with cargo or from a <code>.zip</code></a>.</p>
+            </dd>
+          </div>
+          <div>
+            <dt><svg class="icon" aria-hidden="true"><use href="#apple"/></svg>macOS</dt>
+            <dd>
+              <pre>brew install kimvais/tap/vjuu</pre>
+              <p>Not signed or notarised. Homebrew installs work as is; a binary downloaded by hand needs <code>xattr -d com.apple.quarantine vjuu</code> once.</p>
+            </dd>
+          </div>
+          <div>
+            <dt><svg class="icon" aria-hidden="true"><use href="#debian"/></svg><svg class="icon" aria-hidden="true"><use href="#ubuntu"/></svg>Debian, Ubuntu</dt>
+            <dd><pre>curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg &gt;/dev/null
+echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
+sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
+          </div>
+          <div id="anything-else">
+            <dt><svg class="icon" aria-hidden="true"><use href="#rust"/></svg>Anything else</dt>
+            <dd>
+              <pre>cargo install --locked vjuu</pre>
+              <p>Or a <code>.zip</code>, <code>.tar.gz</code> or <code>.deb</code> from <a class="textlink" href="https://github.com/kimvais/vjuu/releases">GitHub Releases</a>. Building on Linux needs <code>libwebkit2gtk-4.1-dev</code> and <code>libgtk-3-dev</code>.</p>
+            </dd>
+          </div>
+          <div>
+            <dt>Then, for Claude Code and Codex</dt>
+            <dd>
+              <pre>vjuu setup</pre>
+              <p>Installs the skill that tells your agents to run vjuu instead of asking you to open files. Run it again after an upgrade.</p>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
     <section class="how why" id="why" aria-labelledby="why-title">
       <div class="column">
         <p class="eyebrow">Why</p>
@@ -516,6 +565,7 @@ Add a test for this one.</pre>
         <p class="eyebrow">Themes</p>
         <h2 id="themes-title">Fifteen themes, or your own.</h2>
         <p class="lede">GitHub, GitLab, Solarized, Gruvbox and Catppuccin, each light and dark, plus Graphite, Dracula, One Dark, Nord and Tokyo Night. Auto follows the system. A theme is a CSS file of colours: copy one, change it, and it shows up in the settings.</p>
+        <div class="strip-box">
         <div class="strip" role="group" aria-label="Themes" tabindex="0">
           <figure><a href="img/themes/light.jpg"><img src="img/themes/light.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the GitHub Light theme"></a><figcaption>GitHub Light</figcaption></figure>
           <figure><a href="img/themes/github-dark.jpg"><img src="img/themes/github-dark.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the GitHub Dark theme"></a><figcaption>GitHub Dark</figcaption></figure>
@@ -533,52 +583,10 @@ Add a test for this one.</pre>
           <figure><a href="img/themes/nord.jpg"><img src="img/themes/nord.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Nord theme"></a><figcaption>Nord</figcaption></figure>
           <figure><a href="img/themes/tokyo-night.jpg"><img src="img/themes/tokyo-night.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Tokyo Night theme"></a><figcaption>Tokyo Night</figcaption></figure>
         </div>
+        </div>
       </div>
     </section>
 
-    <section class="install" id="install" aria-labelledby="install-title">
-      <div class="column">
-        <p class="eyebrow">Install</p>
-        <h2 id="install-title">Windows, macOS and Linux.</h2>
-        <p class="lede">Uses the system web view: WebView2 on Windows, WKWebView on macOS, WebKitGTK 4.1 on Linux (Debian 12+, Ubuntu 22.04+).</p>
-        <dl class="platforms">
-          <div>
-            <dt><svg class="icon" aria-hidden="true"><use href="#windows"/></svg>Windows</dt>
-            <dd>
-              <pre class="pending">winget install vjuu</pre>
-              <p>Not yet: the <a class="textlink" href="https://github.com/microsoft/winget-pkgs/pull/460998">winget package</a> is waiting for Microsoft's approval. Until then, <a class="textlink" href="#anything-else">install it with cargo or from a <code>.zip</code></a>.</p>
-            </dd>
-          </div>
-          <div>
-            <dt><svg class="icon" aria-hidden="true"><use href="#apple"/></svg>macOS</dt>
-            <dd>
-              <pre>brew install kimvais/tap/vjuu</pre>
-              <p>Not signed or notarised. Homebrew installs work as is; a binary downloaded by hand needs <code>xattr -d com.apple.quarantine vjuu</code> once.</p>
-            </dd>
-          </div>
-          <div>
-            <dt><svg class="icon" aria-hidden="true"><use href="#debian"/></svg><svg class="icon" aria-hidden="true"><use href="#ubuntu"/></svg>Debian, Ubuntu</dt>
-            <dd><pre>curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg &gt;/dev/null
-echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
-sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
-          </div>
-          <div id="anything-else">
-            <dt><svg class="icon" aria-hidden="true"><use href="#rust"/></svg>Anything else</dt>
-            <dd>
-              <pre>cargo install --locked vjuu</pre>
-              <p>Or a <code>.zip</code>, <code>.tar.gz</code> or <code>.deb</code> from <a class="textlink" href="https://github.com/kimvais/vjuu/releases">GitHub Releases</a>. Building on Linux needs <code>libwebkit2gtk-4.1-dev</code> and <code>libgtk-3-dev</code>.</p>
-            </dd>
-          </div>
-          <div>
-            <dt>Then, for Claude Code and Codex</dt>
-            <dd>
-              <pre>vjuu setup</pre>
-              <p>Installs the skill that tells your agents to run vjuu instead of asking you to open files. Run it again after an upgrade.</p>
-            </dd>
-          </div>
-        </dl>
-      </div>
-    </section>
   </main>
 
   <footer class="footer">
@@ -685,7 +693,7 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
     {
       const strip = document.querySelector('.strip');
       const nav = document.createElement('div');
-      nav.className = 'strip-nav';
+      nav.className = 'arrows';
       for (const [label, glyph, step] of [['Previous themes', '‹', -1], ['Next themes', '›', 1]]) {
         const arrow = document.createElement('button');
         arrow.type = 'button';
