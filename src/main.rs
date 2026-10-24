@@ -47,6 +47,9 @@ struct Request {
     /// The agent session that asked for the review, shown in the title bar.
     #[serde(default)]
     session: Option<String>,
+    /// Where vjuu was run: its git checkout goes in the title bar.
+    #[serde(default)]
+    cwd: Option<PathBuf>,
     /// Opens on the settings panel: once after a fresh install, and for `vjuu config`.
     #[serde(default)]
     settings: bool,
@@ -98,6 +101,8 @@ enum AppEvent {
     Open(Request, Option<Stream>),
     Ui(WindowId, Msg),
     Tray(tray::Action),
+    /// A window's git context, looked up after it opened.
+    Context(WindowId, String),
 }
 
 /// Where a finished review goes.
@@ -118,6 +123,8 @@ struct Session {
     reply: Option<Reply>,
     latest: Review,
     started: Instant,
+    /// The git context, kept to hand to the page again if it arrived before the page could take it.
+    context: Option<String>,
 }
 
 fn main() {
@@ -574,7 +581,8 @@ fn plan_decision(review: &str) -> Option<String> {
 }
 
 fn request(docs: Vec<Doc>) -> Request {
-    Request { docs, autoclose: env::var_os("VJUU_AUTOCLOSE").is_some(), session: None, settings: false }
+    let autoclose = env::var_os("VJUU_AUTOCLOSE").is_some();
+    Request { docs, autoclose, session: None, cwd: env::current_dir().ok(), settings: false }
 }
 
 /// Returns a window with no documents that shows only the settings panel.
@@ -733,7 +741,9 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     match initial {
         Some(request) => {
             let title = request.title();
+            let cwd = request.cwd.clone();
             let mut s = new_session(&event_loop, &proxy, &mut context, Some(request));
+            look_up_context(&proxy, s.window.id(), cwd);
             s.window.set_title(&title);
             s.reply = Some(Reply::Stdout);
             s.started = started;
@@ -759,9 +769,19 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 let _ = proxy.send_event(AppEvent::Open(settings_request(), None));
             }
             Event::UserEvent(AppEvent::Tray(tray::Action::Stop)) => process::exit(0),
+            Event::UserEvent(AppEvent::Context(id, git)) => {
+                if let Some(s) = sessions.get_mut(&id) {
+                    let title = s.slot.lock().expect("slot lock").as_ref().map(Request::title).unwrap_or_default();
+                    s.window.set_title(&format!("{title} · {git}"));
+                    s.context = Some(git);
+                    show_context(s);
+                }
+            }
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let title = request.title();
+                let cwd = request.cwd.clone();
                 let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
+                look_up_context(&proxy, s.window.id(), cwd);
                 *s.slot.lock().expect("slot lock") = Some(request);
                 s.reply = conn.map(Reply::Client);
                 s.started = Instant::now();
@@ -791,6 +811,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
             Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
                 if let Some(s) = sessions.get(&id) {
+                    show_context(s);
                     bring_to_front(&s.window, &s.webview);
                     // The OS kept it behind (focus-stealing prevention, or typing elsewhere): say so.
                     if tray.is_some() && !s.window.is_focused() {
@@ -838,6 +859,61 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             None => ControlFlow::Wait,
         };
     })
+}
+
+/// Looks up the git context of `cwd` on a thread and hands it to the window, twice: the checkout at once, and again
+/// with the PR or MR number once `gh` or `glab` answers over the network. The window never waits for either.
+fn look_up_context(proxy: &EventLoopProxy<AppEvent>, id: WindowId, cwd: Option<PathBuf>) {
+    let Some(cwd) = cwd else { return };
+    let proxy = proxy.clone();
+    thread::spawn(move || {
+        let run = |program: &str, args: &[&str]| run_in(&cwd, program, args);
+        let Some(checkout) = checkout_context(run) else { return };
+        let _ = proxy.send_event(AppEvent::Context(id, checkout.clone()));
+        if let Some(change) = change_request(run) {
+            let _ = proxy.send_event(AppEvent::Context(id, format!("{checkout} · {change}")));
+        }
+    });
+}
+
+fn show_context(s: &Session) {
+    if let Some(git) = &s.context {
+        let git = serde_json::to_string(git).expect("string serialises");
+        let _ = s.webview.evaluate_script(&format!("window.vjuuContext && vjuuContext({git})"));
+    }
+}
+
+/// Returns a command's trimmed output, or None when it fails, prints nothing or is not installed.
+fn run_in(cwd: &Path, program: &str, args: &[&str]) -> Option<String> {
+    let out = Command::new(program).current_dir(cwd).args(args).stdin(process::Stdio::null()).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !text.is_empty()).then_some(text)
+}
+
+/// Returns "repo · worktree · branch" for the checkout `run` runs git in; the worktree only when it is a linked one
+/// not named after its branch.
+fn checkout_context(run: impl Fn(&str, &[&str]) -> Option<String>) -> Option<String> {
+    let top = PathBuf::from(run("git", &["rev-parse", "--show-toplevel"])?);
+    // Every worktree shares the main checkout's .git, whose folder names the repository.
+    let common = PathBuf::from(run("git", &["rev-parse", "--path-format=absolute", "--git-common-dir"])?);
+    let main = common.parent()?;
+    let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+    let branch = run("git", &["branch", "--show-current"]);
+    let worktree = name(&top).filter(|w| top != main && Some(w) != branch.as_ref());
+    Some([name(main), worktree, branch].into_iter().flatten().collect::<Vec<_>>().join(" · "))
+}
+
+/// Returns "PR #12" or "MR !12" for the current branch, asking `gh` or `glab` depending on where origin lives.
+fn change_request(run: impl Fn(&str, &[&str]) -> Option<String>) -> Option<String> {
+    let origin = run("git", &["remote", "get-url", "origin"])?;
+    if origin.contains("github") {
+        run("gh", &["pr", "view", "--json", "number", "--jq", ".number"]).map(|n| format!("PR #{n}"))
+    } else if origin.contains("gitlab") {
+        let mr: serde_json::Value = serde_json::from_str(&run("glab", &["mr", "view", "--output", "json"])?).ok()?;
+        mr["iid"].as_u64().map(|n| format!("MR !{n}"))
+    } else {
+        None
+    }
 }
 
 /// Shows a system notification that a review window is waiting, without holding up the event loop.
@@ -932,7 +1008,16 @@ fn new_session(
         });
     let webview =
         platform::build_webview(builder, &window).unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
-    Session { webview, window, _context: own, slot, reply: None, latest: Review::default(), started: Instant::now() }
+    Session {
+        webview,
+        window,
+        _context: own,
+        slot,
+        reply: None,
+        latest: Review::default(),
+        started: Instant::now(),
+        context: None,
+    }
 }
 
 /// Returns whether `url` is vjuu's own page or one of its files.
@@ -1106,7 +1191,49 @@ mod tests {
         SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
         last_assistant_text, plan_decision, transcript_title, turn_diff, turn_feedback,
     };
-    use super::{fence, permission_decision, permission_markdown};
+    use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
+
+    /// Answers like git, gh and glab would for a checkout; `None` where a command would fail.
+    fn fake<'a>(answers: &'a [(&'a str, &'a str)]) -> impl Fn(&str, &[&str]) -> Option<String> + 'a {
+        move |program, args| {
+            let command = format!("{program} {}", args.join(" "));
+            answers.iter().find(|(c, _)| *c == command).map(|(_, out)| out.to_string())
+        }
+    }
+
+    #[test]
+    fn checkout_names_repo_worktree_and_branch() {
+        let common = ("git rev-parse --path-format=absolute --git-common-dir", "C:/p/vjuu/.git");
+        let main = [("git rev-parse --show-toplevel", "C:/p/vjuu"), common, ("git branch --show-current", "main")];
+        assert_eq!(checkout_context(fake(&main)).as_deref(), Some("vjuu · main"));
+        // A linked worktree named after its branch adds nothing.
+        let same =
+            [("git rev-parse --show-toplevel", "C:/p/vjuu/.work/tray"), common, ("git branch --show-current", "tray")];
+        assert_eq!(checkout_context(fake(&same)).as_deref(), Some("vjuu · tray"));
+        let other =
+            [("git rev-parse --show-toplevel", "C:/p/vjuu/.work/fix"), common, ("git branch --show-current", "tray")];
+        assert_eq!(checkout_context(fake(&other)).as_deref(), Some("vjuu · fix · tray"));
+        // Detached HEAD: no branch.
+        assert_eq!(checkout_context(fake(&main[..2])).as_deref(), Some("vjuu"));
+        assert_eq!(checkout_context(fake(&[])), None, "not a git checkout");
+    }
+
+    #[test]
+    fn change_requests_from_github_or_gitlab() {
+        let github = [
+            ("git remote get-url origin", "https://github.com/kimvais/vjuu.git"),
+            ("gh pr view --json number --jq .number", "27"),
+        ];
+        assert_eq!(change_request(fake(&github)).as_deref(), Some("PR #27"));
+        let gitlab = [
+            ("git remote get-url origin", "git@gitlab.com:vainu/data.git"),
+            ("glab mr view --output json", r#"{"iid": 412, "title": "x"}"#),
+        ];
+        assert_eq!(change_request(fake(&gitlab)).as_deref(), Some("MR !412"));
+        // No PR for the branch, or a host neither tool knows.
+        assert_eq!(change_request(fake(&github[..1])), None);
+        assert_eq!(change_request(fake(&[("git remote get-url origin", "ssh://git.example.com/x")])), None);
+    }
     use std::fs;
 
     fn bash_request() -> serde_json::Value {
