@@ -122,6 +122,25 @@ jobs:
           git commit -m "vjuu ${version}"
           git push
 
+  crates:
+    # cargo install vjuu: publishes the tagged version to crates.io.
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - id: check
+        env:
+          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: if [ -n "$TOKEN" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::CARGO_REGISTRY_TOKEN not set; skipping crates.io"; fi
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v5
+      - if: steps.check.outputs.ok == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      # --no-verify: the build job already compiled this tag on every platform, so skip WebKitGTK and a rebuild here.
+      - if: steps.check.outputs.ok == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked --no-verify
+
   pages:
     # Redeploys vjuu.it with the new .deb files in its apt repository.
     needs: release
