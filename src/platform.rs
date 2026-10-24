@@ -102,12 +102,19 @@ pub fn open_url(url: &str) {
     let _ = Command::new(opener).arg(url).spawn();
 }
 
-/// Makes the window frameless on Windows, where ui/ draws the title bar.
+/// Makes the window frameless on Windows, where ui/ draws the title bar, and gives it the exe's icon.
 pub fn frame(builder: WindowBuilder) -> WindowBuilder {
     #[cfg(windows)]
     {
-        use tao::platform::windows::WindowBuilderExtWindows;
-        builder.with_decorations(false).with_undecorated_shadow(true)
+        use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
+        use tao::window::Icon;
+        // Ordinal 1 is vjuu.ico, embedded by build.rs.
+        let icon = || Icon::from_resource(1, None).ok();
+        builder
+            .with_decorations(false)
+            .with_undecorated_shadow(true)
+            .with_window_icon(icon())
+            .with_taskbar_icon(icon())
     }
     #[cfg(not(windows))]
     builder

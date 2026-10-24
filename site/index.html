@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>vjuu: a review window for agent handoffs</title>
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="description" content="When an agent would ask you to open a file and review it, it runs vjuu instead. You comment on lines, click Done, and your comments go back to the agent.">
   <style>
     /* Self-hosted, so the page makes no third-party requests. */
@@ -134,6 +137,9 @@
       height: 88px;
     }
     .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       color: var(--brand);
       font-size: 20px;
       font-weight: 700;
@@ -343,7 +349,7 @@
   </svg>
   <header class="header">
     <div class="column">
-      <span class="wordmark">vjuu</span>
+      <span class="wordmark"><img src="img/vjuu.svg" alt="" width="48" height="48">vjuu</span>
       <nav class="sections" aria-label="Sections">
         <a class="textlink" href="#what">What?</a>
         <a class="textlink" href="#why">Why?</a>
