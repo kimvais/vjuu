@@ -116,6 +116,7 @@ fn main() {
         ["stop"] => stop(),
         ["setup"] => setup(),
         ["hook", "plan"] => hook_plan(),
+        ["hook", "turn"] => hook_turn(),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -176,32 +177,132 @@ fn transcript_title(transcript: &str) -> Option<String> {
 /// Claude Code's PreToolUse hook on ExitPlanMode: opens the plan in vjuu, and comments send it back for changes.
 /// Without comments it decides nothing, so Claude Code's own approval prompt follows and picks the next mode.
 fn hook_plan() -> ! {
-    let mut input = String::new();
-    let _ = std::io::stdin().read_to_string(&mut input);
-    // Anything unexpected falls through to the normal prompt rather than blocking the plan.
-    let event: serde_json::Value = serde_json::from_str(&input).unwrap_or_default();
+    let event = hook_event();
     // Claude Code injects the plan file's path; without one there is nothing to anchor comments to.
     let Some(plan) = event["tool_input"]["planFilePath"].as_str().filter(|p| Path::new(p).is_file()) else {
         process::exit(0)
     };
-    let Ok(exe) = env::current_exe() else { process::exit(0) };
-    let mut vjuu = Command::new(exe);
-    if let Some(title) = event["session_id"].as_str().and_then(session_title) {
-        vjuu.args(["--session", &title]);
-    }
-    let review = vjuu.arg(plan).stdin(process::Stdio::null()).output().map(|o| o.stdout).unwrap_or_default();
-    if let Some(decision) = plan_decision(&String::from_utf8_lossy(&review)) {
+    if let Some(decision) = plan_decision(&review_in_child(&event, Path::new(plan))) {
         println!("{decision}");
     }
     process::exit(0)
 }
 
-/// Returns the hook output that rejects the plan with the review as the reason, or None when there is nothing to act on.
-fn plan_decision(review: &str) -> Option<String> {
+/// Claude Code's Stop hook: shows the diff of the files Claude edited this turn, and comments go back to Claude.
+/// Without edits, or without comments, it lets the turn end.
+fn hook_turn() -> ! {
+    let event = hook_event();
+    let Some(cwd) = event["cwd"].as_str() else { process::exit(0) };
+    let transcript = event["transcript_path"].as_str().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
+    let diff = turn_diff(Path::new(cwd), &edited_this_turn(&transcript));
+    // One file per session, so parallel sessions do not overwrite each other's diff.
+    let path = env::temp_dir().join(format!("vjuu-turn-{}.diff", event["session_id"].as_str().unwrap_or("none")));
+    if diff.is_empty() || fs::write(&path, diff).is_err() {
+        process::exit(0)
+    }
+    if let Some(feedback) = turn_feedback(&review_in_child(&event, &path)) {
+        println!("{feedback}");
+    }
+    process::exit(0)
+}
+
+/// Returns a hook's JSON event from stdin; anything unexpected is Null, so the hook falls through and decides nothing.
+fn hook_event() -> serde_json::Value {
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    serde_json::from_str(&input).unwrap_or_default()
+}
+
+/// Runs vjuu on `path` as a child titled with the hook session's name, and returns the review it prints.
+fn review_in_child(event: &serde_json::Value, path: &Path) -> String {
+    let Ok(exe) = env::current_exe() else { return String::new() };
+    let mut vjuu = Command::new(exe);
+    if let Some(title) = event["session_id"].as_str().and_then(session_title) {
+        vjuu.args(["--session", &title]);
+    }
+    let out = vjuu.arg(path).stdin(process::Stdio::null()).output();
+    out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
+}
+
+/// Returns whether a review has anything for the agent: empty output (vjuu failed) or "No comments." has not.
+fn has_comments(review: &str) -> bool {
     let review = review.trim();
-    if review.is_empty() || review.ends_with("\nNo comments.") {
+    !review.is_empty() && !review.ends_with("\nNo comments.")
+}
+
+/// Returns the files Claude's edit tools touched since the user's last prompt.
+/// shortcut: Claude Code's transcript format is undocumented; lines it does not recognise are skipped.
+fn edited_this_turn(transcript: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    for line in transcript.lines().rev() {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+        // Tool results and hook feedback are user entries too; only what the user typed starts a turn.
+        if entry["type"] == "user" && entry["origin"]["kind"] == "human" {
+            break;
+        }
+        for block in entry["message"]["content"].as_array().into_iter().flatten() {
+            let input = &block["input"];
+            let file = match block["name"].as_str() {
+                Some("Edit" | "MultiEdit" | "Write") if block["type"] == "tool_use" => input["file_path"].as_str(),
+                Some("NotebookEdit") if block["type"] == "tool_use" => input["notebook_path"].as_str(),
+                _ => None,
+            };
+            files.extend(file.map(String::from));
+        }
+    }
+    files.sort();
+    files.dedup();
+    files
+}
+
+/// Returns the uncommitted changes to those of `files` inside the git repository at `cwd`, new files included.
+/// shortcut: changes from earlier turns to the same files show too, as git cannot tell turns apart.
+fn turn_diff(cwd: &Path, files: &[String]) -> String {
+    let git = |args: &[&str]| {
+        let out = Command::new("git").current_dir(cwd).args(["-c", "core.quotepath=off"]).args(args).output();
+        out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
+    };
+    let Ok(top) = Path::new(git(&["rev-parse", "--show-toplevel"]).trim()).canonicalize() else {
+        return String::new();
+    };
+    // git refuses paths outside the repository, and they are not this review's business anyway.
+    let inside: Vec<&str> = files
+        .iter()
+        .map(String::as_str)
+        .filter(|f| Path::new(f).canonicalize().is_ok_and(|p| p.starts_with(&top)))
+        .collect();
+    if inside.is_empty() {
+        return String::new();
+    }
+    let mut diff = git(&[&["diff", "--no-color", "--no-ext-diff", "HEAD", "--"][..], &inside].concat());
+    for new in git(&[&["ls-files", "--others", "--exclude-standard", "--"][..], &inside].concat()).lines() {
+        diff += &git(&["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", new]);
+    }
+    diff
+}
+
+/// Returns the hook output that hands the review of this turn's changes to Claude, or None without comments.
+fn turn_feedback(review: &str) -> Option<String> {
+    if !has_comments(review) {
         return None;
     }
+    let context = format!(
+        "The user reviewed this turn's changes in vjuu. Act on each comment that asks for a change and answer each \
+         question. If no comment asks for anything, just stop.\n\n{}",
+        review.trim()
+    );
+    Some(
+        serde_json::json!({ "hookSpecificOutput": { "hookEventName": "Stop", "additionalContext": context } })
+            .to_string(),
+    )
+}
+
+/// Returns the hook output that rejects the plan with the review as the reason, or None when there is nothing to act on.
+fn plan_decision(review: &str) -> Option<String> {
+    if !has_comments(review) {
+        return None;
+    }
+    let review = review.trim();
     let reason = format!(
         "The user reviewed the plan in vjuu. Act on each comment that asks for a change, update the plan file, \
          then call ExitPlanMode again. If no comment asks for a change (\"LGTM\"), call ExitPlanMode again \
@@ -659,8 +760,81 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::{SKILL, file_doc, install_skill, is_diff, is_vjuu, kind_of, plan_decision, transcript_title};
+    use super::{
+        SKILL, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of, plan_decision, transcript_title,
+        turn_diff, turn_feedback,
+    };
     use std::fs;
+    use std::process::Command;
+
+    #[test]
+    fn edits_since_the_last_prompt() {
+        let prompt =
+            |text: &str| format!(r#"{{"type":"user","origin":{{"kind":"human"}},"message":{{"content":"{text}"}}}}"#);
+        let tool = |name: &str, key: &str, path: &str| {
+            format!(
+                r#"{{"type":"assistant","message":{{"content":[{{"type":"tool_use","name":"{name}","input":{{"{key}":"{path}"}}}}]}}}}"#
+            )
+        };
+        let result = r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}"#;
+        let transcript = [
+            prompt("first"),
+            tool("Edit", "file_path", "old.rs"),
+            prompt("second"),
+            tool("Read", "file_path", "read.rs"),
+            tool("Edit", "file_path", "b.rs"),
+            result.into(),
+            tool("Write", "file_path", "a.md"),
+            tool("Edit", "file_path", "b.rs"),
+            tool("NotebookEdit", "notebook_path", "n.ipynb"),
+            "not json".into(),
+        ]
+        .join("\n");
+        assert_eq!(edited_this_turn(&transcript), ["a.md", "b.rs", "n.ipynb"]);
+        assert!(edited_this_turn(&prompt("only")).is_empty());
+    }
+
+    #[test]
+    fn turn_comments_go_back_to_claude() {
+        for review in ["", "# Review: x.diff\nNo comments.\n"] {
+            assert_eq!(turn_feedback(review), None, "{review:?}");
+        }
+        let review = "# Review: x.diff (1 comment)\n\n## a.rs:3\n> +x\n\nWhy?\n";
+        let feedback: serde_json::Value = serde_json::from_str(&turn_feedback(review).unwrap()).unwrap();
+        assert_eq!(feedback["hookSpecificOutput"]["hookEventName"], "Stop");
+        let context = feedback["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+        assert!(context.ends_with(review.trim()), "{context}");
+    }
+
+    #[test]
+    fn diffs_only_the_turns_files_in_the_repository() {
+        let root = std::env::temp_dir().join(format!("vjuu-turn-{}", std::process::id()));
+        let repo = root.join("repo");
+        fs::create_dir_all(&repo).unwrap();
+        let git =
+            |args: &[&str]| assert!(Command::new("git").current_dir(&repo).args(args).status().unwrap().success());
+        git(&["init", "-q"]);
+        for (name, text) in [("edited.txt", "old\n"), ("untouched.txt", "same\n")] {
+            fs::write(repo.join(name), text).unwrap();
+        }
+        git(&["add", "."]);
+        git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]);
+        fs::write(repo.join("edited.txt"), "new\n").unwrap();
+        fs::write(repo.join("untouched.txt"), "changed but not this turn\n").unwrap();
+        fs::write(repo.join("created.txt"), "fresh\n").unwrap();
+        fs::write(root.join("outside.txt"), "elsewhere\n").unwrap();
+        let files: Vec<String> = [repo.join("created.txt"), repo.join("edited.txt"), root.join("outside.txt")]
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        let diff = turn_diff(&repo, &files);
+        for expected in ["+++ b/edited.txt", "-old", "+new", "created.txt", "+fresh"] {
+            assert!(diff.contains(expected), "{expected} missing from\n{diff}");
+        }
+        assert!(!diff.contains("untouched") && !diff.contains("elsewhere"), "{diff}");
+        assert_eq!(turn_diff(&repo, &[]), "");
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn plan_comments_reject_the_plan() {

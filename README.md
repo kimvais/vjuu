@@ -19,6 +19,7 @@ vjuu last                    # print the most recent review again
 vjuu stop                    # stop the resident instance (before upgrading the exe)
 vjuu setup                   # install the skill for Claude Code and Codex
 vjuu hook plan               # Claude Code hook: review a plan before approving it (see below)
+vjuu hook turn               # Claude Code hook: review what Claude changed at the end of each turn (see below)
 ```
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to
@@ -118,6 +119,23 @@ The vjuu plugin turns this on itself. With `vjuu setup` instead, add the hook to
 ```
 
 After an hour the hook gives up and the normal prompt appears.
+
+## Turn review
+
+When Claude Code finishes a turn in which it edited files, the diff of those files opens in vjuu, new files included.
+Comment and click **Done**, and Claude acts on your comments straight away. Click **Done** without comments and the turn
+ends. Turns without edits, and edits outside the git repository, open nothing.
+
+The diff is the files' uncommitted changes, so changes an earlier turn made to the same files show too. It opens after
+every turn with edits, so it is off by default. To turn it on, add this to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command", "command": "vjuu hook turn", "timeout": 3600 }] }]
+  }
+}
+```
 
 ## Install
 
