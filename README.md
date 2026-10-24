@@ -10,7 +10,7 @@ your comments come back to the agent as markdown on stdout, anchored to `file:li
 vjuu docs/design.md          # markdown
 vjuu a.md b.md change.diff   # several files in one window, stacked
 vjuu change.diff             # diff or patch file
-vjuu site/index.html         # HTML page, rendered with its stylesheets (its scripts do not run); file:// URLs work too
+vjuu site/index.html         # HTML page or claude.ai artifact, rendered as it looks once loaded; file:// URLs work too
 vjuu src/main.rs             # any other file: line-numbered, syntax-highlighted source
 vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
 git show HEAD | vjuu -       # stdin; diff or markdown is detected
@@ -126,7 +126,10 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 
 UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56 base bundle, highlight.js
 11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu. For the same reason
-HTML pages load in an iframe sandboxed without scripts: vjuu adds the comment layer from outside.
+an HTML page's scripts run only in a sandboxed iframe with an origin of its own, which cannot reach vjuu's page; vjuu
+also ignores messages from anywhere but its own page. Once the page stops changing (or after 3 s), it sends back a copy
+of itself, canvases drawn as images, and you comment on that copy in a second iframe with scripts off. So you review
+one state of the page: buttons, tabs and timers do not work, and network requests the page makes still go out.
 
 ## License
 

@@ -118,25 +118,109 @@ const FRAME_CSS = `
   padding: 2px 10px; cursor: pointer; }`;
 const FRAME_VARS = ['--bg', '--fg', '--border', '--comment-bg', '--focus', '--accent', '--sans'];
 
+/** Appended to a page with scripts: once the page settles, posts back a copy of it as rendered, without scripts. */
+const SNAPSHOT_SCRIPT = `<script>(() => {
+  let sent = false;
+  let timer;
+  const rules = (sheet) => [...sheet.cssRules].map((r) => r.cssText).join('\\n');
+  const send = () => {
+    if (sent) return;
+    sent = true;
+    for (const c of document.querySelectorAll('canvas')) {
+      try {
+        const img = document.createElement('img');
+        img.src = c.toDataURL();
+        img.alt = c.getAttribute('aria-label') || 'chart';
+        img.className = c.className;
+        img.style.cssText = c.style.cssText;
+        img.width = c.clientWidth;
+        img.height = c.clientHeight;
+        c.replaceWith(img);
+      } catch {} // a canvas with images from elsewhere cannot be read
+    }
+    // Rules inserted through the CSSOM (CSS-in-JS) are not in the markup. Only empty style tags are rebuilt: the
+    // CSSOM loses shorthands that use var(), such as font: 500 56px var(--mono).
+    for (const s of document.querySelectorAll('style')) {
+      if (!s.textContent.trim()) s.textContent = rules(s.sheet);
+    }
+    for (const sheet of document.adoptedStyleSheets ?? []) {
+      const s = document.createElement('style');
+      s.textContent = rules(sheet);
+      document.head.append(s);
+    }
+    // Values typed or set by script live in properties, not attributes.
+    for (const el of document.querySelectorAll('input, textarea, select')) {
+      if (el.type === 'checkbox' || el.type === 'radio') el.toggleAttribute('checked', el.checked);
+      else if (el.tagName === 'TEXTAREA') el.textContent = el.value;
+      else if (el.tagName === 'SELECT') for (const o of el.options) o.toggleAttribute('selected', o.selected);
+      else el.setAttribute('value', el.value);
+    }
+    // The copy is shown with scripts off, where <noscript> would appear.
+    document.querySelectorAll('script, noscript').forEach((e) => e.remove());
+    const doctype = document.compatMode === 'BackCompat' ? '' : '<!doctype html>';
+    parent.postMessage({ vjuuSnapshot: doctype + document.documentElement.outerHTML }, '*');
+  };
+  addEventListener('load', () => {
+    // Settled: nothing changed for 300 ms. A clock never settles; it is taken as it is after 3 s.
+    new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(send, 300); })
+      .observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    timer = setTimeout(send, 300);
+    setTimeout(send, 3000);
+  });
+})();</script>`;
+
+/**
+ * Shows an HTML page. One with scripts (most claude.ai artifacts build their content in script) runs first in a frame
+ * of its own origin, where it cannot reach vjuu's page or window.ipc; vjuu then shows the copy it sends back.
+ */
 function renderHtml(section, doc, i) {
   const header = document.createElement('div');
   header.className = 'doc-header';
   header.textContent = doc.name;
+  section.append(header);
+  targets.push({ el: section, doc: i, file: doc.name });
+  // Relative stylesheets, scripts and images resolve against the file's folder, served as files/<i>/. After the
+  // doctype, which must stay first or the page renders in quirks mode.
+  const base = `<base href="${new URL(`files/${i}/`, location.href)}">`;
+  const html = doc.text.replace(/^(\s*<!doctype[^>]*>)?/i, `$1${base}`);
+  if (!/<script/i.test(doc.text)) {
+    showPage(section, html, doc, i);
+    return;
+  }
+  // Shown where the copy will go, not hidden: browsers throttle frames out of view, which stalls drawing.
+  const runner = document.createElement('iframe');
+  runner.className = 'html-page';
+  runner.sandbox = 'allow-scripts';
+  runner.srcdoc = html + SNAPSHOT_SCRIPT;
+  let shown = false;
+  const show = (page) => {
+    if (shown) return;
+    shown = true;
+    removeEventListener('message', onMessage);
+    runner.remove();
+    showPage(section, page, doc, i);
+  };
+  const onMessage = (e) => {
+    if (e.source === runner.contentWindow && typeof e.data?.vjuuSnapshot === 'string') show(e.data.vjuuSnapshot);
+  };
+  addEventListener('message', onMessage);
+  // A page that never loads (a stalled CDN) or hangs is shown as written.
+  setTimeout(() => show(html), 8000);
+  section.append(runner);
+}
+
+function showPage(section, html, doc, i) {
   const frame = document.createElement('iframe');
   frame.className = 'html-page';
-  // Same origin, so vjuu can add its comment layer; no allow-scripts, so the page's own scripts (and on* handlers)
-  // never run where they could reach window.ipc. It also blocks forms, popups and leaving through the top window.
+  // Same origin, so vjuu can add its comment layer; no allow-scripts, so nothing in the page (on* handlers, or
+  // scripts if it is shown as written) runs where it could reach window.ipc. It also blocks forms and popups.
   frame.sandbox = 'allow-same-origin';
-  // Relative stylesheets and images resolve against the file's folder, served as files/<i>/. After the doctype,
-  // which must stay first or the page renders in quirks mode.
-  const base = `<base href="${new URL(`files/${i}/`, location.href)}">`;
-  frame.srcdoc = doc.text.replace(/^(\s*<!doctype[^>]*>)?/i, `$1${base}`);
+  frame.srcdoc = html;
   frame.onload = () => {
     wireFrame(frame.contentDocument, doc, i);
     renderComments();
   };
-  section.append(header, frame);
-  targets.push({ el: section, doc: i, file: doc.name });
+  section.append(frame);
 }
 
 function wireFrame(d, doc, i) {
@@ -153,7 +237,10 @@ function wireFrame(d, doc, i) {
     return h ? `under "${h.textContent.trim()}"` : '';
   };
   d.querySelectorAll(HTML_BLOCKS).forEach((el, n) => {
-    const quote = el.tagName === 'IMG' ? `<img src="${el.getAttribute('src')}" alt="${el.alt}">` : el.innerText.trim();
+    // A drawn chart is a data: URL hundreds of KB long.
+    const src = el.getAttribute('src') ?? '';
+    const img = `<img src="${src.startsWith('data:') ? 'data:…' : src}" alt="${el.alt}">`;
+    const quote = el.tagName === 'IMG' ? img : el.innerText.trim();
     anchor(el, { doc: i, part: n, file: doc.name, start: 0, end: 0, old: false, quote, at: at(el) });
   });
   d.addEventListener('mouseover', onHover);

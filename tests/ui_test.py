@@ -426,7 +426,17 @@ _HTML = """<!doctype html>
 <p>Plain</p>
 <ul><li>one</li><li>two</li></ul>
 <a href="other.html">away</a>
-<script>parent.__ran = 1</script><img src="missing.png" onerror="parent.__pwned = 1">
+<style>:root { --big: 30px; } #app p { font: 700 var(--big) serif; font-variant-numeric: tabular-nums; }</style>
+<style id="injected"></style>
+<div id="app"></div><noscript><p>Enable JavaScript</p></noscript>
+<canvas id="chart" width="20" height="10"></canvas>
+<script>
+document.getElementById('app').innerHTML = '<p>Built by script</p>';
+document.getElementById('chart').getContext('2d').fillRect(0, 0, 20, 10);
+document.getElementById('injected').sheet.insertRule('#app p { color: rgb(4, 5, 6); }');
+try { parent.__ran = 1 } catch { document.body.dataset.isolated = 'yes' }
+</script>
+<img src="missing.png" onerror="try { parent.__pwned = 1 } catch {}">
 </body></html>
 """
 
@@ -440,10 +450,18 @@ def test_html_page(page, url, work):
     frame = page.frame_locator('iframe')
     frame.locator('[data-key]').first.wait_for()
     inner = page.frames[1]
-    # The page's stylesheet loads relative to the file; it stays in standards mode; its scripts never run.
+    # The page's stylesheet loads relative to the file; it stays in standards mode.
     assert inner.evaluate("getComputedStyle(document.querySelector('p')).color") == 'rgb(1, 2, 3)'
     assert inner.evaluate('document.compatMode') == 'CSS1Compat'
+    # Its scripts ran, walled off from vjuu's page; what is shown is their result, with the scripts gone.
     assert page.evaluate('[window.__ran, window.__pwned]') == [None, None]
+    assert inner.evaluate('document.body.dataset.isolated') == 'yes'
+    assert frame.get_by_text('Built by script').is_visible()
+    # Styles survive the copy: rules inserted by script, and a shorthand with var() that the CSSOM would mangle.
+    built = "getComputedStyle(document.querySelector('#app p'))"
+    assert inner.evaluate(f'[{built}.color, {built}.fontSize]') == ['rgb(4, 5, 6)', '30px']
+    assert inner.evaluate("document.querySelectorAll('script, noscript, canvas').length") == 0
+    assert inner.evaluate("document.querySelector('img[alt=chart]').src").startswith('data:image/png')
     frame.get_by_text('Run it.').click()
     _comment(page, 'say how')
     frame.get_by_text('two').click()
@@ -501,6 +519,11 @@ def test_html_page(page, url, work):
         'overall': '',
     }, review
     page.evaluate('localStorage.removeItem("vjuu-theme")')
+    # A page without scripts is shown as written, without the round trip.
+    static = '<!doctype html><p>Static</p>'
+    (work / 'doc.json').write_text(json.dumps({'docs': [{'name': 's.html', 'kind': 'html', 'text': static}]}))
+    page.goto(url)
+    frame.get_by_text('Static').wait_for(timeout=2000)
 
 
 def main():

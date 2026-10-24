@@ -22,7 +22,7 @@ foreground timeout, and you are notified when it exits. Do not poll; wait for th
 | A commit | `git show <sha> \| vjuu -` |
 | A diff or patch file | `vjuu change.diff` |
 | Source files (whole files, not a diff) | `vjuu src/main.rs src/review.rs` |
-| An HTML page, rendered (its scripts do not run) | `vjuu site/index.html` |
+| An HTML page or artifact, rendered as it looks once loaded | `vjuu site/index.html` |
 | Text you generated | write it to a `.md` file first, then `vjuu` that file |
 
 Run `--git` from inside the repository. Under Claude Code the title bar shows the session's `/rename` name by

@@ -431,8 +431,7 @@ fn new_session(
         .with_custom_protocol("vjuu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
         .with_url("vjuu://localhost/")
         .with_navigation_handler(|url| {
-            // WebView2 serves custom protocols as http://<scheme>.localhost; WebKit keeps vjuu://.
-            if url.starts_with("vjuu:") || url.starts_with("http://vjuu.localhost") {
+            if is_vjuu(&url) {
                 return true;
             }
             // External links go to the default browser so the review page is never replaced.
@@ -441,15 +440,29 @@ fn new_session(
             }
             false
         })
-        .with_ipc_handler(move |request| match serde_json::from_str::<Msg>(request.body()) {
-            Ok(msg) => {
-                let _ = proxy.send_event(AppEvent::Ui(id, msg));
+        .with_ipc_handler(move |request| {
+            // Only vjuu's own page: an HTML page under review runs its scripts in a frame, and must not be able to
+            // finish the review or fill it in, should the platform hand frames the message channel.
+            if !is_vjuu(&request.uri().to_string()) {
+                eprintln!("Ignored a message from {}", request.uri());
+                return;
             }
-            Err(e) => eprintln!("Bad message from UI: {e}"),
+            match serde_json::from_str::<Msg>(request.body()) {
+                Ok(msg) => {
+                    let _ = proxy.send_event(AppEvent::Ui(id, msg));
+                }
+                Err(e) => eprintln!("Bad message from UI: {e}"),
+            }
         });
     let webview =
         platform::build_webview(builder, &window).unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
     Session { webview, window, _context: own, slot, reply: None, latest: Review::default(), started: Instant::now() }
+}
+
+/// Returns whether `url` is vjuu's own page or one of its files.
+fn is_vjuu(url: &str) -> bool {
+    // WebView2 serves custom protocols as http://<scheme>.localhost; WebKit keeps vjuu://.
+    url.starts_with("vjuu://localhost/") || url.starts_with("http://vjuu.localhost/")
 }
 
 /// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
@@ -597,7 +610,7 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
-    use super::{SKILL, file_doc, install_skill, is_diff, kind_of, transcript_title};
+    use super::{SKILL, file_doc, install_skill, is_diff, is_vjuu, kind_of, transcript_title};
     use std::fs;
 
     #[test]
@@ -648,6 +661,21 @@ mod tests {
             (vec![quoted, "not json customTitle"], None),
         ] {
             assert_eq!(transcript_title(&lines.join("\n")).as_deref(), title, "{lines:?}");
+        }
+    }
+
+    #[test]
+    fn only_vjuu_urls_are_trusted() {
+        for (url, trusted) in [
+            ("vjuu://localhost/", true),
+            ("http://vjuu.localhost/", true),
+            ("http://vjuu.localhost/files/0/a.css", true),
+            ("http://vjuu.localhost.evil.example/", false),
+            ("about:srcdoc", false),
+            ("null", false),
+            ("https://example.com/", false),
+        ] {
+            assert_eq!(is_vjuu(url), trusted, "{url}");
         }
     }
 
