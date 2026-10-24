@@ -31,11 +31,12 @@ pub struct Hooks {
     pub plan: bool,
     pub ask: bool,
     pub turn: bool,
+    pub permission: bool,
 }
 
 impl Default for Hooks {
     fn default() -> Self {
-        Self { plan: true, ask: true, turn: true }
+        Self { plan: true, ask: true, turn: true, permission: true }
     }
 }
 
@@ -51,8 +52,9 @@ impl Config {
             "plan" => self.hooks.plan = on,
             "ask" => self.hooks.ask = on,
             "turn" => self.hooks.turn = on,
+            "permission" => self.hooks.permission = on,
             "tray" => self.tray = on,
-            _ => return Err(format!("Unknown setting `{key}`: use plan, ask, turn or tray.")),
+            _ => return Err(format!("Unknown setting `{key}`: use plan, ask, turn, permission or tray.")),
         }
         Ok(())
     }
@@ -88,7 +90,10 @@ mod tests {
     #[test]
     fn missing_keys_stay_on() {
         let config: Config = toml::from_str("[hooks]\nturn = false\n").unwrap();
-        assert_eq!(config, Config { tray: true, hooks: Hooks { plan: true, ask: true, turn: false } });
+        assert_eq!(
+            config,
+            Config { tray: true, hooks: Hooks { plan: true, ask: true, turn: false, permission: true } }
+        );
         assert_eq!(toml::from_str::<Config>("").unwrap(), Config::default());
     }
 
@@ -98,7 +103,10 @@ mod tests {
         config.set("ask", "off").unwrap();
         config.set("tray", "off").unwrap();
         let text = config.to_toml();
-        assert_eq!(text, format!("{HEADER}tray = false\n\n[hooks]\nplan = true\nask = false\nturn = true\n"));
+        assert_eq!(
+            text,
+            format!("{HEADER}tray = false\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\n")
+        );
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
     }
 
