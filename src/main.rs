@@ -288,7 +288,7 @@ fn hook_turn() -> ! {
     let event = hook_event();
     let Some(cwd) = event["cwd"].as_str() else { process::exit(0) };
     let transcript = event["transcript_path"].as_str().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
-    let diff = turn_diff(Path::new(cwd), &edited_this_turn(&transcript));
+    let diff = turn_diff(Path::new(cwd), &edited_this_turn(&transcript), turn_started(&transcript));
     // One file per session, so parallel sessions do not overwrite each other's diff.
     let path = env::temp_dir().join(format!("vjuu-turn-{}.diff", event["session_id"].as_str().unwrap_or("none")));
     if diff.is_empty() || fs::write(&path, diff).is_err() {
@@ -575,30 +575,79 @@ fn edited_this_turn(transcript: &str) -> Vec<String> {
     files
 }
 
-/// Returns the uncommitted changes to those of `files` inside the git repository at `cwd`, new files included.
-/// shortcut: changes from earlier turns to the same files show too, as git cannot tell turns apart.
-fn turn_diff(cwd: &Path, files: &[String]) -> String {
-    let git = |args: &[&str]| {
-        let out = Command::new("git").current_dir(cwd).args(["-c", "core.quotepath=off"]).args(args).output();
-        out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
-    };
-    let Ok(top) = Path::new(git(&["rev-parse", "--show-toplevel"]).trim()).canonicalize() else {
+/// Returns when the user's last prompt was sent, in Unix seconds.
+fn turn_started(transcript: &str) -> Option<i64> {
+    transcript
+        .lines()
+        .rev()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|entry| entry["type"] == "user" && entry["origin"]["kind"] == "human")
+        .and_then(|entry| unix_seconds(entry["timestamp"].as_str()?))
+}
+
+/// Parses a UTC timestamp such as `2026-10-24T16:37:19.724Z` into Unix seconds.
+fn unix_seconds(iso: &str) -> Option<i64> {
+    let n = |at: usize, len: usize| -> Option<i64> { iso.get(at..at + len)?.parse().ok() };
+    let (y, m, d) = (n(0, 4)?, n(5, 2)?, n(8, 2)?);
+    // Days since the epoch, from Howard Hinnant's days_from_civil.
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + (153 * ((m + 9) % 12) + 2) / 5 + d - 1;
+    Some((era * 146_097 + doe - 719_468) * 86_400 + n(11, 2)? * 3600 + n(14, 2)? * 60 + n(17, 2)?)
+}
+
+fn git_in(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git").current_dir(dir).args(["-c", "core.quotepath=off"]).args(args).output();
+    out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
+}
+
+/// Returns this turn's changes to those of `files` inside the repository at `cwd`, new files included: committed
+/// during the turn (commits authored since `since`) or not, each in its own worktree (`.work/<branch>`, say).
+/// shortcut: uncommitted changes from earlier turns to the same files show too, as git cannot tell turns apart.
+fn turn_diff(cwd: &Path, files: &[String], since: Option<i64>) -> String {
+    let Ok(top) = Path::new(git_in(cwd, &["rev-parse", "--show-toplevel"]).trim()).canonicalize() else {
         return String::new();
     };
-    // git refuses paths outside the repository, and they are not this review's business anyway.
-    let inside: Vec<&str> = files
-        .iter()
-        .map(String::as_str)
-        .filter(|f| Path::new(f).canonicalize().is_ok_and(|p| p.starts_with(&top)))
-        .collect();
-    if inside.is_empty() {
-        return String::new();
+    // Files outside the session's repository are not this review's business; worktrees inside it are.
+    let mut by_worktree: std::collections::BTreeMap<PathBuf, Vec<&str>> = Default::default();
+    for file in files {
+        let Some(dir) = Path::new(file).parent().and_then(|d| d.canonicalize().ok()) else { continue };
+        if !dir.starts_with(&top) {
+            continue;
+        }
+        if let Ok(worktree) = Path::new(git_in(&dir, &["rev-parse", "--show-toplevel"]).trim()).canonicalize() {
+            by_worktree.entry(worktree).or_default().push(file);
+        }
     }
-    let mut diff = git(&[&["diff", "--no-color", "--no-ext-diff", "HEAD", "--"][..], &inside].concat());
-    for new in git(&[&["ls-files", "--others", "--exclude-standard", "--"][..], &inside].concat()).lines() {
-        diff += &git(&["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", new]);
+    let mut diff = String::new();
+    for (worktree, files) in by_worktree {
+        let base = turn_base(&worktree, since);
+        diff += &git_in(&worktree, &[&["diff", "--no-color", "--no-ext-diff", &base, "--"][..], &files].concat());
+        for new in
+            git_in(&worktree, &[&["ls-files", "--others", "--exclude-standard", "--"][..], &files].concat()).lines()
+        {
+            diff += &git_in(&worktree, &["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", new]);
+        }
     }
     diff
+}
+
+/// Returns the commit the worktree was at when the turn started: the parent of the oldest of the latest commits
+/// authored since `since` (author dates survive a rebase), or HEAD when the turn committed nothing.
+fn turn_base(worktree: &Path, since: Option<i64>) -> String {
+    // git's empty tree: the base when the turn made the repository's first commit.
+    const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    let Some(since) = since else { return "HEAD".into() };
+    let mut base = None;
+    for line in git_in(worktree, &["log", "-n", "200", "--format=%at %P"]).lines() {
+        let mut fields = line.split_whitespace();
+        if fields.next().and_then(|t| t.parse::<i64>().ok()).is_none_or(|authored| authored < since) {
+            break;
+        }
+        base = Some(fields.next().unwrap_or(EMPTY_TREE).to_string());
+    }
+    base.unwrap_or_else(|| "HEAD".into())
 }
 
 /// Returns the hook output that hands the review of this turn's changes to Claude, or None without comments.
@@ -1323,7 +1372,7 @@ fn fail(msg: &str) -> ! {
 mod tests {
     use super::{
         SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
-        last_assistant_text, plan_decision, transcript_title, turn_diff, turn_feedback,
+        last_assistant_text, plan_decision, transcript_title, turn_diff, turn_feedback, turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
 
@@ -1551,13 +1600,70 @@ mod tests {
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
-        let diff = turn_diff(&repo, &files);
+        let diff = turn_diff(&repo, &files, None);
         for expected in ["+++ b/edited.txt", "-old", "+new", "created.txt", "+fresh"] {
             assert!(diff.contains(expected), "{expected} missing from\n{diff}");
         }
         assert!(!diff.contains("untouched") && !diff.contains("elsewhere"), "{diff}");
-        assert_eq!(turn_diff(&repo, &[]), "");
+        assert_eq!(turn_diff(&repo, &[], None), "");
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn diffs_a_worktree_with_the_turns_commits() {
+        let repo = std::env::temp_dir().join(format!("vjuu-turn-wt-{}", std::process::id()));
+        let wt = repo.join(".work").join("branch");
+        fs::create_dir_all(&repo).unwrap();
+        // Author dates as Unix seconds: the earlier turn at 1e9, this turn (started at 1.5e9) at 2e9.
+        let git = |dir: &std::path::Path, date: &str, args: &[&str]| {
+            let status = Command::new("git")
+                .current_dir(dir)
+                .env("GIT_AUTHOR_DATE", format!("@{date} +0000"))
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&repo, "0", &["init", "-q"]);
+        fs::write(repo.join(".gitignore"), ".work/\n").unwrap();
+        fs::write(repo.join("a.txt"), "one\n").unwrap();
+        git(&repo, "1000000000", &["add", "."]);
+        git(&repo, "1000000000", &["commit", "-qm", "init"]);
+        git(&repo, "0", &["worktree", "add", "-q", "-b", "branch", wt.to_str().unwrap()]);
+        fs::write(wt.join("a.txt"), "two\n").unwrap();
+        git(&wt, "1000000000", &["commit", "-qam", "earlier turn"]);
+        fs::write(wt.join("a.txt"), "three\n").unwrap();
+        fs::write(wt.join("b.txt"), "new\n").unwrap();
+        git(&wt, "2000000000", &["add", "."]);
+        git(&wt, "2000000000", &["commit", "-qm", "this turn"]);
+        fs::write(wt.join("a.txt"), "four\n").unwrap();
+        let files: Vec<String> =
+            ["a.txt", "b.txt"].iter().map(|f| wt.join(f).to_string_lossy().into_owned()).collect();
+        // Committed and uncommitted changes of this turn, from the worktree, though the session is in the main checkout.
+        let diff = turn_diff(&repo, &files, Some(1_500_000_000));
+        for expected in ["-two", "+four", "+++ b/b.txt", "+new"] {
+            assert!(diff.contains(expected), "{expected} missing from\n{diff}");
+        }
+        assert!(!diff.contains("-one") && !diff.contains("three\n"), "{diff}");
+        // Without a turn start: uncommitted changes only, as before.
+        assert!(turn_diff(&repo, &files, None).contains("-three"));
+        fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn reads_the_turns_start() {
+        assert_eq!(unix_seconds("2026-10-24T16:37:19.724Z"), Some(1_792_859_839));
+        assert_eq!(unix_seconds("2024-02-29T23:59:59Z"), Some(1_709_251_199));
+        assert_eq!(unix_seconds("1970-01-01T00:00:00Z"), Some(0));
+        for bad in ["", "2026-10-24", "yesterday"] {
+            assert_eq!(unix_seconds(bad), None, "{bad}");
+        }
+        let prompt = |ts: &str| format!(r#"{{"type":"user","origin":{{"kind":"human"}},"timestamp":"{ts}"}}"#);
+        let result = r#"{"type":"user","timestamp":"2026-10-24T17:00:00Z","message":{"content":[]}}"#;
+        let transcript = [prompt("2026-10-24T16:00:00Z"), prompt("2026-10-24T16:37:19Z"), result.into()].join("\n");
+        assert_eq!(turn_started(&transcript), Some(1_792_859_839));
+        assert_eq!(turn_started(""), None);
     }
 
     #[test]
