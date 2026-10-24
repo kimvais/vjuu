@@ -80,6 +80,19 @@ pub fn keep_stdio_private() {
     }
 }
 
+/// Whether vjuu has a console of its own, i.e. Windows made one because it was double-clicked rather than run from
+/// a terminal or by an agent (no console at all). Never elsewhere: Finder and file managers open a terminal.
+pub fn own_console() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Console::GetConsoleProcessList;
+        let mut ids = [0u32; 2];
+        unsafe { GetConsoleProcessList(ids.as_mut_ptr(), ids.len() as u32) == 1 }
+    }
+    #[cfg(not(windows))]
+    false
+}
+
 /// Starts `command` detached from the caller: no shared stdio, and not killed with the caller's terminal.
 pub fn spawn_detached(command: &mut Command) {
     #[cfg(windows)]

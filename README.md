@@ -79,6 +79,7 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `git show HEAD \| vjuu -` | stdin; diff or markdown is detected |
 | `vjuu --session "fix login" plan.md` | name the asking session in the title bar (automatic under Claude Code) |
 | `vjuu last` | print the most recent review again |
+| `vjuu start` | start the resident instance in the tray, e.g. at login; double-clicking `vjuu.exe` does the same |
 | `vjuu stop` | stop the resident instance (before upgrading the exe) |
 | `vjuu setup` | install the skill for Claude Code and Codex |
 | `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |

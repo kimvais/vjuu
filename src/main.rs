@@ -41,6 +41,7 @@ Usage:
   vjuu config <setting> <value>  Change one: plan, ask, turn, permission, tray or focus (on / off),
                                  theme (a theme or auto), theme.light or theme.dark (a theme)
   vjuu setup                     Install the skill for Claude Code and Codex
+  vjuu start                     Start the resident instance in the tray (also: double-click vjuu.exe)
   vjuu stop                      Stop the resident instance (before upgrading)
   vjuu hook <name>               Claude Code hooks: plan, ask, turn or permission
 
@@ -174,12 +175,15 @@ fn main() {
             println!("vjuu {}", env!("CARGO_PKG_VERSION"));
             process::exit(0)
         }
+        // Double-clicked: run as an app in the tray. The winget validator also launches the exe so.
+        [] if platform::own_console() => start(),
         // Nothing to review: the help, but as an error, since a script calling vjuu so has a bug.
         [] => {
             eprintln!("{HELP}");
             process::exit(2)
         }
         ["last"] => print_last(),
+        ["start"] => start(),
         ["stop"] => stop(),
         ["setup"] => setup(),
         ["config"] => settings_request(),
@@ -738,6 +742,14 @@ fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
         fail(&format!("The resident vjuu closed without a review ({read:?}). `vjuu last` may have it."));
     }
     print!("{md}");
+    process::exit(0)
+}
+
+/// Starts the resident instance, with its tray icon, unless it is running already.
+fn start() -> ! {
+    if Stream::connect(pipe_name()).is_err() {
+        spawn_server();
+    }
     process::exit(0)
 }
 
