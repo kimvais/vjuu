@@ -195,7 +195,8 @@ asks. Questions that take several answers stay in that picker, as vjuu's buttons
 
 **Turn review.** When Claude finishes a turn in which it edited files, the diff of those files opens in vjuu, new files
 included. Comment and click **Submit & continue**, and Claude acts on your comments straight away. Click **Submit & continue** without comments
-and the turn ends. Turns without edits, and edits outside the git repository, open nothing. The diff is the files'
+and the turn ends. Turns without edits, edits outside the git repository, and a diff you already reviewed open
+nothing. The diff is the files'
 uncommitted changes, so changes an earlier turn made to the same files show too.
 
 **Permission prompts.** When Claude Code would ask whether Claude may run a command, edit a file or use another tool,
