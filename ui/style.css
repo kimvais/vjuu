@@ -5,7 +5,7 @@
 /* The colours come from a theme (themes/*.css, compiled into theme.css by vjuu); these are what every theme shares.
    diff2html is always drawn in its light scheme and recoloured through its --d2h-* variables. */
 :root {
-  /* vjuu's brand colour (Monokai green): window border, logo, Submit & continue. src/main.rs sets the border to the same value. */
+  /* vjuu's brand colour (Monokai green): window border and logo. src/main.rs sets the border to the same value. */
   --brand: #a6e22e;
   --brand-fg: #272822;
   --sans: "Inter", "Segoe UI", system-ui, sans-serif;
@@ -78,8 +78,8 @@ button, select {
 #settings input { grid-row: span 2; margin-top: 4px; accent-color: var(--accent); }
 #settings .cli { margin: 16px 0 0; font-size: 13px; }
 #settings label.theme { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 16px; }
-#settings-apply { float: right; margin-top: -26px; padding: 4px 18px; background: var(--brand); border-color: var(--brand);
-  color: var(--brand-fg); font-weight: 700; }
+#settings-apply { float: right; margin-top: -26px; padding: 4px 18px; background: var(--accent); border-color: var(--accent);
+  color: var(--accent-fg); font-weight: 700; }
 #window-controls { display: flex; align-self: stretch; margin-left: 4px; }
 #window-controls button {
   width: 46px;
@@ -124,7 +124,8 @@ body.maximized .edge { display: none; }
   font-size: 13px;
 }
 #hint { color: var(--muted); }
-#done { margin-left: auto; padding: 5px 22px; background: var(--brand); border-color: var(--brand); color: var(--brand-fg); font-weight: 700; }
+/* The theme's accent, not the brand green, so the main action matches the rest of the theme. */
+#done { margin-left: auto; padding: 5px 22px; background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 700; }
 #done:hover { filter: brightness(1.08); }
 /* Keycaps, in buttons and the help. */
 kbd { display: inline-block; min-width: 1.6em; padding: 0 5px; border: 1px solid currentColor; border-bottom-width: 2px;
