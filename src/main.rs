@@ -291,7 +291,9 @@ fn hook_turn() -> ! {
     let diff = turn_diff(Path::new(cwd), &edited_this_turn(&transcript), turn_started(&transcript));
     // One file per session, so parallel sessions do not overwrite each other's diff.
     let path = env::temp_dir().join(format!("vjuu-turn-{}.diff", event["session_id"].as_str().unwrap_or("none")));
-    if diff.is_empty() || fs::write(&path, diff).is_err() {
+    // Hook feedback starts no new turn, so a reply to it that edits nothing would show the same diff again.
+    let reviewed = fs::read_to_string(&path).is_ok_and(|shown| shown == diff);
+    if diff.is_empty() || reviewed || fs::write(&path, diff).is_err() {
         process::exit(0)
     }
     if let Some(feedback) = turn_feedback(&review_in_child(&event, &path)) {
