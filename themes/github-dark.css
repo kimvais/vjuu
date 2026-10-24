@@ -1,0 +1,52 @@
+/* vjuu theme: GitHub Dark, after GitHub's dark default. Copy this file under another name to make your own
+   theme; vjuu reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --fg: #e6edf3;
+  --muted: #9198a1;
+  --border: #30363d;
+  --accent: #4493f8;
+  --accent-fg: #ffffff;
+  --comment-bg: #272115;
+  --focus: rgba(68, 147, 248, 0.12);
+  --code-bg: #151b23;
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-comment: #8b949e;
+  --hl-number: #79c0ff;
+  --hl-title: #d2a8ff;
+  --hl-type: #ffa657;
+  --hl-attr: #79c0ff;
+  --hl-param: #e6edf3;
+  --hl-meta: #8b949e;
+  --heading: #e6edf3;
+  --chrome: #010409;
+  --heading-3: #79c0ff;
+  --inline-code: #ffa657;
+  --pick: #ffa657;
+  --pick-bg: rgba(255, 166, 87, 0.14);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #8b949e;
+  --d2h-line-border-color: var(--border);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--border);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(46, 160, 67, 0.15);
+  --d2h-ins-border-color: rgba(46, 160, 67, 0.4);
+  --d2h-ins-highlight-bg-color: rgba(46, 160, 67, 0.4);
+  --d2h-ins-label-color: #3fb950;
+  --d2h-del-bg-color: rgba(248, 81, 73, 0.1);
+  --d2h-del-border-color: rgba(248, 81, 73, 0.4);
+  --d2h-del-highlight-bg-color: rgba(248, 81, 73, 0.4);
+  --d2h-del-label-color: #f85149;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(56, 139, 253, 0.1);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #d29922;
+  --d2h-moved-label-color: #79c0ff;
+}

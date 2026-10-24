@@ -1,0 +1,52 @@
+/* vjuu theme: Gruvbox Light, after morhetz's (medium contrast). Copy this file under another name to make your own
+   theme; vjuu reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: light;
+  --bg: #fbf1c7;
+  --fg: #3c3836;
+  --muted: #7c6f64;
+  --border: #d5c4a1;
+  --accent: #076678;
+  --accent-fg: #fbf1c7;
+  --comment-bg: #f7e4a3;
+  --focus: rgba(7, 102, 120, 0.12);
+  --code-bg: #f2e5bc;
+  --hl-keyword: #9d0006;
+  --hl-string: #79740e;
+  --hl-comment: #928374;
+  --hl-number: #8f3f71;
+  --hl-title: #427b58;
+  --hl-type: #b57614;
+  --hl-attr: #076678;
+  --hl-param: #af3a03;
+  --hl-meta: #928374;
+  --heading: #3c3836;
+  --chrome: #ebdbb2;
+  --heading-3: #076678;
+  --inline-code: #af3a03;
+  --pick: #af3a03;
+  --pick-bg: rgba(175, 58, 3, 0.12);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #928374;
+  --d2h-line-border-color: var(--border);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--border);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(121, 116, 14, 0.14);
+  --d2h-ins-border-color: rgba(121, 116, 14, 0.35);
+  --d2h-ins-highlight-bg-color: rgba(121, 116, 14, 0.3);
+  --d2h-ins-label-color: #79740e;
+  --d2h-del-bg-color: rgba(157, 0, 6, 0.1);
+  --d2h-del-border-color: rgba(157, 0, 6, 0.3);
+  --d2h-del-highlight-bg-color: rgba(157, 0, 6, 0.22);
+  --d2h-del-label-color: #9d0006;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(7, 102, 120, 0.08);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #b57614;
+  --d2h-moved-label-color: #076678;
+}

@@ -1,0 +1,52 @@
+/* vjuu theme: Solarized Dark, after Ethan Schoonover's. Text is base1 rather than base0, for contrast. Copy this file
+   under another name to make your own theme; vjuu reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #002b36;
+  --fg: #93a1a1;
+  --muted: #839496;
+  --border: #0a4352;
+  --accent: #268bd2;
+  --accent-fg: #fdf6e3;
+  --comment-bg: #0d3c47;
+  --focus: rgba(147, 161, 161, 0.1);
+  --code-bg: #073642;
+  --hl-keyword: #859900;
+  --hl-string: #2aa198;
+  --hl-comment: #586e75;
+  --hl-number: #d33682;
+  --hl-title: #268bd2;
+  --hl-type: #b58900;
+  --hl-attr: #268bd2;
+  --hl-param: #cb4b16;
+  --hl-meta: #6c71c4;
+  --heading: #268bd2;
+  --chrome: #001e26;
+  --heading-3: #2aa198;
+  --inline-code: #cb4b16;
+  --pick: #cb4b16;
+  --pick-bg: rgba(203, 75, 22, 0.18);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #586e75;
+  --d2h-line-border-color: var(--border);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--border);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(133, 153, 0, 0.18);
+  --d2h-ins-border-color: rgba(133, 153, 0, 0.45);
+  --d2h-ins-highlight-bg-color: rgba(133, 153, 0, 0.42);
+  --d2h-ins-label-color: #859900;
+  --d2h-del-bg-color: rgba(220, 50, 47, 0.18);
+  --d2h-del-border-color: rgba(220, 50, 47, 0.45);
+  --d2h-del-highlight-bg-color: rgba(220, 50, 47, 0.42);
+  --d2h-del-label-color: #dc322f;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(38, 139, 210, 0.08);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #b58900;
+  --d2h-moved-label-color: #268bd2;
+}

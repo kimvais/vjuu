@@ -1,0 +1,52 @@
+/* vjuu theme: Catppuccin Latte, after catppuccin.com. Copy this file under another name to make your own theme; vjuu
+   reads only the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: light;
+  --bg: #eff1f5;
+  --fg: #4c4f69;
+  --muted: #6c6f85;
+  --border: #ccd0da;
+  --accent: #1e66f5;
+  --accent-fg: #eff1f5;
+  --comment-bg: #f5e6c4;
+  --focus: rgba(30, 102, 245, 0.12);
+  --code-bg: #e6e9ef;
+  --hl-keyword: #8839ef;
+  --hl-string: #40a02b;
+  --hl-comment: #7c7f93;
+  --hl-number: #fe640b;
+  --hl-title: #1e66f5;
+  --hl-type: #df8e1d;
+  --hl-attr: #179299;
+  --hl-param: #e64553;
+  --hl-meta: #ea76cb;
+  --heading: #8839ef;
+  --chrome: #dce0e8;
+  --heading-3: #1e66f5;
+  --inline-code: #e64553;
+  --pick: #fe640b;
+  --pick-bg: rgba(254, 100, 11, 0.12);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #8c8fa1;
+  --d2h-line-border-color: var(--border);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--border);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(64, 160, 43, 0.12);
+  --d2h-ins-border-color: rgba(64, 160, 43, 0.35);
+  --d2h-ins-highlight-bg-color: rgba(64, 160, 43, 0.3);
+  --d2h-ins-label-color: #40a02b;
+  --d2h-del-bg-color: rgba(210, 15, 57, 0.1);
+  --d2h-del-border-color: rgba(210, 15, 57, 0.3);
+  --d2h-del-highlight-bg-color: rgba(210, 15, 57, 0.25);
+  --d2h-del-label-color: #d20f39;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(30, 102, 245, 0.08);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #df8e1d;
+  --d2h-moved-label-color: #1e66f5;
+}

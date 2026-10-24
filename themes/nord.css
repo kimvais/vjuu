@@ -1,0 +1,52 @@
+/* vjuu theme: Nord, after nordtheme.com. Copy this file under another name to make your own theme; vjuu reads only
+   the color-scheme and the --custom-properties. */
+:root {
+  color-scheme: dark;
+  --bg: #2e3440;
+  --fg: #d8dee9;
+  --muted: #8f99ab;
+  --border: #434c5e;
+  --accent: #88c0d0;
+  --accent-fg: #2e3440;
+  --comment-bg: #3b4252;
+  --focus: rgba(216, 222, 233, 0.08);
+  --code-bg: #292e39;
+  --hl-keyword: #81a1c1;
+  --hl-string: #a3be8c;
+  --hl-comment: #616e88;
+  --hl-number: #b48ead;
+  --hl-title: #88c0d0;
+  --hl-type: #8fbcbb;
+  --hl-attr: #8fbcbb;
+  --hl-param: #d8dee9;
+  --hl-meta: #5e81ac;
+  --heading: #88c0d0;
+  --chrome: #242933;
+  --heading-3: #81a1c1;
+  --inline-code: #ebcb8b;
+  --pick: #d08770;
+  --pick-bg: rgba(208, 135, 112, 0.16);
+  --d2h-bg-color: var(--bg);
+  --d2h-border-color: var(--border);
+  --d2h-dim-color: #616e88;
+  --d2h-line-border-color: var(--comment-bg);
+  --d2h-file-header-bg-color: var(--code-bg);
+  --d2h-file-header-border-color: var(--border);
+  --d2h-empty-placeholder-bg-color: var(--code-bg);
+  --d2h-empty-placeholder-border-color: var(--comment-bg);
+  --d2h-selected-color: var(--focus);
+  --d2h-ins-bg-color: rgba(163, 190, 140, 0.15);
+  --d2h-ins-border-color: rgba(163, 190, 140, 0.4);
+  --d2h-ins-highlight-bg-color: rgba(163, 190, 140, 0.35);
+  --d2h-ins-label-color: #a3be8c;
+  --d2h-del-bg-color: rgba(191, 97, 106, 0.18);
+  --d2h-del-border-color: rgba(191, 97, 106, 0.45);
+  --d2h-del-highlight-bg-color: rgba(191, 97, 106, 0.42);
+  --d2h-del-label-color: #d08791;
+  --d2h-change-del-color: var(--d2h-del-bg-color);
+  --d2h-change-ins-color: var(--d2h-ins-bg-color);
+  --d2h-info-bg-color: rgba(255, 255, 255, 0.04);
+  --d2h-info-border-color: var(--border);
+  --d2h-change-label-color: #ebcb8b;
+  --d2h-moved-label-color: #88c0d0;
+}
