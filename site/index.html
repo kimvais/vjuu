@@ -188,7 +188,7 @@
     .shots { margin: 0 0 40px; }
     .shot { margin: 0 0 48px; }
     .shot:last-child { margin-bottom: 0; }
-    .shot img {
+    .shot img, .shot video {
       display: block;
       width: 100%;
       height: auto;
@@ -367,6 +367,10 @@
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Don't open the file. <span>Your agent already did.</span></h1>
         <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Done, and your comments go straight back to the agent.</p>
+        <figure class="shot demo">
+          <video src="img/demo.mp4" poster="img/demo.jpg" width="1920" height="1008" autoplay muted loop playsinline aria-label="A Claude Code session in plan mode. Its question opens in vjuu and is answered with a click; the plan opens in vjuu and gets a comment, and Claude revises it; after the code is written, the diff opens in vjuu, a comment asks for a docstring, and Claude adds it."></video>
+          <figcaption>A real Claude Code session: a question, a plan and a diff, each answered in vjuu.</figcaption>
+        </figure>
         <div class="shots" role="group" aria-label="Screenshots">
           <figure class="shot">
             <img src="img/diff.png" width="2560" height="1600" alt="vjuu showing a syntax-highlighted Rust diff side by side, with a comment under one added line and a file tree on the left.">
@@ -516,6 +520,13 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
         span.textContent = token;
         pre.append(span);
       }
+    }
+
+    // With reduced motion the demo waits on its last frame, with controls to play it.
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const demo = document.querySelector('.demo video');
+      demo.pause();
+      demo.controls = true;
     }
 
     // Screenshots rotate every few seconds; hovering or focusing them holds the current one.

@@ -4,7 +4,7 @@ A fast review window for agent handoffs. When an agent would say "open X and rev
 `vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Done**, and
 your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
-![A diff in vjuu, side by side in the Graphite theme](site/img/diff.png)
+![A Claude Code session where a question, a plan and a diff each open in vjuu and get answered there](site/img/demo.gif)
 
 ## Usage
 
