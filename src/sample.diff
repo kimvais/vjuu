@@ -1,0 +1,25 @@
+diff --git a/src/greet.rs b/src/greet.rs
+index 3f2a1c4..8b9d0e7 100644
+--- a/src/greet.rs
++++ b/src/greet.rs
+@@ -1,12 +1,16 @@
+ use std::env;
+
+-/// Prints a greeting.
+-fn greet(name: &str) {
+-    println!("Hello, {name}!");
++/// Returns a greeting, shouted when `loud` is set.
++fn greet(name: &str, loud: bool) -> String {
++    let greeting = format!("Hello, {name}!");
++    if loud { greeting.to_uppercase() } else { greeting }
+ }
+
+ fn main() {
+-    let name = env::args().nth(1).unwrap_or_else(|| "world".into());
+-    greet(&name);
++    let mut args = env::args().skip(1);
++    let name = args.next().unwrap_or_else(|| "world".into());
++    // `--loud` anywhere after the name.
++    let loud = args.any(|a| a == "--loud");
++    println!("{}", greet(&name, loud));
+ }

@@ -90,8 +90,8 @@ $('#theme').onchange = (e) => showTheme(e.target.value);
 settings.addEventListener('close', () => {
   // After Esc, back to the remembered theme; after Apply, that is the new one.
   showTheme(theme);
-  // A window opened only for the settings has nothing else to show.
-  if (req && !req.docs.length) done();
+  // A window opened for the settings shows only a sample behind them: nothing to review.
+  if (req?.sample) done();
 });
 $('#settings-apply').onclick = applySettings;
 $('#settings-open').onclick = openSettings;
