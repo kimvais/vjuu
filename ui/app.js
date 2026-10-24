@@ -924,6 +924,8 @@ function syncMaximized() {
 window.addEventListener('resize', syncMaximized);
 syncMaximized();
 
+/** vjuu calls this with the window's git checkout (repo, worktree, branch, PR) once it has looked it up. */
+window.vjuuContext = (text) => { $('#context').textContent = text; };
 window.vjuuLoad = () => load().catch((err) => {
   content.textContent = `vjuu failed to render: ${err}`;
 });

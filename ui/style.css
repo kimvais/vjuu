@@ -192,6 +192,8 @@ button, select {
 body.maximized .edge { display: none; }
 #session { flex: none; max-width: 30%; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #session:empty { display: none; }
+#context { flex: none; max-width: 30%; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#context:empty { display: none; }
 #name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #count { color: var(--fg); font-weight: 600; }
 #statusbar {
