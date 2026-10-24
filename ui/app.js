@@ -86,8 +86,13 @@ function applySettings() {
   settings.close();
 }
 
-// A window opened only for the settings has nothing else to show.
-settings.addEventListener('close', () => { if (req && !req.docs.length) done(); });
+$('#theme').onchange = (e) => showTheme(e.target.value);
+settings.addEventListener('close', () => {
+  // After Esc, back to the remembered theme; after Apply, that is the new one.
+  showTheme(theme);
+  // A window opened only for the settings has nothing else to show.
+  if (req && !req.docs.length) done();
+});
 $('#settings-apply').onclick = applySettings;
 $('#settings-open').onclick = openSettings;
 
@@ -882,10 +887,15 @@ let theme = 'auto';
 
 function setTheme(name) {
   theme = name;
-  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
-  frameDocs().forEach(syncFrameTheme);
+  showTheme(name);
   // Every window shares one WebView2 profile, so the choice carries over; storage may be unavailable.
   try { localStorage.setItem('vjuu-theme', name); } catch {}
+}
+
+/** Colours the window in a theme without remembering it: the settings panel previews with this. */
+function showTheme(name) {
+  document.documentElement.dataset.theme = name === 'auto' ? (osDark.matches ? 'graphite' : 'light') : name;
+  frameDocs().forEach(syncFrameTheme);
 }
 
 try { theme = localStorage.getItem('vjuu-theme') ?? 'auto'; } catch {}

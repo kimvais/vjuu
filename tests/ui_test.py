@@ -147,11 +147,13 @@ def test_highlighting_and_themes(page, url, work):
     assert theme() == ['light', 'auto']
     _set_theme(work, page, 'light')
     assert theme() == ['light', 'light']
-    # Picked but not applied: Esc keeps the old theme.
+    # Picking previews the theme without remembering it; Esc goes back.
     page.click('#settings-open')
     page.wait_for_selector('#settings[open]')
     page.select_option('#theme', 'graphite')
+    assert theme() == ['graphite', 'light']
     page.keyboard.press('Escape')
+    page.wait_for_function('document.documentElement.dataset.theme === "light"', timeout=2000)
     assert theme() == ['light', 'light']
     _set_theme(work, page, 'graphite')
     assert theme() == ['graphite', 'graphite']
