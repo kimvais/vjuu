@@ -68,21 +68,21 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 
 ## Usage
 
-```
-vjuu docs/design.md          # markdown
-vjuu a.md b.md change.diff   # several files in one window, stacked
-vjuu change.diff             # diff or patch file
-vjuu site/index.html         # HTML page or claude.ai artifact, rendered as it looks once loaded; file:// URLs work too
-vjuu src/main.rs             # any other file: line-numbered, syntax-highlighted source
-vjuu --git main...HEAD       # runs `git diff main...HEAD` in the current directory
-git show HEAD | vjuu -       # stdin; diff or markdown is detected
-vjuu --session "fix login" plan.md  # name the asking session in the title bar (automatic under Claude Code)
-vjuu last                    # print the most recent review again
-vjuu stop                    # stop the resident instance (before upgrading the exe)
-vjuu setup                   # install the skill for Claude Code and Codex
-vjuu config                  # settings: which Claude Code hooks open vjuu (see below)
-vjuu --help / vjuu --version # all of the above, briefly / the version
-```
+| Command | What it does |
+|---|---|
+| `vjuu docs/design.md` | markdown |
+| `vjuu a.md b.md change.diff` | several files in one window, stacked |
+| `vjuu change.diff` | diff or patch file |
+| `vjuu site/index.html` | HTML page or claude.ai artifact, rendered as it looks once loaded; `file://` URLs work too |
+| `vjuu src/main.rs` | any other file: line-numbered, syntax-highlighted source |
+| `vjuu --git main...HEAD` | runs `git diff main...HEAD` in the current directory |
+| `git show HEAD \| vjuu -` | stdin; diff or markdown is detected |
+| `vjuu --session "fix login" plan.md` | name the asking session in the title bar (automatic under Claude Code) |
+| `vjuu last` | print the most recent review again |
+| `vjuu stop` | stop the resident instance (before upgrading the exe) |
+| `vjuu setup` | install the skill for Claude Code and Codex |
+| `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |
+| `vjuu --help`, `vjuu --version` | all of the above, briefly; the version |
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to
 `%LOCALAPPDATA%\vjuu\reviews\`, so a later session can pick it up with `vjuu last`.
