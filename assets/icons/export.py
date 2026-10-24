@@ -52,8 +52,10 @@ def main() -> None:
     _png(_tile(inset=0, radius=0), 180).save(_SITE / 'apple-touch-icon.png')
     # macOS draws app icons at ~80% of the canvas with a drop shadow margin
     _png(_tile(inset=100, radius=185), 1024).save(_DIR / 'vjuu.icns')
+    # The tray is tiny: the bare mark, cropped to its width (x 34-990), on transparency like the other tray icons.
+    tray = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="32 26 960 960">{_paths}</svg>'
     # raw RGBA, so the binary needs no PNG decoder; src/tray.rs loads it as 32x32
-    (_DIR / 'tray.rgba').write_bytes(_png(tile, 32).convert('RGBA').tobytes())
+    (_DIR / 'tray.rgba').write_bytes(_png(tray, 32).convert('RGBA').tobytes())
 
 
 if __name__ == '__main__':

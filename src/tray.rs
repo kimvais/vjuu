@@ -65,16 +65,17 @@ fn icon(waiting: bool) -> Icon {
     Icon::from_rgba(pixels(waiting), SIZE, SIZE).expect("icon size matches its pixels")
 }
 
-/// The brand tile as raw RGBA, exported by assets/icons/export.py; the array type checks its size.
-const TILE: &[u8; (SIZE * SIZE * 4) as usize] = include_bytes!("../assets/icons/tray.rgba");
+/// The bare mark as raw RGBA, exported by assets/icons/export.py; the array type checks its size.
+const MARK: &[u8; (SIZE * SIZE * 4) as usize] = include_bytes!("../assets/icons/tray.rgba");
 
-/// Returns the icon as RGBA: the brand tile, with an orange dot while reviews wait.
+/// Returns the icon as RGBA: the mark, with an orange dot while reviews wait.
 fn pixels(waiting: bool) -> Vec<u8> {
-    let mut rgba = TILE.to_vec();
+    let mut rgba = MARK.to_vec();
     if waiting {
         for (i, pixel) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let (x, y) = ((i as u32 % SIZE) as f32 + 0.5, (i as u32 / SIZE) as f32 + 0.5);
-            if (x - 25.0).powi(2) + (y - 7.0).powi(2) <= 30.0 {
+            // Bottom right, the empty corner under the V's right arm.
+            if (x - 26.0).powi(2) + (y - 26.0).powi(2) <= 30.0 {
                 *pixel = ORANGE;
             }
         }
@@ -92,11 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn adds_the_waiting_dot_to_the_tile() {
+    fn adds_the_waiting_dot_to_the_mark() {
         let (idle, waiting) = (pixels(false), pixels(true));
-        assert_eq!(at(&idle, 0, 0)[3], 0, "corners are rounded off");
-        assert_eq!(at(&idle, 25, 7), [0x27, 0x28, 0x22, 0xff], "tile background");
-        assert_eq!(at(&waiting, 25, 7), ORANGE);
-        assert_eq!(at(&waiting, 16, 20), at(&idle, 16, 20), "the dot leaves the mark alone");
+        assert_eq!(at(&idle, 0, 0)[3], 0, "no background");
+        assert_eq!(at(&idle, 26, 26)[3], 0, "the dot's corner is empty");
+        assert_eq!(at(&waiting, 26, 26), ORANGE);
+        assert_eq!(at(&idle, 12, 12), [0xa6, 0xe2, 0x2e, 0xff], "the mark, edge to edge");
+        assert_eq!(at(&waiting, 12, 12), at(&idle, 12, 12), "the dot leaves the mark alone");
+        assert_eq!(at(&waiting, 20, 21), at(&idle, 20, 21), "nor the tip of its right arm");
     }
 }
