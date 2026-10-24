@@ -33,6 +33,7 @@ Usage:
                                  (or file:// URL), or any source file
   vjuu -                         Review stdin: a diff or markdown
   vjuu --git [<git diff args>]   Review `git diff` in the current directory
+  vjuu --previous <old> <file>   Review a file as its changes since an earlier copy; d shows it in full
   vjuu --session <name> ...      Name the asking session in the title bar (automatic under Claude Code)
   vjuu last                      Print the most recent review again
 
@@ -61,6 +62,9 @@ struct Doc {
     text: String,
     /// Directory the document's relative images resolve against.
     base: Option<PathBuf>,
+    /// The changes since an earlier version, as a unified diff; shown instead of the document until toggled.
+    #[serde(default)]
+    changes: Option<String>,
 }
 
 /// The documents one window shows; also what a client sends the resident instance.
@@ -199,10 +203,16 @@ fn main() {
             let mut bytes = Vec::new();
             std::io::stdin().read_to_end(&mut bytes).unwrap_or_else(|e| fail(&format!("Cannot read stdin: {e}")));
             let text = String::from_utf8_lossy(&bytes).into_owned();
-            let doc =
-                Doc { name: "stdin".into(), kind: kind_of("", &text).into(), text, base: env::current_dir().ok() };
+            let doc = Doc {
+                name: "stdin".into(),
+                kind: kind_of("", &text).into(),
+                text,
+                base: env::current_dir().ok(),
+                changes: None,
+            };
             request(vec![doc])
         }
+        ["--previous", previous, path] => request(vec![revised_doc(previous, path)]),
         // A command with the wrong arguments is not a file to open.
         ref paths @ [first, ..]
             if first != "config" && first != "hook" && paths.iter().all(|p| !p.starts_with('-')) =>
@@ -273,10 +283,23 @@ fn hook_plan() -> ! {
     let Some(plan) = event["tool_input"]["planFilePath"].as_str().filter(|p| Path::new(p).is_file()) else {
         process::exit(0)
     };
-    if let Some(decision) = plan_decision(&review_in_child(&event, Path::new(plan))) {
+    let previous = previous_plan(Path::new(plan), event["session_id"].as_str().unwrap_or("none"));
+    if let Some(decision) = plan_decision(&review_in_child(&event, Path::new(plan), previous.as_deref())) {
         println!("{decision}");
     }
     process::exit(0)
+}
+
+/// Keeps a copy of the plan as the session last saw it, and returns a copy of that earlier version when the plan has
+/// changed since, so a revision opens as a diff against it.
+fn previous_plan(plan: &Path, session: &str) -> Option<PathBuf> {
+    let shown = env::temp_dir().join(format!("vjuu-plan-{session}.md"));
+    let previous = env::temp_dir().join(format!("vjuu-plan-{session}.previous.md"));
+    let current = fs::read(plan).ok()?;
+    let before = fs::read(&shown).ok().filter(|before| *before != current);
+    let _ = fs::write(&shown, &current);
+    fs::write(&previous, before?).ok()?;
+    Some(previous)
 }
 
 /// Claude Code's Stop hook: shows the diff of the files Claude edited this turn, and comments go back to Claude.
@@ -296,7 +319,7 @@ fn hook_turn() -> ! {
     if diff.is_empty() || reviewed || fs::write(&path, diff).is_err() {
         process::exit(0)
     }
-    if let Some(feedback) = turn_feedback(&review_in_child(&event, &path)) {
+    if let Some(feedback) = turn_feedback(&review_in_child(&event, &path, None)) {
         println!("{feedback}");
     }
     process::exit(0)
@@ -321,7 +344,7 @@ fn hook_ask() -> ! {
     if fs::write(&path, md).is_err() {
         process::exit(0)
     }
-    if let Some(decision) = ask_decision(&event["tool_input"], &review_in_child(&event, &path)) {
+    if let Some(decision) = ask_decision(&event["tool_input"], &review_in_child(&event, &path, None)) {
         println!("{decision}");
     }
     process::exit(0)
@@ -448,7 +471,7 @@ fn hook_permission() -> ! {
     if fs::write(&path, permission_markdown(&event)).is_err() {
         process::exit(0)
     }
-    if let Some(decision) = permission_decision(&event, &review_in_child(&event, &path)) {
+    if let Some(decision) = permission_decision(&event, &review_in_child(&event, &path, None)) {
         println!("{decision}");
     }
     process::exit(0)
@@ -535,12 +558,16 @@ fn hook_event() -> serde_json::Value {
     serde_json::from_str(&input).unwrap_or_default()
 }
 
-/// Runs vjuu on `path` as a child titled with the hook session's name, and returns the review it prints.
-fn review_in_child(event: &serde_json::Value, path: &Path) -> String {
+/// Runs vjuu on `path`, as its changes since `previous` when given, as a child titled with the hook session's name,
+/// and returns the review it prints.
+fn review_in_child(event: &serde_json::Value, path: &Path, previous: Option<&Path>) -> String {
     let Ok(exe) = env::current_exe() else { return String::new() };
     let mut vjuu = Command::new(exe);
     if let Some(title) = event["session_id"].as_str().and_then(session_title) {
         vjuu.args(["--session", &title]);
+    }
+    if let Some(previous) = previous {
+        vjuu.arg("--previous").arg(previous);
     }
     let out = vjuu.arg(path).stdin(process::Stdio::null()).output();
     out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
@@ -702,6 +729,7 @@ fn settings_request() -> Request {
         kind: kind.into(),
         text: text.into(),
         base: None,
+        changes: None,
     };
     // The diff first: the modal panel blocks scrolling, so only the top of the window shows.
     let docs = vec![
@@ -735,7 +763,17 @@ fn file_doc(arg: &str) -> Doc {
     // Lenient with odd encodings (Latin-1 source, a binary byte or two): show the file rather than refuse it.
     let text = String::from_utf8_lossy(&bytes).into_owned();
     let base = Path::new(path).canonicalize().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-    Doc { name: path.into(), kind: kind_of(path, &text).into(), text, base }
+    Doc { name: path.into(), kind: kind_of(path, &text).into(), text, base, changes: None }
+}
+
+/// Returns the file's document with its changes since `previous`, an earlier copy of it; none when nothing changed.
+fn revised_doc(previous: &str, path: &str) -> Doc {
+    let doc = file_doc(path);
+    // git's diff works outside a repository too; without git, the file just shows in full.
+    let diff = git_in(Path::new("."), &["diff", "--no-color", "--no-ext-diff", "--no-index", "--", previous, path]);
+    // Named after the file on both sides, not after the earlier copy, so comments name the file.
+    let changes = diff.find("\n@@ ").map(|at| format!("--- a/{0}\n+++ b/{0}{1}", doc.name, &diff[at..]));
+    Doc { changes, ..doc }
 }
 
 /// Returns how a file is shown: "diff", "md", "html" (the rendered page), or "code" (line-numbered source; the UI
@@ -773,7 +811,7 @@ fn git_diff(rest: &[&str]) -> Request {
         process::exit(0);
     }
     let name = format!("git diff {}", rest.join(" ")).trim_end().to_string();
-    request(vec![Doc { name, kind: "diff".into(), text, base: env::current_dir().ok() }])
+    request(vec![Doc { name, kind: "diff".into(), text, base: env::current_dir().ok(), changes: None }])
 }
 
 fn client(mut conn: Stream, request: &Request, started: Instant) -> ! {
@@ -1374,7 +1412,8 @@ fn fail(msg: &str) -> ! {
 mod tests {
     use super::{
         SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
-        last_assistant_text, plan_decision, transcript_title, turn_diff, turn_feedback, turn_started, unix_seconds,
+        last_assistant_text, plan_decision, previous_plan, revised_doc, transcript_title, turn_diff, turn_feedback,
+        turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
 
@@ -1680,6 +1719,31 @@ mod tests {
         assert_eq!(decision["hookSpecificOutput"]["permissionDecision"], "deny");
         let reason = decision["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
         assert!(reason.ends_with(review.trim()), "{reason}");
+    }
+
+    #[test]
+    fn revised_plans_open_as_their_changes() {
+        let dir = std::env::temp_dir().join(format!("vjuu-revised-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let plan = dir.join("plan.md");
+        let session = format!("test-{}", std::process::id());
+        fs::write(&plan, "# Plan\n\nStep one\n").unwrap();
+        assert_eq!(previous_plan(&plan, &session), None, "first time: nothing to compare with");
+        assert_eq!(previous_plan(&plan, &session), None, "shown again unchanged");
+        fs::write(&plan, "# Plan\n\nStep two\n").unwrap();
+        let previous = previous_plan(&plan, &session).unwrap();
+        assert_eq!(fs::read_to_string(&previous).unwrap(), "# Plan\n\nStep one\n");
+
+        let name = plan.to_str().unwrap();
+        let doc = revised_doc(previous.to_str().unwrap(), name);
+        assert_eq!((doc.kind.as_str(), doc.text.as_str()), ("md", "# Plan\n\nStep two\n"));
+        let changes = doc.changes.unwrap();
+        assert!(changes.starts_with(&format!("--- a/{name}\n+++ b/{name}\n@@ ")), "{changes}");
+        assert!(changes.ends_with("-Step one\n+Step two\n"), "{changes}");
+        assert_eq!(revised_doc(name, name).changes, None, "no changes");
+        fs::remove_dir_all(&dir).unwrap();
+        fs::remove_file(previous.with_file_name(format!("vjuu-plan-{session}.md"))).unwrap();
+        fs::remove_file(previous).unwrap();
     }
 
     #[test]

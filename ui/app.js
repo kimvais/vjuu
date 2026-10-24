@@ -8,6 +8,8 @@ const scroller = $('#scroll');
 /** {docs: [{name, kind, text}], autoclose, session} */
 let req;
 let sideBySide = false;
+/** A document with changes since an earlier version shows them, not the whole document, until toggled. */
+let showChanges = true;
 let focused = null;
 /** key -> {el, a}: every commentable element of the current render. */
 let anchors = new Map();
@@ -60,7 +62,10 @@ async function load() {
   $('#session').textContent = req.session ?? '';
   $('#name').textContent = req.docs.map((x) => x.name).join(', ');
   $('#view').hidden = !hasDiff();
-  const renderers = new Set(req.docs.map((x) => ({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind]).filter(Boolean));
+  $('#changes').hidden = !hasChanges();
+  const renderers = new Set(req.docs
+    .flatMap((x) => [({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind], x.changes && RENDERERS[2]])
+    .filter(Boolean));
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
   if (req.settings) openSettings();
@@ -153,7 +158,8 @@ async function openHelp() {
 $('#settings-open').onclick = openSettings;
 $('#themes-open').onclick = () => post({ type: 'themes' });
 
-const hasDiff = () => req.docs.some((x) => x.kind === 'diff');
+const hasChanges = () => req.docs.some((x) => x.changes);
+const hasDiff = () => req.docs.some((x) => x.kind === 'diff') || hasChanges();
 
 function render() {
   anchors = new Map();
@@ -164,7 +170,9 @@ function render() {
     const section = document.createElement('section');
     section.className = 'doc';
     content.append(section);
-    if (doc.kind === 'diff') {
+    if (doc.changes && showChanges) {
+      renderDiff(section, { ...doc, text: doc.changes }, i);
+    } else if (doc.kind === 'diff') {
       renderDiff(section, doc, i);
     } else if (doc.kind === 'code') {
       renderCode(section, doc, i);
@@ -934,6 +942,8 @@ function onKey(e) {
     if (el) startComment(el);
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
+  } else if (e.key === 'd' && hasChanges()) {
+    toggleChanges();
   } else if (e.key === 'f') {
     filesHidden = !filesHidden;
     renderFileList();
@@ -950,9 +960,16 @@ function toggleView() {
   render();
 }
 
+function toggleChanges() {
+  showChanges = !showChanges;
+  $('#changes').textContent = showChanges ? 'Full file' : 'Changes';
+  render();
+}
+
 // The compiled theme follows the OS by itself; framed pages copy its colours, so they need telling.
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => frameDocs().forEach(syncFrameTheme));
 $('#view').onclick = toggleView;
+$('#changes').onclick = toggleChanges;
 $('#done').onclick = done;
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
 

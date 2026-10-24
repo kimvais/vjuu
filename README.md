@@ -76,6 +76,7 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `vjuu site/index.html` | HTML page or claude.ai artifact, rendered as it looks once loaded; `file://` URLs work too |
 | `vjuu src/main.rs` | any other file: line-numbered, syntax-highlighted source |
 | `vjuu --git main...HEAD` | runs `git diff main...HEAD` in the current directory |
+| `vjuu --previous old.md plan.md` | a file as its changes since an earlier copy; `d` shows it in full |
 | `git show HEAD \| vjuu -` | stdin; diff or markdown is detected |
 | `vjuu --session "fix login" plan.md` | name the asking session in the title bar (automatic under Claude Code) |
 | `vjuu last` | print the most recent review again |
@@ -122,6 +123,7 @@ notification when the tray is on.
 | `Esc` | Cancel the comment being written; close the settings or the help |
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
+| `d` | A revised plan (or `--previous`): toggle its changes / the full file |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+,` (`⌘,` on macOS) | Settings |
 | `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
@@ -184,6 +186,7 @@ The first vjuu window after a fresh install opens on the settings panel, where y
 
 **Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Submit & continue**, and
 Claude revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back once more.
+A revised plan opens as its changes since the version you last saw; press `d` for the full plan.
 Click **Submit & continue** without comments, or close the window, and Claude Code's own approval prompt follows as usual. That
 prompt is where you choose how Claude continues.
 

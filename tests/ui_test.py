@@ -160,6 +160,30 @@ def test_markdown(page, url, work):
     assert loaded == ['"Inter"', '"JetBrains Mono"'] or loaded == ['Inter', 'JetBrains Mono'], loaded
 
 
+_CHANGES = '--- a/plan.md\n+++ b/plan.md\n@@ -1,4 +1,4 @@\n # Title\n \n-Only paragraph\n+First paragraph\n spans two lines.\n'
+
+
+def test_revised_file(page, url, work):
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD, 'changes': _CHANGES})
+    # A revision opens on its changes; a comment there is on the file's line.
+    assert page.locator('article.markdown').count() == 0 and page.inner_text('#changes') == 'Full file'
+    page.locator('tr', has=page.locator('.d2h-ins')).first.click()
+    _comment(page, 'better')
+    assert _review(page)['comments'] == [
+        {'file': 'plan.md', 'start': 3, 'end': 3, 'old': False, 'quote': '+First paragraph', 'text': 'better'}
+    ]
+    page.keyboard.press('d')
+    assert page.locator('.d2h-file-wrapper').count() == 0 and page.locator('article.markdown h1').count() == 1
+    assert page.inner_text('#changes') == 'Changes'
+    page.keyboard.press('d')
+    assert page.locator('.d2h-file-wrapper').count() == 1 and page.locator('#orphans').count() == 0
+    # Without an earlier version there is nothing to toggle.
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+    assert page.locator('#changes').is_hidden()
+    page.keyboard.press('d')
+    assert page.locator('article.markdown').count() == 1
+
+
 def test_highlighting_and_themes(page, url, work):
     _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     # Fenced ```py block is highlighted; `print` is a built-in.
@@ -706,6 +730,7 @@ def main():
         for test in (
             test_diff,
             test_markdown,
+            test_revised_file,
             test_highlighting_and_themes,
             test_session_name,
             test_multiple_documents,
