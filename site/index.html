@@ -258,7 +258,7 @@
     @media (min-width: 1160px) {
       .arrows { margin: 0 -60px; padding: 0; }
     }
-    .arrows button {
+    .arrows button, .strip-nav button {
       width: 44px;
       height: 44px;
       padding: 0;
@@ -272,7 +272,33 @@
       pointer-events: auto;
       transition: background-color var(--dur-wipe) var(--glide);
     }
-    .arrows button:hover { background: rgba(0, 0, 0, 0.85); }
+    .arrows button:hover, .strip-nav button:hover { background: rgba(0, 0, 0, 0.85); }
+
+    /* Themes: a strip of thumbnails, four at a time (two on a phone), that scrolls sideways. */
+    .themes { padding-top: 0; }
+    .strip {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: calc((100% - 3 * 16px) / 4);
+      gap: 16px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+    }
+    @media (max-width: 720px) {
+      .strip { grid-auto-columns: calc((100% - 16px) / 2); }
+    }
+    .strip figure { margin: 0; scroll-snap-align: start; }
+    .strip img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+    }
+    .strip figcaption { margin-top: 10px; color: var(--ink-dim); font-size: 15px; }
+    .strip-nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
     .dots { display: flex; gap: 4px; margin: 8px 0 0 -10px; }
     .dots button {
       width: 28px;
@@ -485,6 +511,31 @@ Add a test for this one.</pre>
       </div>
     </section>
 
+    <section class="how themes" id="themes" aria-labelledby="themes-title">
+      <div class="column">
+        <p class="eyebrow">Themes</p>
+        <h2 id="themes-title">Fifteen themes, or your own.</h2>
+        <p class="lede">GitHub, GitLab, Solarized, Gruvbox and Catppuccin, each light and dark, plus Graphite, Dracula, One Dark, Nord and Tokyo Night. Auto follows the system. A theme is a CSS file of colours: copy one, change it, and it shows up in the settings.</p>
+        <div class="strip" role="group" aria-label="Themes" tabindex="0">
+          <figure><a href="img/themes/light.jpg"><img src="img/themes/light.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the GitHub Light theme"></a><figcaption>GitHub Light</figcaption></figure>
+          <figure><a href="img/themes/github-dark.jpg"><img src="img/themes/github-dark.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the GitHub Dark theme"></a><figcaption>GitHub Dark</figcaption></figure>
+          <figure><a href="img/themes/graphite.jpg"><img src="img/themes/graphite.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Graphite theme"></a><figcaption>Graphite</figcaption></figure>
+          <figure><a href="img/themes/gitlab-light.jpg"><img src="img/themes/gitlab-light.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the GitLab Light theme"></a><figcaption>GitLab Light</figcaption></figure>
+          <figure><a href="img/themes/gitlab-dark.jpg"><img src="img/themes/gitlab-dark.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the GitLab Dark theme"></a><figcaption>GitLab Dark</figcaption></figure>
+          <figure><a href="img/themes/solarized-light.jpg"><img src="img/themes/solarized-light.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Solarized Light theme"></a><figcaption>Solarized Light</figcaption></figure>
+          <figure><a href="img/themes/solarized-dark.jpg"><img src="img/themes/solarized-dark.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Solarized Dark theme"></a><figcaption>Solarized Dark</figcaption></figure>
+          <figure><a href="img/themes/gruvbox-light.jpg"><img src="img/themes/gruvbox-light.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Gruvbox Light theme"></a><figcaption>Gruvbox Light</figcaption></figure>
+          <figure><a href="img/themes/gruvbox-dark.jpg"><img src="img/themes/gruvbox-dark.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Gruvbox Dark theme"></a><figcaption>Gruvbox Dark</figcaption></figure>
+          <figure><a href="img/themes/catppuccin-latte.jpg"><img src="img/themes/catppuccin-latte.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Catppuccin Latte theme"></a><figcaption>Catppuccin Latte</figcaption></figure>
+          <figure><a href="img/themes/catppuccin-mocha.jpg"><img src="img/themes/catppuccin-mocha.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Catppuccin Mocha theme"></a><figcaption>Catppuccin Mocha</figcaption></figure>
+          <figure><a href="img/themes/dracula.jpg"><img src="img/themes/dracula.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Dracula theme"></a><figcaption>Dracula</figcaption></figure>
+          <figure><a href="img/themes/one-dark.jpg"><img src="img/themes/one-dark.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the One Dark theme"></a><figcaption>One Dark</figcaption></figure>
+          <figure><a href="img/themes/nord.jpg"><img src="img/themes/nord.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Nord theme"></a><figcaption>Nord</figcaption></figure>
+          <figure><a href="img/themes/tokyo-night.jpg"><img src="img/themes/tokyo-night.jpg" width="1280" height="800" loading="lazy" alt="vjuu in the Tokyo Night theme"></a><figcaption>Tokyo Night</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
     <section class="install" id="install" aria-labelledby="install-title">
       <div class="column">
         <p class="eyebrow">Install</p>
@@ -628,6 +679,22 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
           if (!held && (!shots[current].contains(demo) || demo.ended)) show((current + 1) % shots.length);
         }, 5000);
       }
+    }
+
+    // Arrows for the theme strip, a page of thumbnails per click. Without script the strip still scrolls sideways.
+    {
+      const strip = document.querySelector('.strip');
+      const nav = document.createElement('div');
+      nav.className = 'strip-nav';
+      for (const [label, glyph, step] of [['Previous themes', '‹', -1], ['Next themes', '›', 1]]) {
+        const arrow = document.createElement('button');
+        arrow.type = 'button';
+        arrow.setAttribute('aria-label', label);
+        arrow.textContent = glyph;
+        arrow.onclick = () => strip.scrollBy({ left: step * strip.clientWidth });
+        nav.append(arrow);
+      }
+      strip.after(nav);
     }
 
     // A Copy button on every install command that works today. Added here so the markup stays plain <pre> blocks.

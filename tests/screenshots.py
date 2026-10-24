@@ -36,6 +36,52 @@ The first `vjuu` opens its own window. Every later call should appear at once.
 
 Tabs, persistent history and remote review.
 """
+# Every shipped theme, by file name, with the name the site and the README show; also their order there.
+_THEMES = {
+    'light': 'GitHub Light',
+    'github-dark': 'GitHub Dark',
+    'graphite': 'Graphite',
+    'gitlab-light': 'GitLab Light',
+    'gitlab-dark': 'GitLab Dark',
+    'solarized-light': 'Solarized Light',
+    'solarized-dark': 'Solarized Dark',
+    'gruvbox-light': 'Gruvbox Light',
+    'gruvbox-dark': 'Gruvbox Dark',
+    'catppuccin-latte': 'Catppuccin Latte',
+    'catppuccin-mocha': 'Catppuccin Mocha',
+    'dracula': 'Dracula',
+    'one-dark': 'One Dark',
+    'nord': 'Nord',
+    'tokyo-night': 'Tokyo Night',
+}
+_THEME_PLAN = """# Plan: pipe timeout
+
+Give the resident instance's pipe a timeout, so a stale one cannot block the next call.
+
+```choice
+Which timeout?
+1. An hour: as the hooks
+2. A minute: fail fast
+```
+"""
+_THEME_DIFF = """diff --git a/src/pipe.rs b/src/pipe.rs
+--- a/src/pipe.rs
++++ b/src/pipe.rs
+@@ -1,4 +1,6 @@
+ /// Opens the resident instance's pipe.
+-pub fn open(name: &str) -> io::Result<Pipe> {
+-    Pipe::connect(name)
++pub fn open(name: &str, timeout: u64) -> io::Result<Pipe> {
++    let pipe = Pipe::connect(name)?; // "vjuu"
++    pipe.set_timeout(Duration::from_secs(timeout))?;
++    Ok(pipe)
+ }
+"""
+_SHEET = """<!doctype html><meta charset="utf-8"><style>
+body {{ margin: 0; padding: 24px; background: #1f2328; font: 600 20px system-ui, sans-serif; color: #fff; }}
+main {{ display: grid; grid-template-columns: repeat(3, 600px); gap: 24px; }}
+figure {{ margin: 0; }} figcaption {{ margin: 0 0 8px; }} img {{ display: block; width: 600px; border-radius: 6px; }}
+</style><main>{}</main>"""
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -54,6 +100,46 @@ def _shoot(page, url, work, *docs):
     page.wait_for_selector('[data-key]')
     page.evaluate('document.fonts.ready')
     return page
+
+
+def _themes(browser, url, work):
+    """Renders one shot per shipped theme for the site's thumbnails, and tiles them into one sheet for the README."""
+    shipped = {css.stem for css in (_ROOT / 'themes').glob('*.css')}
+    if shipped != _THEMES.keys():
+        raise ValueError(f'Themes without a shot, or shots without a theme: `{shipped ^ _THEMES.keys()}`!')
+    out = _IMG / 'themes'
+    out.mkdir(exist_ok=True)
+    sheet = work / 'sheet'
+    sheet.mkdir()
+    for name in _THEMES:
+        # A page of its own per theme: one page would keep the first theme.css in its cache.
+        page = browser.new_page(viewport={'width': 1280, 'height': 800})
+        page.add_init_script(_STUB)
+        shutil.copy(_ROOT / 'themes' / f'{name}.css', work / 'theme.css')
+        _shoot(
+            page,
+            url,
+            work,
+            {'name': 'docs/plan.md', 'kind': 'md', 'text': _THEME_PLAN},
+            {'name': 'git diff', 'kind': 'diff', 'text': _THEME_DIFF},
+        )
+        page.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
+        page.get_by_text('Give the resident').click()
+        _comment(page, 'Which timeout do the hooks use?')
+        page.keyboard.press('1')
+        page.mouse.click(5, 5)
+        page.screenshot(path=out / f'{name}.jpg', quality=85)
+        shutil.copy(out / f'{name}.jpg', sheet)
+        page.close()
+    page = browser.new_page(viewport={'width': 1280, 'height': 800})
+    tiles = ''.join(
+        f'<figure><figcaption>{label}</figcaption><img src="{n}.jpg"></figure>' for n, label in _THEMES.items()
+    )
+    (sheet / 'index.html').write_text(_SHEET.format(tiles), encoding='utf-8')
+    page.goto(f'{url}sheet/')
+    page.wait_for_load_state('load')
+    page.screenshot(path=_IMG / 'themes.jpg', full_page=True, quality=85)
+    page.close()
 
 
 def main():
@@ -105,6 +191,7 @@ def main():
         _comment(light, 'Does this hold on a second monitor with a different DPI?')
         light.mouse.click(5, 5)
         light.screenshot(path=_IMG / 'light.png')
+        _themes(browser, url, work)
         browser.close()
         server.shutdown()
 

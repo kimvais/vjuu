@@ -136,6 +136,8 @@ neutral dark grey), GitHub Dark, GitLab Light and Dark, Dracula, One Dark, Nord,
 Catppuccin (each light and dark), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
 another while it is dark, and the dark one when the system does not say. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
 
+![vjuu in each shipped theme](site/img/themes.jpg)
+
 ## Output
 
 ```
