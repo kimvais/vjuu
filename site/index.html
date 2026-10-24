@@ -221,6 +221,13 @@
       justify-content: space-between;
       padding: 0 12px;
       pointer-events: none;
+      /* Above the video, which the browser may draw on a layer of its own. */
+      position: relative;
+      z-index: 1;
+    }
+    /* With room beside the column, the arrows sit there instead of over the slide. */
+    @media (min-width: 1160px) {
+      .arrows { margin: 0 -60px; padding: 0; }
     }
     .arrows button {
       width: 44px;
