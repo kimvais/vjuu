@@ -26,7 +26,7 @@ use platform::{bring_to_front, pipe_name};
 use review::Review;
 
 const HELP: &str = "\
-vjuu: a review window for agent handoffs. Comment on lines, click Done, and the review comes back on stdout.
+vjuu: a review window for agent handoffs. Comment on lines, click Submit & continue, and the review comes back on stdout.
 
 Usage:
   vjuu <file>...                 Review files in one window: markdown, a diff or patch, an HTML page
@@ -1181,10 +1181,13 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/vendor/jetbrains-mono.woff2" => {
             (Cow::Borrowed(include_bytes!("../ui/vendor/jetbrains-mono.woff2")), "font/woff2")
         }
+        "/logo.svg" => (Cow::Borrowed(include_bytes!("../assets/icons/vjuu.svg")), "image/svg+xml"),
         // Read when the panel opens, so a change made with `vjuu config` meanwhile shows; with the themes to pick from.
+        // The help reads the version from here too.
         "/config.json" => {
             let mut config = serde_json::to_value(config::load()).expect("Config serialises");
             config["themes"] = serde_json::to_value(theme::list()).expect("themes serialise");
+            config["version"] = env!("CARGO_PKG_VERSION").into();
             (Cow::Owned(config.to_string().into_bytes()), "application/json")
         }
         "/theme.css" => (Cow::Owned(theme::compiled()), "text/css"),

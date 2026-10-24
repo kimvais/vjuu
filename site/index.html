@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://vjuu.it/">
   <meta property="og:site_name" content="vjuu">
   <meta property="og:title" content="vjuu: a review window for Claude Code and Codex">
-  <meta property="og:description" content="Don't open the file. Your agent already did. Comment on lines, click Done, and your comments go back to the agent.">
+  <meta property="og:description" content="Don't open the file. Your agent already did. Comment on lines, click Submit &amp; continue, and your comments go back to the agent.">
   <!-- The top 2:1 of diff.png, 1280x640, the same image as the GitHub repository's social preview. -->
   <meta property="og:image" content="https://vjuu.it/img/social.jpg">
   <meta property="og:image:width" content="1280">
@@ -67,7 +67,7 @@
       --tok-flag: #fd971f;
       --tok-str: #e6db74;
       --tok-op: #f92672;
-      /* vjuu's brand colour (Monokai green), as in the app's logo and Done button. */
+      /* vjuu's brand colour (Monokai green), as in the app's logo and Submit &amp; continue button. */
       --brand: #a6e22e;
 
       --font: "Inter", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -408,7 +408,7 @@
         <!-- Finnish: "rallienglanti", English as Finnish rally drivers speak it. -->
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Don't open the file. <span>Your agent already did.</span></h1>
-        <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Done, and your comments go straight back to the agent.</p>
+        <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Submit &amp; continue, and your comments go straight back to the agent.</p>
         <div class="shots" role="group" aria-label="Demo and screenshots">
           <figure class="shot">
             <video src="img/demo.mp4" poster="img/demo.jpg" width="1920" height="1008" autoplay muted loop playsinline aria-label="A Claude Code session in plan mode. Its question opens in vjuu and is answered with a click; the plan opens in vjuu and gets a comment, and Claude revises it; after the code is written, the diff opens in vjuu, a comment asks for a docstring, and Claude adds it."></video>

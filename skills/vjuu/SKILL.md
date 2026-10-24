@@ -6,7 +6,7 @@ description: Use whenever you would ask the user to open, read, look over or rev
 # vjuu
 
 `vjuu` shows a markdown file or a diff in a window where the user leaves line comments. It blocks
-until they click Done, then prints the review as markdown on stdout. Use it instead of saying "open X
+until they click Submit & continue, then prints the review as markdown on stdout. Use it instead of saying "open X
 and review it" or pasting long content into chat for review.
 
 ## Replies longer than 20 lines

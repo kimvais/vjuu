@@ -22,6 +22,7 @@ _CONFIG = {
     'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False},
     'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     'themes': [{'name': 'graphite', 'scheme': 'dark'}, {'name': 'light', 'scheme': 'light'}],
+    'version': '9.9.9',
 }
 _WHITE, _GRAPHITE = 'rgb(255, 255, 255)', 'rgb(30, 30, 30)'
 _DIFF = """diff --git a/src/app.py b/src/app.py
@@ -357,7 +358,7 @@ def test_keyboard_navigation(page, url, work):
     got = sorted((c['file'], c['start'], c['text']) for c in _review(page)['comments'])
     assert got == [('a.md', 3, 'on the paragraph'), ('src/app.py', 2, 'on the diff')], got
     assert page.evaluate('window.__msgs.at(-1).type') == 'state'
-    page.keyboard.press('Control+Enter')  # outside a comment: Done
+    page.keyboard.press('Control+Enter')  # outside a comment: Submit & continue
     assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done'}
 
 
@@ -365,7 +366,7 @@ def test_unsaved_comment_is_kept(page, url, work):
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
     page.get_by_text('First paragraph').click()
     page.keyboard.type('half-written')
-    # Done (or closing the window) while still typing must not drop the text.
+    # Submit & continue (or closing the window) while still typing must not drop the text.
     page.keyboard.press('Control+Shift+Enter')
     assert [c['text'] for c in _review(page)['comments']] == ['half-written']
     # Editing a saved comment and finishing without saving sends the edited text.
@@ -637,8 +638,8 @@ def test_settings(page, url, work):
     ]
     assert checked() == [True, False, True, False, True, False]
     # Review keys do nothing while it is open.
-    page.keyboard.press('Control+Enter')
-    assert msgs('done') == []
+    page.keyboard.press('j')
+    assert page.locator('.focused').count() == 0
     # Nothing is saved until Apply; Esc throws the change away.
     page.click('#settings [name=turn]')
     assert msgs('settings') == []
@@ -649,7 +650,7 @@ def test_settings(page, url, work):
     page.wait_for_selector('#settings[open]')
     assert checked() == [True, False, True, False, True, False]
     page.click('#settings [name=turn]')
-    page.click('#settings-apply')
+    page.keyboard.press('Control+Enter')  # Apply, and not on to Submit & continue
     assert msgs('settings')[-1]['config'] == {
         'tray': True,
         'focus': False,
@@ -669,12 +670,32 @@ def test_settings(page, url, work):
     assert len(msgs('done')) == 1
 
 
+def test_help(page, url, work):
+    (work / 'config.json').write_text(json.dumps(_CONFIG))
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+    page.get_by_text('First paragraph').click()
+    # F1 works while typing a comment too, and the review keys wait until the help closes.
+    page.keyboard.press('F1')
+    page.wait_for_selector('#help[open]')
+    assert page.inner_text('#version') == _CONFIG['version']
+    assert page.evaluate("document.querySelector('#help img').naturalWidth") > 0
+    page.keyboard.press('s')
+    assert not page.is_visible('#settings')
+    page.keyboard.press('Escape')
+    assert not page.is_visible('#help')
+    # The help lists every key the README does.
+    readme = (_UI.parent / 'README.md').read_text(encoding='utf-8')
+    keys = readme.split('## Keys')[1].split('\n\n')[1]
+    assert keys.count('\n| ') == page.locator('#help tr').count(), keys
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
         shutil.copytree(_UI, work)
         # What vjuu serves at /themes/<name>.css is the theme's declarations; the files themselves do the same here.
         shutil.copytree(_THEMES, work / 'themes')
+        shutil.copy(_UI.parent / 'assets' / 'icons' / 'vjuu.svg', work / 'logo.svg')
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
@@ -699,6 +720,7 @@ def main():
             test_choices,
             test_choice_keys,
             test_settings,
+            test_help,
         ):
             if only and test.__name__ not in only:
                 continue
