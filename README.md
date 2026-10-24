@@ -18,6 +18,7 @@ vjuu --session "fix login" plan.md  # name the asking session in the title bar (
 vjuu last                    # print the most recent review again
 vjuu stop                    # stop the resident instance (before upgrading the exe)
 vjuu setup                   # install the skill for Claude Code and Codex
+vjuu hook plan               # Claude Code hook: review a plan before approving it (see below)
 ```
 
 `vjuu` blocks until you click **Done** or close the window. Every review is also saved to
@@ -96,6 +97,27 @@ Snapshot (recommended)
 ```
 
 An unanswered choice reads `No answer.`
+
+## Plan review
+
+When Claude Code finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Done**, and Claude
+gets your comments, revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back
+once more; click **Done** again without comments to go on. Click **Done** without comments, or close the window, and Claude
+Code's own approval prompt follows as usual. That prompt is where you choose how Claude continues.
+
+The vjuu plugin turns this on itself. With `vjuu setup` instead, add the hook to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "ExitPlanMode", "hooks": [{ "type": "command", "command": "vjuu hook plan", "timeout": 3600 }] }
+    ]
+  }
+}
+```
+
+After an hour the hook gives up and the normal prompt appears.
 
 ## Install
 
