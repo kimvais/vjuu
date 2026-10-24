@@ -6,6 +6,7 @@ mod tray;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -34,6 +35,7 @@ Usage:
   vjuu -                         Review stdin: a diff or markdown
   vjuu --git [<git diff args>]   Review `git diff` in the current directory
   vjuu --previous <old> <file>   Review a file as its changes since an earlier copy; d shows it in full
+  vjuu --comments <json> ...     Show the comments kept in <json> by the last review, and keep this one's there
   vjuu --session <name> ...      Name the asking session in the title bar (automatic under Claude Code)
   vjuu last                      Print the most recent review again
 
@@ -84,6 +86,12 @@ struct Request {
     /// The documents are only a sample behind the settings panel: closing the panel closes the window, unreviewed.
     #[serde(default)]
     sample: bool,
+    /// Where this review's comments are kept for the next round, as JSON.
+    #[serde(default)]
+    comments: Option<PathBuf>,
+    /// The comments kept there by the round before, shown beside this one's but not sent again.
+    #[serde(default)]
+    earlier: Vec<review::Comment>,
 }
 
 impl Request {
@@ -170,6 +178,9 @@ fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
     // Only as the first argument, so it never eats a `--git` argument.
     let session = (args.len() > 1 && args[0] == "--session").then(|| args.drain(..2).nth(1).expect("checked length"));
+    // Next, likewise.
+    let comments = (args.len() > 1 && args[0] == "--comments")
+        .then(|| PathBuf::from(args.drain(..2).nth(1).expect("checked length")));
     let mut request = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["-h" | "--help"] => {
             println!("{HELP}");
@@ -230,6 +241,13 @@ fn main() {
         }
     };
     request.session = session.or_else(claude_session_title);
+    if let Some(path) = comments {
+        // No file yet, or one vjuu cannot read, is a first round: no earlier comments.
+        request.earlier =
+            fs::read(&path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
+        // The resident instance writes it, from its own directory.
+        request.comments = Some(std::path::absolute(&path).unwrap_or(path));
+    }
     // A fresh install opens on the settings panel once; later windows pay only for checking that the file exists.
     if !request.settings && !config::path().exists() && config::save(&config::Config::default()).is_ok() {
         request.settings = true;
@@ -283,18 +301,33 @@ fn hook_plan() -> ! {
     let Some(plan) = event["tool_input"]["planFilePath"].as_str().filter(|p| Path::new(p).is_file()) else {
         process::exit(0)
     };
-    let previous = previous_plan(Path::new(plan), event["session_id"].as_str().unwrap_or("none"));
-    if let Some(decision) = plan_decision(&review_in_child(&event, Path::new(plan), previous.as_deref())) {
+    let dir = session_dir(event["session_id"].as_str().unwrap_or_default());
+    let comments = dir.join("comments.json");
+    let mut args = vec![OsStr::new("--comments"), comments.as_os_str()];
+    let previous = previous_plan(Path::new(plan), &dir);
+    if let Some(previous) = &previous {
+        args.extend([OsStr::new("--previous"), previous.as_os_str()]);
+    }
+    args.push(OsStr::new(plan));
+    if let Some(decision) = plan_decision(&review_in_child(&event, &args)) {
         println!("{decision}");
     }
     process::exit(0)
 }
 
+/// Returns where vjuu keeps a Claude Code session's plan and comments between rounds of review.
+fn session_dir(session: &str) -> PathBuf {
+    // The id comes from the hook's input: it must not climb out of the folder.
+    let id: String = session.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+    platform::data_dir().join("sessions").join("claude").join(if id.is_empty() { "none" } else { &id })
+}
+
 /// Keeps a copy of the plan as the session last saw it, and returns a copy of that earlier version when the plan has
 /// changed since, so a revision opens as a diff against it.
-fn previous_plan(plan: &Path, session: &str) -> Option<PathBuf> {
-    let shown = env::temp_dir().join(format!("vjuu-plan-{session}.md"));
-    let previous = env::temp_dir().join(format!("vjuu-plan-{session}.previous.md"));
+fn previous_plan(plan: &Path, dir: &Path) -> Option<PathBuf> {
+    let shown = dir.join("plan.md");
+    let previous = dir.join("plan.previous.md");
+    fs::create_dir_all(dir).ok()?;
     let current = fs::read(plan).ok()?;
     let before = fs::read(&shown).ok().filter(|before| *before != current);
     let _ = fs::write(&shown, &current);
@@ -319,7 +352,7 @@ fn hook_turn() -> ! {
     if diff.is_empty() || reviewed || fs::write(&path, diff).is_err() {
         process::exit(0)
     }
-    if let Some(feedback) = turn_feedback(&review_in_child(&event, &path, None)) {
+    if let Some(feedback) = turn_feedback(&review_in_child(&event, &[path.as_os_str()])) {
         println!("{feedback}");
     }
     process::exit(0)
@@ -344,7 +377,7 @@ fn hook_ask() -> ! {
     if fs::write(&path, md).is_err() {
         process::exit(0)
     }
-    if let Some(decision) = ask_decision(&event["tool_input"], &review_in_child(&event, &path, None)) {
+    if let Some(decision) = ask_decision(&event["tool_input"], &review_in_child(&event, &[path.as_os_str()])) {
         println!("{decision}");
     }
     process::exit(0)
@@ -471,7 +504,7 @@ fn hook_permission() -> ! {
     if fs::write(&path, permission_markdown(&event)).is_err() {
         process::exit(0)
     }
-    if let Some(decision) = permission_decision(&event, &review_in_child(&event, &path, None)) {
+    if let Some(decision) = permission_decision(&event, &review_in_child(&event, &[path.as_os_str()])) {
         println!("{decision}");
     }
     process::exit(0)
@@ -558,18 +591,14 @@ fn hook_event() -> serde_json::Value {
     serde_json::from_str(&input).unwrap_or_default()
 }
 
-/// Runs vjuu on `path`, as its changes since `previous` when given, as a child titled with the hook session's name,
-/// and returns the review it prints.
-fn review_in_child(event: &serde_json::Value, path: &Path, previous: Option<&Path>) -> String {
+/// Runs vjuu with `args` as a child titled with the hook session's name, and returns the review it prints.
+fn review_in_child(event: &serde_json::Value, args: &[&OsStr]) -> String {
     let Ok(exe) = env::current_exe() else { return String::new() };
     let mut vjuu = Command::new(exe);
     if let Some(title) = event["session_id"].as_str().and_then(session_title) {
         vjuu.args(["--session", &title]);
     }
-    if let Some(previous) = previous {
-        vjuu.arg("--previous").arg(previous);
-    }
-    let out = vjuu.arg(path).stdin(process::Stdio::null()).output();
+    let out = vjuu.args(args).stdin(process::Stdio::null()).output();
     out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default()
 }
 
@@ -718,7 +747,16 @@ fn plan_decision(review: &str) -> Option<String> {
 
 fn request(docs: Vec<Doc>) -> Request {
     let autoclose = env::var_os("VJUU_AUTOCLOSE").is_some();
-    Request { docs, autoclose, session: None, cwd: env::current_dir().ok(), settings: false, sample: false }
+    Request {
+        docs,
+        autoclose,
+        session: None,
+        cwd: env::current_dir().ok(),
+        settings: false,
+        sample: false,
+        comments: None,
+        earlier: Vec::new(),
+    }
 }
 
 /// Returns a window for the settings panel alone, with vjuu's README and a sample diff behind it, so a theme preview
@@ -1233,10 +1271,16 @@ fn is_vjuu(url: &str) -> bool {
 /// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
 fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
     let Some(s) = sessions.remove(&id) else { return };
-    let (name, only_settings) = match s.slot.lock().expect("slot lock").as_ref() {
-        Some(r) => (r.name(), r.sample),
-        None => (String::new(), false),
+    let (name, only_settings, keep) = match s.slot.lock().expect("slot lock").as_ref() {
+        Some(r) => (r.name(), r.sample, r.comments.clone()),
+        None => (String::new(), false, None),
     };
+    if save && let Some(path) = keep {
+        let json = serde_json::to_vec(&s.latest.comments).expect("comments serialise");
+        if let Err(e) = fs::write(&path, json) {
+            eprintln!("Could not keep the comments in {}: {e}", path.display());
+        }
+    }
     let md = match (save, only_settings) {
         // Nothing to review: Apply saved the settings, or Esc left them as they were.
         (_, true) if s.applied => "Settings saved.\n".into(),
@@ -1412,8 +1456,8 @@ fn fail(msg: &str) -> ! {
 mod tests {
     use super::{
         SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
-        last_assistant_text, plan_decision, previous_plan, revised_doc, transcript_title, turn_diff, turn_feedback,
-        turn_started, unix_seconds,
+        last_assistant_text, plan_decision, previous_plan, revised_doc, session_dir, transcript_title, turn_diff,
+        turn_feedback, turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
 
@@ -1726,12 +1770,12 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vjuu-revised-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let plan = dir.join("plan.md");
-        let session = format!("test-{}", std::process::id());
+        let kept = dir.join("session");
         fs::write(&plan, "# Plan\n\nStep one\n").unwrap();
-        assert_eq!(previous_plan(&plan, &session), None, "first time: nothing to compare with");
-        assert_eq!(previous_plan(&plan, &session), None, "shown again unchanged");
+        assert_eq!(previous_plan(&plan, &kept), None, "first time: nothing to compare with");
+        assert_eq!(previous_plan(&plan, &kept), None, "shown again unchanged");
         fs::write(&plan, "# Plan\n\nStep two\n").unwrap();
-        let previous = previous_plan(&plan, &session).unwrap();
+        let previous = previous_plan(&plan, &kept).unwrap();
         assert_eq!(fs::read_to_string(&previous).unwrap(), "# Plan\n\nStep one\n");
 
         let name = plan.to_str().unwrap();
@@ -1742,8 +1786,15 @@ mod tests {
         assert!(changes.ends_with("-Step one\n+Step two\n"), "{changes}");
         assert_eq!(revised_doc(name, name).changes, None, "no changes");
         fs::remove_dir_all(&dir).unwrap();
-        fs::remove_file(previous.with_file_name(format!("vjuu-plan-{session}.md"))).unwrap();
-        fs::remove_file(previous).unwrap();
+    }
+
+    #[test]
+    fn session_ids_stay_in_their_folder() {
+        let sessions = session_dir("x").parent().unwrap().to_path_buf();
+        assert_eq!(session_dir("0b1c-9f"), sessions.join("0b1c-9f"));
+        for id in ["../../evil", "..\\..", ""] {
+            assert_eq!(session_dir(id).parent().unwrap(), sessions, "{id}");
+        }
     }
 
     #[test]

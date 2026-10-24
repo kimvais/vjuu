@@ -177,6 +177,29 @@ def test_revised_file(page, url, work):
     assert page.inner_text('#changes') == 'Changes'
     page.keyboard.press('d')
     assert page.locator('.d2h-file-wrapper').count() == 1 and page.locator('#orphans').count() == 0
+
+    # The last review's comments: on the line of the earlier version they were on, if the changes show it.
+    earlier = [
+        {'file': 'plan.md', 'start': 3, 'end': 3, 'old': False, 'quote': 'Only paragraph', 'text': 'say more'},
+        {'file': 'plan.md', 'start': 40, 'end': 41, 'old': False, 'quote': 'Far away', 'text': 'not shown here'},
+        {'file': 'plan.md', 'start': 3, 'end': 3, 'old': True, 'quote': '-Older', 'text': 'two rounds ago'},
+    ]
+    doc = {'name': 'plan.md', 'kind': 'md', 'text': _MD, 'changes': _CHANGES}
+    (work / 'doc.json').write_text(json.dumps({'docs': [doc], 'earlier': earlier}))
+    page.goto(url)
+    page.wait_for_selector('[data-key]')
+    placed = page.locator('tr.vjuu-c', has_text='say more')
+    assert placed.evaluate('r => r.previousElementSibling.dataset.oldLine') == '3'
+    assert page.locator('#earlier .comment .text').all_inner_texts() == ['not shown here', 'two rounds ago']
+    # Read-only, and not part of this review.
+    placed.click()
+    assert page.locator('.vjuu-c textarea').count() == 0
+    page.locator('tr', has=page.locator('.d2h-ins')).first.click()
+    _comment(page, 'new one')
+    assert [c['text'] for c in _review(page)['comments']] == ['new one']
+    page.keyboard.press('d')  # the full plan has no old line numbers: all of them are listed
+    assert page.locator('#earlier .comment').count() == 3
+
     # Without an earlier version there is nothing to toggle.
     _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     assert page.locator('#changes').is_hidden()
