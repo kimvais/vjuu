@@ -69,7 +69,7 @@ inside a comment edit it.
 
 Themes, picked in the settings (the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
 neutral dark grey), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
-another while it is dark. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
+another while it is dark, and the dark one when the system does not say. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
 
 ## Output
 
@@ -160,7 +160,8 @@ there. vjuu puts `light.css` and `graphite.css` in it, and puts them back if you
 to get a newer shipped version, delete your copy. To make a theme, copy one under a new name and change its colours.
 It shows up in the settings the next time you open them.
 
-vjuu reads only the `color-scheme` (light or dark, which decides where the theme is offered for Auto) and the
+vjuu reads only the `color-scheme` (light or dark, which decides where the theme is offered for Auto; a theme without
+one counts as dark) and the
 `--custom-properties`; any other CSS in the file is ignored, so a theme can recolour everything but not move anything.
 On **Apply** (or `vjuu config theme ...`) vjuu compiles the chosen themes into one `theme.css` next to the reviews, and
 open windows switch to it. A new window loads that file, kept in memory by the resident instance, so a theme costs
