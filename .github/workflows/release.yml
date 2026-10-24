@@ -151,6 +151,37 @@ jobs:
     uses: ./.github/workflows/pages.yml
     secrets: inherit
 
+  screenshots:
+    # Re-renders the site's screenshots from the released ui/ and opens a pull request if any changed. Edge, which
+    # tests/screenshots.py drives, is only on the Windows runners.
+    needs: release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The diff screenshots show an old commit (git show dc6bf53).
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --no-project --with playwright python tests/screenshots.py
+      - name: Open a pull request if they changed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain -- site/img)" ]; then echo "Screenshots unchanged"; exit 0; fi
+          branch="screenshots-${GITHUB_REF_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add site/img
+          git commit -m "Update screenshots for ${GITHUB_REF_NAME}"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "Update screenshots for ${GITHUB_REF_NAME}" \
+            --body "Re-rendered by tests/screenshots.py from the ${GITHUB_REF_NAME} UI. Check the images, then merge to redeploy vjuu.it. Also upload site/img/social.jpg as the repository's social preview (Settings > Social preview) if it changed."
+
   winget:
     # winget install vjuu: opens a pull request to microsoft/winget-pkgs. Works once the first version has been
     # merged there (see packaging/winget/README.md).

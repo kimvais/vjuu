@@ -258,7 +258,8 @@ still switch them:
 - `tests/keyboard_focus.ps1 -HomeHwnd <hwnd>`: manual check that a freshly opened window takes keyboard focus from
   another app (cold and resident). It types real keys, so run it by hand.
 - `site/` is vjuu.it, deployed with the apt repository by `.github/workflows/pages.yml`.
-  `uv run --no-project --with playwright python tests/screenshots.py` re-renders its screenshots.
+  `uv run --no-project --with playwright python tests/screenshots.py` re-renders its screenshots (not the demo video,
+  which is a real recording). Each release does this too and opens a pull request when an image changed.
 - `VJUU_AUTOCLOSE=1 vjuu <file>` exits as soon as the page has rendered and prints the time to
   stderr, for startup measurements.
 

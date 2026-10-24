@@ -91,6 +91,10 @@ def main():
         _comment(page, 'Does this hold on a second monitor with a different DPI?')
         page.mouse.click(5, 5)
         page.screenshot(path=_IMG / 'diff.png')
+        # The link preview (og:image, GitHub's social preview): the top 2:1 of the same view, 1280x640.
+        page.screenshot(
+            path=_IMG / 'social.jpg', clip={'x': 0, 'y': 0, 'width': 1280, 'height': 640}, scale='css', quality=90
+        )
 
         light = browser.new_page(viewport={'width': 1280, 'height': 800}, device_scale_factor=2)
         light.add_init_script(_STUB)
