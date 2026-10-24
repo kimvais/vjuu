@@ -194,7 +194,7 @@ compiled and tested in CI but not by hand, and are not signed or notarised.
 
 | | Install |
 |---|---|
-| Windows | `winget install vjuu` |
+| Windows | a `.zip` from [GitHub Releases](https://github.com/kimvais/vjuu/releases), or `cargo` (below). `winget install vjuu` once the [winget package](https://github.com/microsoft/winget-pkgs/pull/459293) is approved by Microsoft |
 | macOS | `brew install kimvais/tap/vjuu` |
 | Debian, Ubuntu | add the apt source below once, then `sudo apt install vjuu` |
 | Anything else | a `.zip`, `.tar.gz` or `.deb` from [GitHub Releases](https://github.com/kimvais/vjuu/releases) |

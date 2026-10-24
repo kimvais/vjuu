@@ -302,6 +302,8 @@
     /* Install: the raised black gives the page its one change of rhythm. */
     .install { padding: var(--section-y) 0; background: var(--black-raised); }
     .install pre { background: var(--black); }
+    /* A command that does not work yet: shown, but greyed out and without a Copy button. */
+    .install pre.pending { opacity: 0.4; }
     /* minmax(0, ...): long commands scroll inside their box instead of widening the page. */
     .platforms { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin: 0; }
     .tok-cmd { color: var(--tok-cmd); }
@@ -461,7 +463,10 @@ Add a test for this one.</pre>
         <dl class="platforms">
           <div>
             <dt><svg class="icon" aria-hidden="true"><use href="#windows"/></svg>Windows</dt>
-            <dd><pre>winget install vjuu</pre></dd>
+            <dd>
+              <pre class="pending">winget install vjuu</pre>
+              <p>Not yet: the <a class="textlink" href="https://github.com/microsoft/winget-pkgs/pull/459293">winget package</a> is waiting for Microsoft's approval. Until then, <a class="textlink" href="#anything-else">install it with cargo or from a <code>.zip</code></a>.</p>
+            </dd>
           </div>
           <div>
             <dt><svg class="icon" aria-hidden="true"><use href="#apple"/></svg>macOS</dt>
@@ -476,7 +481,7 @@ Add a test for this one.</pre>
 echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable main" | sudo tee /etc/apt/sources.list.d/vjuu.list
 sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
           </div>
-          <div>
+          <div id="anything-else">
             <dt><svg class="icon" aria-hidden="true"><use href="#rust"/></svg>Anything else</dt>
             <dd>
               <pre>cargo install --locked --git https://github.com/kimvais/vjuu</pre>
@@ -595,8 +600,8 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
       }
     }
 
-    // A Copy button on every install command. Added here so the markup stays plain <pre> blocks.
-    for (const pre of document.querySelectorAll('.install pre')) {
+    // A Copy button on every install command that works today. Added here so the markup stays plain <pre> blocks.
+    for (const pre of document.querySelectorAll('.install pre:not(.pending)')) {
       highlight(pre);
       const box = document.createElement('div');
       box.className = 'copyable';
