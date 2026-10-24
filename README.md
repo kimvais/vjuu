@@ -16,14 +16,27 @@ your comments come back to the agent as markdown on stdout, anchored to `file:li
 
 Runs on Windows 10/11 (WebView2), Linux (WebKitGTK 4.1: Debian 12+, Ubuntu 22.04+) and macOS (WKWebView). On
 Windows the window is frameless with its own title bar; macOS and Linux keep the native frame. macOS builds are
-compiled and tested in CI but not by hand, and are not signed or notarised.
+compiled and tested in CI but not by hand.
 
-| | Install |
-|---|---|
-| Windows | a `.zip` from [GitHub Releases](https://github.com/kimvais/vjuu/releases), or `cargo` (below). `winget install vjuu` once the [winget package](https://github.com/microsoft/winget-pkgs/pull/459293) is approved by Microsoft |
-| macOS | `brew install kimvais/tap/vjuu` |
-| Debian, Ubuntu | add the apt source below once, then `sudo apt install vjuu` |
-| Anything else | a `.zip`, `.tar.gz` or `.deb` from [GitHub Releases](https://github.com/kimvais/vjuu/releases) |
+### Windows
+
+```
+winget install vjuu
+```
+
+Not yet: the [winget package](https://github.com/microsoft/winget-pkgs/pull/459293) is waiting for Microsoft's
+approval. Until then, use cargo or a `.zip` (below).
+
+### macOS
+
+```
+brew install kimvais/tap/vjuu
+```
+
+Not signed or notarised. Homebrew installs work as is; a binary downloaded by hand needs
+`xattr -d com.apple.quarantine vjuu` once.
+
+### Debian, Ubuntu
 
 ```
 curl -fsSL https://vjuu.it/apt/vjuu.gpg | sudo tee /usr/share/keyrings/vjuu.gpg >/dev/null
@@ -31,14 +44,19 @@ echo "deb [signed-by=/usr/share/keyrings/vjuu.gpg] https://vjuu.it/apt stable ma
 sudo apt update && sudo apt install vjuu
 ```
 
-A macOS binary downloaded by hand needs `xattr -d com.apple.quarantine vjuu` once, since it is not notarised
-(Homebrew installs don't). To build from source you need a Rust toolchain, and on Linux also
-`libwebkit2gtk-4.1-dev` and `libgtk-3-dev`:
+### Anything else
+
 ```
 cargo install --locked vjuu
 ```
 
-Then, however you installed it:
+Or a `.zip`, `.tar.gz` or `.deb` from [GitHub Releases](https://github.com/kimvais/vjuu/releases). Building needs a
+Rust toolchain, and on Linux also `libwebkit2gtk-4.1-dev` and `libgtk-3-dev`.
+
+### Then
+
+However you installed it:
+
 ```
 vjuu setup
 ```
