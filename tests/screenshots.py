@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 
 _ROOT = Path(__file__).resolve().parent.parent
 _IMG = _ROOT / 'site' / 'img'
-_STUB = 'window.ipc = { postMessage: () => {} }; localStorage.setItem("vjuu-theme", "%s");'
+_STUB = 'window.ipc = { postMessage: () => {} };'
 _PLAN = """# Plan: resident window
 
 The first `vjuu` opens its own window. Every later call should appear at once.
@@ -72,7 +72,9 @@ def main():
         url = f'http://127.0.0.1:{server.server_port}/'
         browser = p.chromium.launch(channel='msedge')
         page = browser.new_page(viewport={'width': 1280, 'height': 800}, device_scale_factor=2)
-        page.add_init_script(_STUB % 'graphite')
+        page.add_init_script(_STUB)
+        # vjuu serves the compiled theme as theme.css; a theme file on its own works the same.
+        shutil.copy(_ROOT / 'themes' / 'graphite.css', work / 'theme.css')
 
         _shoot(page, url, work, {'name': 'docs/plan.md', 'kind': 'md', 'text': _PLAN})
         page.get_by_text('Hand each new document').click()
@@ -91,7 +93,8 @@ def main():
         page.screenshot(path=_IMG / 'diff.png')
 
         light = browser.new_page(viewport={'width': 1280, 'height': 800}, device_scale_factor=2)
-        light.add_init_script(_STUB % 'light')
+        light.add_init_script(_STUB)
+        shutil.copy(_ROOT / 'themes' / 'light.css', work / 'theme.css')
         _shoot(light, url, work, {'name': 'git show dc6bf53', 'kind': 'diff', 'text': diff})
         light.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
         light.locator('tr', has=light.locator('.d2h-ins')).nth(6).click()

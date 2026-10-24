@@ -64,7 +64,8 @@ rows) and click **Comment** or press `c`. Links still open, except on HTML pages
 inside a comment edit it.
 
 Themes, picked in the settings (the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
-neutral dark grey). **Auto** picks one from the system's light/dark setting. The choice is remembered.
+neutral dark grey), or any theme of your own. **Auto**, the default, follows the system: one theme while it is light,
+another while it is dark. Picking previews the theme; **Apply** keeps it. See [Themes](#themes) to make your own.
 
 ## Output
 
@@ -142,10 +143,24 @@ Click the gear in the title bar and **Apply** (Esc cancels), or use the terminal
 vjuu config                  # open the settings panel
 vjuu config list             # print the settings and where the file is
 vjuu config turn off         # switch one: plan, ask, turn, permission, or tray; on or off
+vjuu config theme graphite   # a theme, or auto; theme.light and theme.dark set Auto's two picks
 ```
 
 They live in `config.toml` in your config folder: `%APPDATA%\vjuu` on Windows, `~/.config/vjuu` on Linux (or
 `$XDG_CONFIG_HOME/vjuu`), `~/Library/Application Support/vjuu` on macOS. A missing setting counts as on.
+
+### Themes
+
+A theme is a CSS file in the `themes` folder next to `config.toml`; **Open themes folder** in the settings takes you
+there. vjuu puts `light.css` and `graphite.css` in it, and puts them back if you delete them, but never overwrites them:
+to get a newer shipped version, delete your copy. To make a theme, copy one under a new name and change its colours.
+It shows up in the settings the next time you open them.
+
+vjuu reads only the `color-scheme` (light or dark, which decides where the theme is offered for Auto) and the
+`--custom-properties`; any other CSS in the file is ignored, so a theme can recolour everything but not move anything.
+On **Apply** (or `vjuu config theme ...`) vjuu compiles the chosen themes into one `theme.css` next to the reviews, and
+open windows switch to it. A new window loads that file, kept in memory by the resident instance, so a theme costs
+nothing when a window opens. After editing the theme in use, pick it and **Apply** again.
 
 ### Without the plugin
 

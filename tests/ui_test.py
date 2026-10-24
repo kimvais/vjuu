@@ -15,6 +15,14 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 _UI = Path(__file__).resolve().parent.parent / 'ui'
+_THEMES = _UI.parent / 'themes'
+_CONFIG = {
+    'tray': True,
+    'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False},
+    'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
+    'themes': [{'name': 'graphite', 'scheme': 'dark'}, {'name': 'light', 'scheme': 'light'}],
+}
+_WHITE, _GRAPHITE = 'rgb(255, 255, 255)', 'rgb(30, 30, 30)'
 _DIFF = """diff --git a/src/app.py b/src/app.py
 --- a/src/app.py
 +++ b/src/app.py
@@ -55,13 +63,21 @@ def _review(page):
     return review
 
 
+def _background(page):
+    return page.evaluate('getComputedStyle(document.body).backgroundColor')
+
+
 def _set_theme(work, page, name):
-    """Picks a theme in the settings panel and applies it."""
-    (work / 'config.json').write_text(json.dumps({'tray': True, 'hooks': {}}))
+    """Picks a theme in the settings panel and applies it, compiling it the way vjuu would: here, a copy."""
+    (work / 'config.json').write_text(json.dumps(_CONFIG))
     page.click('#settings-open')
     page.wait_for_selector('#settings[open]')
     page.select_option('#theme', name)
     page.click('#settings-apply')
+    shutil.copy(work / 'themes' / f'{name}.css', work / 'theme.css')
+    page.evaluate('vjuuThemeSaved()')
+    background = {'light': _WHITE, 'graphite': _GRAPHITE}[name]
+    page.wait_for_function(f'getComputedStyle(document.body).backgroundColor === "{background}"', timeout=2000)
 
 
 def _comment(page, text):
@@ -140,33 +156,29 @@ def test_highlighting_and_themes(page, url, work):
     _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
     # Fenced ```py block is highlighted; `print` is a built-in.
     assert page.locator('pre code .hljs-built_in').inner_text() == 'print'
-    theme = lambda: page.evaluate('[document.documentElement.dataset.theme, localStorage.getItem("vjuu-theme")]')
-    assert theme() == ['light', 'auto']  # headless Edge reports a light OS
-    # The theme moved to the settings: a stray `t` no longer changes it.
+    assert _background(page) == _WHITE  # the compiled theme the harness starts with
+    # The theme lives in the settings: a stray `t` does not change it.
     page.keyboard.press('t')
-    assert theme() == ['light', 'auto']
-    _set_theme(work, page, 'light')
-    assert theme() == ['light', 'light']
-    # Picking previews the theme without remembering it; Esc goes back.
+    assert _background(page) == _WHITE
+    # The panel lists the themes; the light and dark picks show only for Auto.
+    (work / 'config.json').write_text(json.dumps(_CONFIG))
     page.click('#settings-open')
     page.wait_for_selector('#settings[open]')
+    options = page.eval_on_selector_all('#theme option', 'os => os.map((o) => o.value)')
+    assert options == ['auto', 'graphite', 'light'] and page.is_visible('#auto-themes')
+    assert page.eval_on_selector_all('#theme-dark option', 'os => os.map((o) => o.value)') == ['graphite']
+    # Picking previews the theme; Esc goes back to the saved one.
     page.select_option('#theme', 'graphite')
-    assert theme() == ['graphite', 'light']
+    page.wait_for_function(f'getComputedStyle(document.body).backgroundColor === "{_GRAPHITE}"', timeout=2000)
+    assert not page.is_visible('#auto-themes')
     page.keyboard.press('Escape')
-    page.wait_for_function('document.documentElement.dataset.theme === "light"', timeout=2000)
-    assert theme() == ['light', 'light']
+    assert _background(page) == _WHITE
     _set_theme(work, page, 'graphite')
-    assert theme() == ['graphite', 'graphite']
-    assert page.evaluate('getComputedStyle(document.body).backgroundColor') == 'rgb(30, 30, 30)'
-    # The choice survives into the next window.
+    assert _background(page) == _GRAPHITE
+    # The choice is in theme.css, so the next window opens in it.
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
-    assert theme() == ['graphite', 'graphite']
+    assert _background(page) == _GRAPHITE
     page.wait_for_selector('.d2h-code-line-ctn .hljs-keyword')
-    # Monokai was folded into Graphite: an old saved choice still gives a dark theme, not an unknown one.
-    page.evaluate('localStorage.setItem("vjuu-theme", "monokai")')
-    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
-    assert theme() == ['graphite', 'graphite']
-    page.evaluate('localStorage.removeItem("vjuu-theme")')
 
 
 def test_session_name(page, url, work):
@@ -533,7 +545,6 @@ def test_html_page(page, url, work):
         ],
         'overall': '',
     }, review
-    page.evaluate('localStorage.removeItem("vjuu-theme")')
     # A page without scripts is shown as written, without the round trip.
     static = '<!doctype html><p>Static</p>'
     (work / 'doc.json').write_text(json.dumps({'docs': [{'name': 's.html', 'kind': 'html', 'text': static}]}))
@@ -606,9 +617,7 @@ def test_choice_keys(page, url, work):
 
 
 def test_settings(page, url, work):
-    (work / 'config.json').write_text(
-        json.dumps({'tray': True, 'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False}})
-    )
+    (work / 'config.json').write_text(json.dumps(_CONFIG))
     msgs = lambda kind: [m for m in page.evaluate('window.__msgs || []') if m['type'] == kind]
     # A first window opens on the panel, showing the saved settings, over its document.
     (work / 'doc.json').write_text(
@@ -635,6 +644,7 @@ def test_settings(page, url, work):
     assert msgs('settings')[-1]['config'] == {
         'tray': True,
         'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False},
+        'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     }
     assert not page.is_visible('#settings') and msgs('done') == []
     # `vjuu config`: the panel over a sample to preview themes on; the window finishes when the panel closes.
@@ -653,6 +663,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
         shutil.copytree(_UI, work)
+        # What vjuu serves at /themes/<name>.css is the theme's declarations; the files themselves do the same here.
+        shutil.copytree(_THEMES, work / 'themes')
         url = _serve(work)
         browser = p.chromium.launch(channel='msedge')
         errors = []
@@ -680,6 +692,8 @@ def main():
         ):
             if only and test.__name__ not in only:
                 continue
+            # Every test starts in the Light theme, as compiled into theme.css.
+            shutil.copy(_THEMES / 'light.css', work / 'theme.css')
             page = browser.new_page()
             page.add_init_script(_STUB)
             page.on('pageerror', lambda e: errors.append(e))
