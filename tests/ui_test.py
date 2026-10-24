@@ -566,6 +566,30 @@ def test_choices(page, url, work):
     assert [c['text'] for c in _review(page)['comments']] == ['neither']
 
 
+def test_choice_keys(page, url, work):
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _CHOICE})
+    answer = lambda n=0: _review(page)['choices'][n]['answer']
+    # The only choice block in the review: digits pick without moving the cursor there.
+    page.keyboard.press('2')
+    assert answer() == 'Live page'
+    # Picks are orange, apart from the blue cursor.
+    picked = "getComputedStyle(document.querySelector('.choice button.picked')).borderTopColor"
+    assert page.evaluate(picked) == 'rgb(188, 76, 0)'
+    page.keyboard.press('2')  # again: taken back
+    assert answer() == ''
+    page.keyboard.press('7')  # no such option
+    assert answer() == ''
+    two = _CHOICE + '\n```choice\nShip it?\n- Yes\n- No\n```\n'
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': two})
+    # Two blocks and the cursor on neither: a digit could mean either, so it does nothing.
+    page.keyboard.press('1')
+    assert page.locator('.choice button.picked').count() == 0
+    page.locator('.choice').nth(1).locator('.question').click()
+    page.keyboard.press('Escape')  # the click opened a comment; the cursor stays on the block
+    page.keyboard.press('2')
+    assert [c['answer'] for c in _review(page)['choices']] == ['', 'No']
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
@@ -592,6 +616,7 @@ def main():
             test_markdown_html_is_not_rendered,
             test_html_page,
             test_choices,
+            test_choice_keys,
         ):
             if only and test.__name__ not in only:
                 continue

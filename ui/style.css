@@ -40,6 +40,9 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --brand-text: #5c8a00;
   --heading-3: #0550ae;
   --inline-code: #953800;
+  /* A pick in a choice block: orange, apart from the blue cursor. Monokai's #fd971f is too pale on white. */
+  --pick: #bc4c00;
+  --pick-bg: rgba(251, 133, 0, 0.12);
   --d2h-bg-color: var(--bg);
   --d2h-change-del-color: var(--d2h-del-bg-color);
   --d2h-change-ins-color: var(--d2h-ins-bg-color);
@@ -69,6 +72,8 @@ code, pre, .d2h-wrapper { font-variant-ligatures: none; }
   --chrome: #141414;
   --heading-3: #66d9ef;
   --inline-code: #fd971f;
+  --pick: #fd971f;
+  --pick-bg: rgba(253, 151, 31, 0.14);
   --d2h-bg-color: var(--bg);
   --d2h-border-color: var(--border);
   --d2h-dim-color: #75715e;
@@ -219,13 +224,17 @@ article.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2e
 article.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
 article.markdown blockquote > :last-child { margin-bottom: 0; }
 article.markdown h1, article.markdown h2, article.markdown h3 { scroll-margin-top: 8px; }
-/* ```choice blocks: each option a button; the picked one is marked like the active file. */
-article.markdown .choice { margin: 0 0 1em; display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+/* ```choice blocks: each option a button; the picked one in the pick colour. */
+article.markdown .choice { margin: 0 0 1em; display: flex; flex-direction: column; gap: 8px; max-width: 640px; counter-reset: option; }
 article.markdown .choice .question { margin: 0; font-weight: 600; }
-article.markdown .choice button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border-radius: 8px; background: var(--bg); text-align: left; }
+article.markdown .choice button { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px 10px 42px; border-radius: 8px; background: var(--bg); text-align: left; counter-increment: option; }
+/* The digit that picks it; generated content, so it stays out of the button's text. */
+article.markdown .choice button::before { content: counter(option); position: absolute; left: 12px; top: 11px; min-width: 18px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font: 12px/18px var(--mono); text-align: center; }
+article.markdown .choice button:nth-of-type(n + 10)::before { content: none; }
 article.markdown .choice button:hover { border-color: var(--accent); }
 article.markdown .choice button span { color: var(--muted); font-size: 14px; }
-article.markdown .choice button.picked { border-color: var(--accent); background: var(--focus); box-shadow: inset 3px 0 var(--accent); }
+article.markdown .choice button.picked { border-color: var(--pick); background: var(--pick-bg); box-shadow: inset 3px 0 var(--pick); }
+article.markdown .choice button.picked::before { border-color: var(--pick); color: var(--pick); }
 tr.hovered td { background-image: linear-gradient(var(--focus), var(--focus)); }
 a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }

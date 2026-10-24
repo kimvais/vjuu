@@ -45,6 +45,7 @@ its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 | `Enter` (or `c`) | Comment on the current line, or on the selected text |
 | `Ctrl+Enter` | In a comment: save it. Anywhere else: **Done** |
 | `Esc` | Cancel the comment being written |
+| `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
 | `t` | Next theme: Auto, Light, Graphite |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
@@ -78,8 +79,8 @@ its comments quote the text and say where it is, as `## site/index.html (#instal
 ### Choices
 
 A ```` ```choice ```` block in a markdown document shows its list items as buttons; the other lines are the question.
-Text before the first `: ` is the label, the rest an explanation. Click a button to pick it, click it again to take the
-pick back. Picks come first in the review:
+Text before the first `: ` is the label, the rest an explanation. Click a button or press its digit to pick it, and do
+it again to take the pick back. Picks come first in the review:
 
 ````
 ```choice
