@@ -80,6 +80,7 @@ async function openSettings() {
   const config = await (await fetch('config.json', { cache: 'no-store' })).json();
   for (const hook of HOOKS) settings.querySelector(`[name=${hook}]`).checked = config.hooks[hook];
   settings.querySelector('[name=tray]').checked = config.tray;
+  settings.querySelector('[name=focus]').checked = config.focus;
   const names = config.themes.map((t) => [t.name, t.name]);
   const of = (scheme) => config.themes.filter((t) => t.scheme === scheme).map((t) => [t.name, t.name]);
   fillSelect($('#theme'), [['auto', 'Auto (follow the system)'], ...names], config.theme.name);
@@ -120,7 +121,7 @@ function reloadTheme() {
 function applySettings() {
   const on = (name) => settings.querySelector(`[name=${name}]`).checked;
   const hooks = Object.fromEntries(HOOKS.map((h) => [h, on(h)]));
-  post({ type: 'settings', config: { tray: on('tray'), hooks, theme: pickedTheme() } });
+  post({ type: 'settings', config: { tray: on('tray'), focus: on('focus'), hooks, theme: pickedTheme() } });
   // The preview stays up until vjuu has compiled the theme and the new theme.css has loaded.
   settings.close();
 }

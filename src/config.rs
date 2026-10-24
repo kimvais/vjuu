@@ -15,13 +15,15 @@ pub struct Config {
     /// The tray icon, and a notification when a review opens behind other windows. First: TOML puts plain keys
     /// before tables.
     pub tray: bool,
+    /// Bring each new window to the front; off, it opens behind the window in use, with a notification.
+    pub focus: bool,
     pub hooks: Hooks,
     pub theme: Theme,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { tray: true, hooks: Hooks::default(), theme: Theme::default() }
+        Self { tray: true, focus: true, hooks: Hooks::default(), theme: Theme::default() }
     }
 }
 
@@ -79,12 +81,13 @@ impl Config {
             "turn" => self.hooks.turn = on()?,
             "permission" => self.hooks.permission = on()?,
             "tray" => self.tray = on()?,
+            "focus" => self.focus = on()?,
             "theme" => self.theme.name = theme(true)?,
             "theme.light" => self.theme.light = theme(false)?,
             "theme.dark" => self.theme.dark = theme(false)?,
             _ => {
                 return Err(format!(
-                    "Unknown setting `{key}`: use plan, ask, turn, permission, tray, theme, theme.light or theme.dark."
+                    "Unknown setting `{key}`: use plan, ask, turn, permission, tray, focus, theme, theme.light or theme.dark."
                 ));
             }
         }
@@ -126,6 +129,7 @@ mod tests {
             config,
             Config {
                 tray: true,
+                focus: true,
                 hooks: Hooks { plan: true, ask: true, turn: false, permission: true },
                 theme: Theme::default()
             }
@@ -142,7 +146,7 @@ mod tests {
         assert_eq!(
             text,
             format!(
-                "{HEADER}tray = false\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\n\n\
+                "{HEADER}tray = false\nfocus = true\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\n\n\
                  [theme]\nname = \"auto\"\nlight = \"light\"\ndark = \"graphite\"\n"
             )
         );

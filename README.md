@@ -39,6 +39,10 @@ opens behind others (Windows refuses to hand over focus while you type elsewhere
 icon and notifications off with `vjuu config tray off`. On Linux the icon needs a desktop that shows StatusNotifier
 icons (KDE, or GNOME with the AppIndicator extension).
 
+A new window comes to the front and takes the keyboard. If that interrupts you, `vjuu config focus off` (or "Bring
+new windows to the front" in the settings) opens new reviews behind the window you are in instead, each with a
+notification when the tray is on.
+
 | Case | First paint |
 |------|-------------|
 | Markdown or diff, cold | ~400-450 ms |
@@ -142,7 +146,7 @@ Click the gear in the title bar and **Apply** (Esc cancels), or use the terminal
 ```
 vjuu config                  # open the settings panel
 vjuu config list             # print the settings and where the file is
-vjuu config turn off         # switch one: plan, ask, turn, permission, or tray; on or off
+vjuu config turn off         # switch one: plan, ask, turn, permission, tray or focus; on or off
 vjuu config theme graphite   # a theme, or auto; theme.light and theme.dark set Auto's two picks
 ```
 

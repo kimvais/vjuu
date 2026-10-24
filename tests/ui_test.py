@@ -18,6 +18,7 @@ _UI = Path(__file__).resolve().parent.parent / 'ui'
 _THEMES = _UI.parent / 'themes'
 _CONFIG = {
     'tray': True,
+    'focus': False,
     'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False},
     'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     'themes': [{'name': 'graphite', 'scheme': 'dark'}, {'name': 'light', 'scheme': 'light'}],
@@ -631,8 +632,10 @@ def test_settings(page, url, work):
     )
     page.goto(url)
     page.wait_for_selector('#settings[open]')
-    checked = lambda: [page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn', 'permission', 'tray')]
-    assert checked() == [True, False, True, False, True]
+    checked = lambda: [
+        page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn', 'permission', 'tray', 'focus')
+    ]
+    assert checked() == [True, False, True, False, True, False]
     # Review keys do nothing while it is open.
     page.keyboard.press('Control+Enter')
     assert msgs('done') == []
@@ -644,11 +647,12 @@ def test_settings(page, url, work):
     # The gear opens it again with the saved settings; Apply saves and leaves the review open.
     page.click('#settings-open')
     page.wait_for_selector('#settings[open]')
-    assert checked() == [True, False, True, False, True]
+    assert checked() == [True, False, True, False, True, False]
     page.click('#settings [name=turn]')
     page.click('#settings-apply')
     assert msgs('settings')[-1]['config'] == {
         'tray': True,
+        'focus': False,
         'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False},
         'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     }

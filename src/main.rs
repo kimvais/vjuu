@@ -133,6 +133,8 @@ struct Session {
     context: Option<String>,
     /// The settings panel's Apply saved, so a settings-only window can say so when it closes.
     applied: bool,
+    /// Opened behind the window in use (the `focus` setting off), so it is never brought to the front by itself.
+    background: bool,
 }
 
 fn main() {
@@ -759,16 +761,21 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             let _ = proxy.lock().expect("proxy lock").send_event(AppEvent::Tray(action));
         })
     };
+    // Read once, like the tray setting; Apply in the panel updates it, `vjuu config` from the next resident instance.
+    let mut focus = config::load().focus;
     match initial {
         Some(request) => {
             let title = request.title();
             let cwd = request.cwd.clone();
-            let mut s = new_session(&event_loop, &proxy, &mut context, Some(request));
+            let mut s = new_session(&event_loop, &proxy, &mut context, Some(request), focus);
             look_up_context(&proxy, s.window.id(), cwd);
             s.window.set_title(&title);
             s.reply = Some(Reply::Stdout);
             s.started = started;
-            bring_to_front(&s.window, &s.webview);
+            s.background = !focus;
+            if focus {
+                bring_to_front(&s.window, &s.webview);
+            }
             sessions.insert(s.window.id(), s);
         }
         None => {
@@ -801,15 +808,23 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let title = request.title();
                 let cwd = request.cwd.clone();
-                let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None));
+                let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None, true));
                 look_up_context(&proxy, s.window.id(), cwd);
                 *s.slot.lock().expect("slot lock") = Some(request);
                 s.reply = conn.map(Reply::Client);
                 s.started = Instant::now();
                 s.window.set_title(&title);
                 let _ = s.webview.evaluate_script("window.vjuuLoad && vjuuLoad()");
-                s.window.set_visible(true);
-                bring_to_front(&s.window, &s.webview);
+                s.background = !focus;
+                if focus {
+                    s.window.set_visible(true);
+                    bring_to_front(&s.window, &s.webview);
+                } else {
+                    // Unfocusable while it appears, so Windows does not activate it; clickable again right after.
+                    s.window.set_focusable(false);
+                    s.window.set_visible(true);
+                    s.window.set_focusable(true);
+                }
                 sessions.insert(s.window.id(), s);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }
@@ -834,6 +849,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     }),
                     Err(e) => eprintln!("Cannot compile the theme: {e}"),
                 }
+                focus = config.focus;
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
@@ -845,8 +861,10 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
                 if let Some(s) = sessions.get(&id) {
                     show_context(s);
-                    bring_to_front(&s.window, &s.webview);
-                    // The OS kept it behind (focus-stealing prevention, or typing elsewhere): say so.
+                    if !s.background {
+                        bring_to_front(&s.window, &s.webview);
+                    }
+                    // Opened behind on purpose, or the OS kept it there (focus-stealing prevention): say so.
                     if tray.is_some() && !s.window.is_focused() {
                         notify(s.window.title());
                     }
@@ -884,7 +902,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             shown = sessions.len();
         }
         if spare.is_none() && spare_due.is_some_and(|due| due <= Instant::now()) {
-            spare = Some(new_session(target, &proxy, &mut context, None));
+            spare = Some(new_session(target, &proxy, &mut context, None, true));
             spare_due = None;
         }
         *control_flow = match spare_due {
@@ -989,12 +1007,14 @@ fn window_command(window: &Window, msg: Msg) {
     }
 }
 
-/// Creates a window and webview; without a request it stays hidden until a client hands one over.
+/// Creates a window and webview; without a request it stays hidden until a client hands one over. `focus` false
+/// opens a shown window behind the one in use.
 fn new_session(
     target: &EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
     context: &mut WebContext,
     request: Option<Request>,
+    focus: bool,
 ) -> Session {
     // A spare window is built while the user is reading another one: it must not take focus, or their keys
     // go to the hidden spare.
@@ -1002,7 +1022,7 @@ fn new_session(
     let builder = WindowBuilder::new()
         .with_title("vjuu")
         .with_visible(shown)
-        .with_focused(shown)
+        .with_focused(shown && focus)
         .with_inner_size(LogicalSize::new(1100.0, 900.0));
     let window = platform::frame(builder).build(target).unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
     platform::style_frame(&window);
@@ -1014,7 +1034,7 @@ fn new_session(
     let mut own = platform::CONTEXT_PER_WINDOW.then(|| WebContext::new(Some(platform::data_dir().join("webview"))));
     let context = own.as_mut().unwrap_or(context);
     let builder = WebViewBuilder::new_with_web_context(context)
-        .with_focused(shown)
+        .with_focused(shown && focus)
         // Tells ui/ whether to draw its own title bar and resize edges.
         .with_initialization_script(format!("window.VJUU_FRAMELESS = {};", platform::FRAMELESS))
         .with_custom_protocol("vjuu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
@@ -1055,6 +1075,7 @@ fn new_session(
         started: Instant::now(),
         context: None,
         applied: false,
+        background: false,
     }
 }
 
