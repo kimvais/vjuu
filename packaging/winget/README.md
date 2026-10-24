@@ -4,21 +4,20 @@
 Microsoft reviews the first version by hand; after that, the release workflow's `winget` job opens an update pull
 request for every release.
 
-## First submission (once)
+## Until the first version is merged
 
-After the first GitHub release exists:
+`komac update` only works for a package that is already in winget-pkgs, so each version is submitted whole from
+the manifests in `manifest/` (the answers `komac new` would ask for). After the GitHub release exists:
 
 ```powershell
 winget install komac
-komac new kimvais.vjuu --version 0.1.0 `
-  --urls https://github.com/kimvais/vjuu/releases/download/v0.1.0/vjuu-v0.1.0-x86_64-pc-windows-msvc.zip `
-         https://github.com/kimvais/vjuu/releases/download/v0.1.0/vjuu-v0.1.0-aarch64-pc-windows-msvc.zip `
-  --moniker vjuu --package-name vjuu --publisher "Kimmo Parviainen-Jalanko" --license MIT `
-  --short-description "Fast review window for AI-agent handoffs" --submit
+./packaging/winget/submit.ps1 0.3.3 -DryRun   # check the manifests
+./packaging/winget/submit.ps1 0.3.3
 ```
 
-Komac reads the zip, finds `vjuu.exe` as a portable command, and opens the pull request from your fork of
-winget-pkgs. It asks for a GitHub token with the `public_repo` scope.
+The script fills in the version, date and the two zips' hashes, and runs `komac submit`, which opens the pull
+request from your fork of winget-pkgs. Komac asks for a GitHub token with the `public_repo` scope (or reads
+`GITHUB_TOKEN`). Close the previous version's pull request if it is still open.
 
 ## Updates
 
