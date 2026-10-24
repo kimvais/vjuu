@@ -526,6 +526,46 @@ def test_html_page(page, url, work):
     frame.get_by_text('Static').wait_for(timeout=2000)
 
 
+_CHOICE = """# Plan
+
+```choice
+How should vjuu handle artifacts?
+1. Snapshot (recommended): small change, one frozen state
+2: Live page: interactive, much bigger
+- Both" onmouseover="window.__pwned=1: <img src=x onerror="window.__pwned=1">
+```
+
+Done.
+"""
+
+
+def test_choices(page, url, work):
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _CHOICE})
+    options = page.locator('.choice button')
+    assert [' '.join(t.split()) for t in options.all_inner_texts()][:2] == [
+        'Snapshot (recommended) small change, one frozen state',
+        'Live page interactive, much bigger',
+    ]
+    # Option text is text, never markup.
+    options.nth(2).hover()
+    assert page.locator('.choice img').count() == 0
+    assert page.evaluate('window.__pwned') is None
+    choices = lambda: _review(page)['choices']
+    options.nth(1).click()
+    assert choices() == [{'question': 'How should vjuu handle artifacts?', 'answer': 'Live page'}]
+    # A pick is not a comment, and picking another replaces it.
+    assert page.locator('.vjuu-c').count() == 0
+    options.nth(0).click()
+    assert choices() == [{'question': 'How should vjuu handle artifacts?', 'answer': 'Snapshot (recommended)'}]
+    assert page.locator('.choice button.picked').all_inner_texts()[0].startswith('Snapshot')
+    # Picking it again takes it back; the question can still be commented on.
+    options.nth(0).click()
+    assert choices() == [{'question': 'How should vjuu handle artifacts?', 'answer': ''}]
+    page.locator('.choice .question').click()
+    _comment(page, 'neither')
+    assert [c['text'] for c in _review(page)['comments']] == ['neither']
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
@@ -551,6 +591,7 @@ def main():
             test_markdown_file_in_a_diff_uses_code_size,
             test_markdown_html_is_not_rendered,
             test_html_page,
+            test_choices,
         ):
             if only and test.__name__ not in only:
                 continue

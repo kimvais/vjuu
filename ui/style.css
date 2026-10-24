@@ -219,6 +219,13 @@ article.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2e
 article.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
 article.markdown blockquote > :last-child { margin-bottom: 0; }
 article.markdown h1, article.markdown h2, article.markdown h3 { scroll-margin-top: 8px; }
+/* ```choice blocks: each option a button; the picked one is marked like the active file. */
+article.markdown .choice { margin: 0 0 1em; display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+article.markdown .choice .question { margin: 0; font-weight: 600; }
+article.markdown .choice button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border-radius: 8px; background: var(--bg); text-align: left; }
+article.markdown .choice button:hover { border-color: var(--accent); }
+article.markdown .choice button span { color: var(--muted); font-size: 14px; }
+article.markdown .choice button.picked { border-color: var(--accent); background: var(--focus); box-shadow: inset 3px 0 var(--accent); }
 tr.hovered td { background-image: linear-gradient(var(--focus), var(--focus)); }
 a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }
