@@ -12,6 +12,9 @@ pub struct Comment {
     pub old: bool,
     pub quote: String,
     pub text: String,
+    /// Where on a rendered HTML page (`#id` or `under "Heading"`); its start and end are 0, as a page has no lines.
+    #[serde(default)]
+    pub at: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -35,9 +38,14 @@ pub fn to_markdown(name: &str, review: &Review) -> String {
     };
     let mut out = format!("# Review: {name} ({count})\n");
     for c in comments {
-        let range = if c.start == c.end { c.start.to_string() } else { format!("{}-{}", c.start, c.end) };
+        let range = match (c.start, c.end) {
+            (0, _) => String::new(),
+            (s, e) if s == e => format!(":{s}"),
+            (s, e) => format!(":{s}-{e}"),
+        };
         let side = if c.old { " (old)" } else { "" };
-        out += &format!("\n## {}:{range}{side}\n", c.file);
+        let at = if c.at.is_empty() { String::new() } else { format!(" ({})", c.at) };
+        out += &format!("\n## {}{range}{side}{at}\n", c.file);
         let lines: Vec<&str> = c.quote.lines().collect();
         for line in lines.iter().take(MAX_QUOTE_LINES) {
             out += &format!("> {line}\n");
@@ -58,7 +66,21 @@ mod tests {
     use super::*;
 
     fn comment(file: &str, start: u32, end: u32, old: bool, quote: &str, text: &str) -> Comment {
-        Comment { file: file.into(), start, end, old, quote: quote.into(), text: text.into() }
+        Comment { file: file.into(), start, end, old, quote: quote.into(), text: text.into(), at: String::new() }
+    }
+
+    #[test]
+    fn html_comments_have_no_line_numbers() {
+        let mut c = comment("site/index.html", 0, 0, false, "Run it.", "say how");
+        c.at = "#install".into();
+        let plain = comment("site/index.html", 0, 0, false, "Plain", "ok");
+        let review = Review { comments: vec![c, plain], overall: String::new() };
+        assert_eq!(
+            to_markdown("site/index.html", &review),
+            "# Review: site/index.html (2 comments)\n\
+             \n## site/index.html (#install)\n> Run it.\n\nsay how\n\
+             \n## site/index.html\n> Plain\n\nok\n"
+        );
     }
 
     #[test]

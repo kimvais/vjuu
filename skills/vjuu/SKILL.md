@@ -22,6 +22,7 @@ foreground timeout, and you are notified when it exits. Do not poll; wait for th
 | A commit | `git show <sha> \| vjuu -` |
 | A diff or patch file | `vjuu change.diff` |
 | Source files (whole files, not a diff) | `vjuu src/main.rs src/review.rs` |
+| An HTML page or artifact, rendered as it looks once loaded | `vjuu site/index.html` |
 | Text you generated | write it to a `.md` file first, then `vjuu` that file |
 
 Run `--git` from inside the repository. Under Claude Code the title bar shows the session's `/rename` name by
@@ -45,6 +46,8 @@ general comment
 ```
 
 - Each `## file:line` section is one comment; `(old)` means a deleted line, numbered in the old file.
+- A rendered HTML page has no line numbers: `## site/index.html (#install)` or `(under "Install")` names the nearest
+  id or heading. Find the quoted text in the source near it.
 - Treat comments as the user's instructions for that spot: act on each one, then say per comment what
   you did. A question in a comment gets an answer, not an edit.
 - `No comments.` means the user closed it without remarks: ask whether they approve rather than assume.
