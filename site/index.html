@@ -180,6 +180,14 @@
     @media (max-width: 720px) {
       .sections { gap: 14px; margin-right: 20px; }
     }
+    /* A phone fits the section links or GitHub, not both; GitHub is in the hero and the footer too. */
+    @media (max-width: 480px) {
+      .header .column > .textlink { display: none; }
+      .header .column { gap: 8px; }
+      .sections { gap: 8px; margin-right: 0; }
+      .header .sections .textlink { font-size: 14px; }
+      .wordmark img { width: 32px; height: 32px; }
+    }
 
     /* Hero */
     .hero { padding: calc(var(--section-y) * 1.25) 0 var(--section-y); }
@@ -428,6 +436,7 @@
         <a class="textlink" href="#what">What?</a>
         <a class="textlink" href="#why">Why?</a>
         <a class="textlink" href="#how">How?</a>
+        <a class="textlink" href="#themes">Themes?</a>
         <a class="textlink brand" href="#install">Install</a>
       </nav>
       <a class="textlink" href="https://github.com/kimvais/vjuu"><svg class="icon" aria-hidden="true"><use href="#github"/></svg>GitHub</a>
