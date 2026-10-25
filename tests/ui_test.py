@@ -791,6 +791,22 @@ def test_help(page, url, work):
     assert keys.count('\n| ') == page.locator('#help tr').count(), keys
 
 
+def test_next_window(page, url, work):
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+    nexts = lambda: [m for m in page.evaluate('window.__msgs || []') if m['type'] == 'next']
+    # Plain Tab and Ctrl+Shift+Tab are not it.
+    page.keyboard.press('Tab')
+    page.keyboard.press('Control+Shift+Tab')
+    assert nexts() == []
+    page.keyboard.press('Control+Tab')
+    assert nexts() == [{'type': 'next'}]
+    # While typing a comment too, which keeps its text.
+    page.get_by_text('First paragraph').click()
+    page.keyboard.type('half')
+    page.keyboard.press('Control+Tab')
+    assert len(nexts()) == 2 and page.input_value('.vjuu-c textarea') == 'half'
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
         work = Path(tmp) / 'ui'
@@ -825,6 +841,7 @@ def main():
             test_choice_keys,
             test_settings,
             test_help,
+            test_next_window,
         ):
             if only and test.__name__ not in only:
                 continue

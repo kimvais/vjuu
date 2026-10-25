@@ -98,7 +98,10 @@ pipe and the window appears almost at once. The spare window preloads fonts and 
 its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 
 The resident instance has a tray icon. An orange dot on it means a review window is still open, and hovering it says
-how many. Click it to bring the oldest one forward; right-click it for the settings, or to stop vjuu. If a new window
+how many. Click it to bring the oldest one forward. Right-click it for a list of the waiting reviews, oldest first: the
+asking session, what it asks (plan, question, permission, turn, or the file names), the repository and branch, and how
+long it has waited. Click one to bring it forward; on Windows, pressing its digit does the same. The same menu has the settings and stops
+vjuu. In a review window, `Ctrl+Tab` brings the next waiting one forward. If a new window
 opens behind others (Windows refuses to hand over focus while you type elsewhere), a notification says so. Switch the
 icon and notifications off with `vjuu config tray off`. On Linux the icon needs a desktop that shows StatusNotifier
 icons (KDE, or GNOME with the AppIndicator extension).
@@ -128,6 +131,7 @@ notification when the tray is on.
 | `x` | Mark the diff file under the cursor viewed: folds it and ticks it in the sidebar; again to unmark |
 | `o` | Fold / open the diff file under the cursor; lock files, minified and generated files start folded |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
+| `Ctrl+Tab` | Bring the next waiting review window forward, oldest after newest |
 | `Ctrl+,` (`⌘,` on macOS) | Settings |
 | `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
 | `F1` | Help: the version and these keys |

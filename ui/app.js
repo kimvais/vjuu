@@ -1015,6 +1015,12 @@ function onKey(e) {
     openSettings();
     return;
   }
+  // The next waiting review, also while typing: like switching tabs.
+  if (e.key === 'Tab' && e.ctrlKey && !e.altKey && !e.shiftKey) {
+    e.preventDefault();
+    post({ type: 'next' });
+    return;
+  }
   const inField = e.target.closest('textarea, input, select');
   // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
   if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {

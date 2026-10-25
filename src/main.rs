@@ -56,6 +56,8 @@ More at https://vjuu.it";
 const SKILL: &str = include_str!("../skills/vjuu/SKILL.md");
 /// Wait before warming the next spare window, so it does not compete with the one just shown.
 const SPARE_DELAY: Duration = Duration::from_millis(500);
+/// How a hook tells the vjuu it runs what it asks; an environment variable, so no argument can be mistaken for it.
+const KIND_VAR: &str = "VJUU_KIND";
 
 #[derive(Serialize, Deserialize)]
 struct Doc {
@@ -92,6 +94,9 @@ struct Request {
     /// The comments kept there by the round before, shown beside this one's but not sent again.
     #[serde(default)]
     earlier: Vec<review::Comment>,
+    /// What a Claude Code hook asks (plan, question, permission, turn), for the tray's list; None for documents.
+    #[serde(default)]
+    kind: Option<String>,
 }
 
 impl Request {
@@ -135,6 +140,8 @@ enum Msg {
     },
     /// The settings panel's "Open themes folder".
     Themes,
+    /// Ctrl+Tab: bring the next waiting review forward.
+    Next,
 }
 
 enum AppEvent {
@@ -309,7 +316,7 @@ fn hook_plan() -> ! {
         args.extend([OsStr::new("--previous"), previous.as_os_str()]);
     }
     args.push(OsStr::new(plan));
-    if let Some(decision) = plan_decision(&review_in_child(&event, &args)) {
+    if let Some(decision) = plan_decision(&review_in_child("plan", &event, &args)) {
         println!("{decision}");
     }
     process::exit(0)
@@ -352,7 +359,7 @@ fn hook_turn() -> ! {
     if diff.is_empty() || reviewed || fs::write(&path, diff).is_err() {
         process::exit(0)
     }
-    if let Some(feedback) = turn_feedback(&review_in_child(&event, &[path.as_os_str()])) {
+    if let Some(feedback) = turn_feedback(&review_in_child("turn", &event, &[path.as_os_str()])) {
         println!("{feedback}");
     }
     process::exit(0)
@@ -377,7 +384,9 @@ fn hook_ask() -> ! {
     if fs::write(&path, md).is_err() {
         process::exit(0)
     }
-    if let Some(decision) = ask_decision(&event["tool_input"], &review_in_child(&event, &[path.as_os_str()])) {
+    if let Some(decision) =
+        ask_decision(&event["tool_input"], &review_in_child("question", &event, &[path.as_os_str()]))
+    {
         println!("{decision}");
     }
     process::exit(0)
@@ -504,7 +513,7 @@ fn hook_permission() -> ! {
     if fs::write(&path, permission_markdown(&event)).is_err() {
         process::exit(0)
     }
-    if let Some(decision) = permission_decision(&event, &review_in_child(&event, &[path.as_os_str()])) {
+    if let Some(decision) = permission_decision(&event, &review_in_child("permission", &event, &[path.as_os_str()])) {
         println!("{decision}");
     }
     process::exit(0)
@@ -592,9 +601,10 @@ fn hook_event() -> serde_json::Value {
 }
 
 /// Runs vjuu with `args` as a child titled with the hook session's name, and returns the review it prints.
-fn review_in_child(event: &serde_json::Value, args: &[&OsStr]) -> String {
+fn review_in_child(kind: &str, event: &serde_json::Value, args: &[&OsStr]) -> String {
     let Ok(exe) = env::current_exe() else { return String::new() };
     let mut vjuu = Command::new(exe);
+    vjuu.env(KIND_VAR, kind);
     if let Some(title) = event["session_id"].as_str().and_then(session_title) {
         vjuu.args(["--session", &title]);
     }
@@ -756,6 +766,7 @@ fn request(docs: Vec<Doc>) -> Request {
         sample: false,
         comments: None,
         earlier: Vec::new(),
+        kind: env::var(KIND_VAR).ok(),
     }
 }
 
@@ -890,7 +901,8 @@ fn stop() -> ! {
 
 fn spawn_server() {
     if let Ok(exe) = env::current_exe() {
-        platform::spawn_detached(Command::new(exe).arg("--serve"));
+        // Started by a hook's vjuu, it would otherwise take every later window for that hook's kind.
+        platform::spawn_detached(Command::new(exe).arg("--serve").env_remove(KIND_VAR));
     }
 }
 
@@ -935,12 +947,12 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     // Only the resident instance has a tray: it outlives the windows and holds every session's.
     let resident = initial.is_none();
     let mut tray: Option<tray::Tray> = None;
-    // How many waiting windows the tray shows; MAX makes a new tray icon catch up.
-    let mut shown = usize::MAX;
+    // The waiting windows the tray lists; None makes a new tray icon catch up.
+    let mut listed: Option<Vec<(WindowId, String)>> = None;
     let tray_proxy = Arc::new(Mutex::new(proxy.clone()));
-    let new_tray = move || {
+    let new_tray = move |target: &EventLoopWindowTarget<AppEvent>| {
         let proxy = tray_proxy.clone();
-        tray::Tray::new(move |action| {
+        tray::Tray::new(target, move |action| {
             let _ = proxy.lock().expect("proxy lock").send_event(AppEvent::Tray(action));
         })
     };
@@ -969,11 +981,29 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             // macOS wants the tray made once the loop runs; the other platforms do not mind.
-            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(),
+            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(target),
+            #[cfg(windows)]
+            Event::UserEvent(AppEvent::Tray(tray::Action::Menu)) => {
+                if let Some(tray) = &tray {
+                    tray.show_menu();
+                }
+            }
             Event::UserEvent(AppEvent::Tray(tray::Action::Oldest)) => {
                 if let Some(s) = sessions.values().min_by_key(|s| s.started) {
-                    s.window.set_minimized(false);
-                    bring_to_front(&s.window, &s.webview);
+                    raise(s);
+                }
+            }
+            Event::UserEvent(AppEvent::Tray(tray::Action::Open(id))) => {
+                if let Some(s) = sessions.get(&id) {
+                    raise(s);
+                }
+            }
+            Event::UserEvent(AppEvent::Ui(id, Msg::Next)) => {
+                let open = waiting(&sessions);
+                let at = open.iter().position(|(w, _)| *w == id).unwrap_or(0);
+                // The one opened after this, or the oldest after the newest.
+                if let Some(s) = open.iter().cycle().nth(at + 1).and_then(|(w, _)| sessions.get(w)) {
+                    raise(s);
                 }
             }
             Event::UserEvent(AppEvent::Tray(tray::Action::Settings)) => {
@@ -1036,8 +1066,8 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
-                    tray = new_tray();
-                    shown = usize::MAX;
+                    tray = new_tray(target);
+                    listed = None;
                 }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
@@ -1078,21 +1108,51 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             _ => {}
         }
-        if let Some(tray) = &tray
-            && sessions.len() != shown
-        {
-            tray.show_waiting(sessions.len());
-            shown = sessions.len();
+        if let Some(tray) = &mut tray {
+            let open = waiting(&sessions);
+            if listed.as_ref() != Some(&open) {
+                tray.show_waiting(&open);
+                listed = Some(open);
+            }
         }
         if spare.is_none() && spare_due.is_some_and(|due| due <= Instant::now()) {
             spare = Some(new_session(target, &proxy, &mut context, None, true));
             spare_due = None;
         }
-        *control_flow = match spare_due {
+        // The tray menu's ages count minutes.
+        let tick = (tray.is_some() && !sessions.is_empty()).then(|| Instant::now() + Duration::from_secs(60));
+        *control_flow = match spare_due.into_iter().chain(tick).min() {
             Some(due) => ControlFlow::WaitUntil(due),
             None => ControlFlow::Wait,
         };
     })
+}
+
+fn raise(s: &Session) {
+    s.window.set_minimized(false);
+    bring_to_front(&s.window, &s.webview);
+}
+
+/// Returns the open review windows, oldest first, each with its line for the tray menu.
+fn waiting(sessions: &HashMap<WindowId, Session>) -> Vec<(WindowId, String)> {
+    let mut open: Vec<&Session> = sessions.values().collect();
+    open.sort_by_key(|s| s.started);
+    open.into_iter().map(|s| (s.window.id(), s.label())).collect()
+}
+
+impl Session {
+    /// Returns "fix login · plan · vjuu · main · 4 min": the asking session, what it asks (or the documents), the git
+    /// checkout and how long it has waited; whichever are known.
+    fn label(&self) -> String {
+        let slot = self.slot.lock().expect("slot lock");
+        let (session, what) =
+            slot.as_ref().map(|r| (r.session.clone(), r.kind.clone().unwrap_or_else(|| r.name()))).unzip();
+        [session.flatten(), what, self.context.clone(), Some(tray::age(self.started.elapsed()))]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ")
+    }
 }
 
 /// Looks up the git context of `cwd` on a thread and hands it to the window, twice: the checkout at once, and again
@@ -1186,7 +1246,7 @@ fn window_command(window: &Window, msg: Msg) {
             let _ = theme::ensure_shipped();
             platform::open_url(&theme::dir().to_string_lossy());
         }
-        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Settings { .. } => {}
+        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Settings { .. } | Msg::Next => {}
     }
 }
 
