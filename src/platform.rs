@@ -11,9 +11,9 @@ use interprocess::local_socket::{GenericFilePath, GenericNamespaced, Name, prelu
 use tao::window::{Window, WindowBuilder};
 use wry::{WebView, WebViewBuilder};
 
-/// WebKitGTK allows one handler per URI scheme per web context, so every Linux window needs its own context;
+/// WebKitGTK allows one handler per URI scheme per web context, so every Linux webview needs its own context;
 /// WebView2 and WKWebView can share one.
-pub const CONTEXT_PER_WINDOW: bool = cfg!(all(unix, not(target_os = "macos")));
+pub const CONTEXT_PER_WEBVIEW: bool = cfg!(all(unix, not(target_os = "macos")));
 
 /// Whether ui/ draws the title bar and resize edges (Windows) or the OS frame is kept.
 pub const FRAMELESS: bool = cfg!(windows);
@@ -142,7 +142,8 @@ pub fn frame(builder: WindowBuilder) -> WindowBuilder {
     builder
 }
 
-/// Builds the webview into the window; on Linux it goes into tao's GTK box so Wayland works too.
+/// Builds one of the window's webviews (a tab), filling the window. On Linux it goes into tao's GTK box so Wayland
+/// works too, and the box gives the space to whichever webview is visible.
 pub fn build_webview(builder: WebViewBuilder, window: &Window) -> wry::Result<WebView> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
@@ -151,7 +152,22 @@ pub fn build_webview(builder: WebViewBuilder, window: &Window) -> wry::Result<We
         builder.build_gtk(window.default_vbox().expect("tao windows have a default GTK box"))
     }
     #[cfg(not(all(unix, not(target_os = "macos"))))]
-    builder.build(window)
+    builder.with_bounds(bounds(window)).build_as_child(window)
+}
+
+/// Sizes a webview to the window after a resize; on Linux the GTK box does it.
+pub fn fit_webview(webview: &WebView, window: &Window) {
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    let _ = webview.set_bounds(bounds(window));
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = (webview, window);
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn bounds(window: &Window) -> wry::Rect {
+    use wry::dpi::{PhysicalPosition, PhysicalSize};
+    let size = window.inner_size();
+    wry::Rect { position: PhysicalPosition::new(0, 0).into(), size: PhysicalSize::new(size.width, size.height).into() }
 }
 
 /// Gives the window the full height of its screen, keeping its width, centred horizontally.

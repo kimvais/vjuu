@@ -4,8 +4,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::host::TabId;
 use tao::event_loop::EventLoopWindowTarget;
-use tao::window::WindowId;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -15,13 +15,13 @@ pub enum Action {
     /// Right-click on Windows: show the menu from vjuu's own window (see `Tray::show_menu`).
     #[cfg(windows)]
     Menu,
-    Open(WindowId),
+    Open(TabId),
     Settings,
     Stop,
 }
 
-/// The menu's waiting reviews: which window each entry opens.
-type Entries = Arc<Mutex<Vec<(MenuId, WindowId)>>>;
+/// The menu's waiting reviews: which tab each entry opens.
+type Entries = Arc<Mutex<Vec<(MenuId, TabId)>>>;
 
 pub struct Tray {
     icon: TrayIcon,
@@ -103,7 +103,7 @@ impl Tray {
     }
 
     /// Shows the waiting reviews, oldest first, each with its line for the menu.
-    pub fn show_waiting(&mut self, waiting: &[(WindowId, String)]) {
+    pub fn show_waiting(&mut self, waiting: &[(TabId, String)]) {
         let _ = self.icon.set_icon(Some(icon(!waiting.is_empty())));
         let tip = match waiting.len() {
             0 => "vjuu".to_string(),
@@ -126,7 +126,7 @@ const SETTINGS: &str = "settings";
 const STOP: &str = "stop";
 
 /// Returns the tray menu: the waiting reviews, numbered so a digit opens one while the menu is open, then the rest.
-fn menu(waiting: &[(WindowId, String)]) -> tray_icon::menu::Result<(Menu, Vec<(MenuId, WindowId)>)> {
+fn menu(waiting: &[(TabId, String)]) -> tray_icon::menu::Result<(Menu, Vec<(MenuId, TabId)>)> {
     let menu = Menu::new();
     let mut entries = Vec::new();
     for (n, (window, label)) in waiting.iter().enumerate() {

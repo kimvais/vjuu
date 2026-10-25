@@ -93,22 +93,26 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 ## Why it opens fast
 
 The first `vjuu` opens its window itself (~400 ms, mostly WebView2 starting) and starts a hidden
-resident instance that keeps a pre-warmed window. Later calls hand the document to it over a named
-pipe and the window appears almost at once. The spare window preloads fonts and renderers. The resident instance costs roughly 300 MB working set across
+resident instance that keeps a pre-warmed tab. Later calls hand the document to it over a named
+pipe and the review appears almost at once. The spare tab preloads fonts and renderers. The resident instance costs roughly 300 MB working set across
 its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 
-The resident instance has a tray icon. An orange dot on it means a review window is still open, and hovering it says
-how many. Click it to bring the oldest one forward. Right-click it for a list of the waiting reviews, oldest first: the
-asking session, what it asks (plan, question, permission, turn, or the file names), the repository and branch, and how
-long it has waited. Click one to bring it forward; on Windows, pressing its digit does the same. The same menu has the settings and stops
-vjuu. In a review window, `Ctrl+Tab` brings the next waiting one forward. If a new window
-opens behind others (Windows refuses to hand over focus while you type elsewhere), a notification says so. Switch the
-icon and notifications off with `vjuu config tray off`. On Linux the icon needs a desktop that shows StatusNotifier
-icons (KDE, or GNOME with the AppIndicator extension).
+The resident instance keeps every review in one window, a tab each, with a session's tabs side by side. One review
+shows no tab strip. Closing a tab (its `×` or `Ctrl+W`) sends its review as it is, as **Submit & continue** does;
+closing the window sends every review as it is.
 
-A new window comes to the front and takes the keyboard. If that interrupts you, `vjuu config focus off` (or "Bring
-new windows to the front" in the settings) opens new reviews behind the window you are in instead, each with a
-notification when the tray is on.
+It also has a tray icon. An orange dot on it means a review is still open, and hovering it says how many. Click it to
+bring the oldest one forward. Right-click it for a list of the waiting reviews, oldest first: the asking session, what
+it asks (plan, question, permission, turn, or the file names), the repository and branch, and how long it has waited.
+Click one to bring it forward; on Windows, pressing its digit does the same. The same menu has the settings and stops
+vjuu. If a review opens behind others (Windows refuses to hand over focus while you type elsewhere), a notification
+says so. Switch the icon and notifications off with `vjuu config tray off`. On Linux the icon needs a desktop that
+shows StatusNotifier icons (KDE, or GNOME with the AppIndicator extension).
+
+A new review comes to the front and takes the keyboard, unless you are in the vjuu window already: then it opens as a
+tab behind the one you are in, marked with a dot. If coming to the front interrupts you, `vjuu config focus off` (or
+"Bring new windows to the front" in the settings) opens every new review behind, each with a notification when the
+tray is on.
 
 | Case | First paint |
 |------|-------------|
@@ -131,7 +135,9 @@ notification when the tray is on.
 | `x` | Mark the diff file under the cursor viewed: folds it and ticks it in the sidebar; again to unmark |
 | `o` | Fold / open the diff file under the cursor; lock files, minified and generated files start folded |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
-| `Ctrl+Tab` | Bring the next waiting review window forward, oldest after newest |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `Ctrl+1`–`Ctrl+9` | That tab |
+| `Ctrl+W` | Close the tab: sends its review as it is |
 | `Ctrl+,` (`⌘,` on macOS) | Settings |
 | `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
 | `F1` | Help: the version and these keys |

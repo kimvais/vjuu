@@ -1015,11 +1015,21 @@ function onKey(e) {
     openSettings();
     return;
   }
-  // The next waiting review, also while typing: like switching tabs.
-  if (e.key === 'Tab' && e.ctrlKey && !e.altKey && !e.shiftKey) {
-    e.preventDefault();
-    post({ type: 'next' });
-    return;
+  // Tab keys work while typing too, as in a browser.
+  if (e.ctrlKey && !e.altKey && !e.metaKey) {
+    const at = tabs.findIndex((t) => t.active);
+    const pick = e.key === 'Tab' ? tabs[(at + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length]
+      : /^[1-9]$/.test(e.key) && !e.shiftKey ? tabs[e.key - 1] : null;
+    if (e.key === 'Tab' || pick) {
+      e.preventDefault();
+      if (pick && !pick.active) post({ type: 'show', tab: pick.id });
+      return;
+    }
+    if (e.key === 'w' && !e.shiftKey) {
+      e.preventDefault();
+      done();
+      return;
+    }
   }
   const inField = e.target.closest('textarea, input, select');
   // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
@@ -1096,7 +1106,7 @@ titlebar.addEventListener('mousedown', (e) => {
   if (e.detail === 2) post({ type: 'maximize' }); else post({ type: 'drag' });
 });
 for (const btn of document.querySelectorAll('#window-controls button')) {
-  btn.onclick = () => (btn.dataset.cmd === 'close' ? done() : post({ type: btn.dataset.cmd }));
+  btn.onclick = () => (btn.dataset.cmd === 'close' ? post({ type: 'quit' }) : post({ type: btn.dataset.cmd }));
 }
 for (const edge of document.querySelectorAll('.edge')) {
   edge.addEventListener('mousedown', (e) => {
@@ -1112,7 +1122,35 @@ function syncMaximized() {
 window.addEventListener('resize', syncMaximized);
 syncMaximized();
 
-/** vjuu calls this with the window's git checkout (repo, worktree, branch, PR) once it has looked it up. */
+/** The window's reviews, as vjuu last sent them: [{id, name, kind, title, active, unseen}]. */
+let tabs = [];
+
+/** vjuu calls this in every tab whenever a review opens or closes, or another tab is shown. */
+window.vjuuTabs = (list) => {
+  tabs = list;
+  // One review needs no strip: the title bar shows it as before.
+  document.body.classList.toggle('tabbed', tabs.length > 1);
+  $('#tabs').replaceChildren(...tabs.map((t, i) => {
+    const span = (cls, text) => {
+      const s = document.createElement('span');
+      s.className = cls;
+      s.textContent = text;
+      return s;
+    };
+    const tab = document.createElement('button');
+    tab.className = 'tab';
+    tab.classList.toggle('active', t.active);
+    tab.classList.toggle('unseen', t.unseen);
+    tab.title = i < 9 ? `${t.title} (Ctrl+${i + 1})` : t.title;
+    const close = span('tab-close', '×');
+    close.title = 'Close: sends this review as it is (Ctrl+W)';
+    tab.append(span('tab-name', t.name), ...(t.kind ? [span('kind', t.kind)] : []), close);
+    tab.onclick = (e) => post(e.target === close ? { type: 'close', tab: t.id } : { type: 'show', tab: t.id });
+    return tab;
+  }));
+};
+
+/** vjuu calls this with the tab's git checkout (repo, worktree, branch, PR) once it has looked it up. */
 window.vjuuContext = (text) => { $('#context').textContent = text; };
 window.vjuuLoad = () => load().catch((err) => {
   content.textContent = `vjuu failed to render: ${err}`;

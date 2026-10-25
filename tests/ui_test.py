@@ -791,20 +791,47 @@ def test_help(page, url, work):
     assert keys.count('\n| ') == page.locator('#help tr').count(), keys
 
 
-def test_next_window(page, url, work):
+def _tab(id, name, active=False, unseen=False, kind=None):
+    return {'id': id, 'name': name, 'kind': kind, 'title': f'{name} · 1 min', 'active': active, 'unseen': unseen}
+
+
+def test_tabs(page, url, work):
     _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
-    nexts = lambda: [m for m in page.evaluate('window.__msgs || []') if m['type'] == 'next']
-    # Plain Tab and Ctrl+Shift+Tab are not it.
-    page.keyboard.press('Tab')
-    page.keyboard.press('Control+Shift+Tab')
-    assert nexts() == []
+    sent = lambda: [m for m in page.evaluate('window.__msgs || []') if m['type'] in ('show', 'close', 'quit', 'done')]
+    # One review: no strip, and the tab keys do nothing.
+    page.evaluate('(t) => vjuuTabs(t)', [_tab(0, 'fix login', active=True)])
+    assert page.locator('#tabs').is_hidden() and page.locator('#name').is_visible()
     page.keyboard.press('Control+Tab')
-    assert nexts() == [{'type': 'next'}]
+    page.keyboard.press('Control+1')
+    assert sent() == []
+    tabs = [_tab(0, 'fix login', active=True, kind='plan'), _tab(3, 'refactor', unseen=True), _tab(5, 'a.md')]
+    page.evaluate('(t) => vjuuTabs(t)', tabs)
+    assert page.locator('#tabs').is_visible() and page.locator('#name').is_hidden()
+    strip = page.locator('#tabs .tab')
+    assert [' '.join(t.split()) for t in strip.all_inner_texts()] == ['fix login plan ×', 'refactor ×', 'a.md ×']
+    assert strip.nth(1).evaluate("e => e.classList.contains('unseen')") and strip.nth(0).get_attribute('title') == (
+        'fix login · 1 min (Ctrl+1)'
+    )
+    # Next, previous (wrapping), a digit; the tab already shown is not asked for again; plain Tab is not a tab key.
+    page.keyboard.press('Tab')
+    page.keyboard.press('Control+Tab')
+    page.keyboard.press('Control+Shift+Tab')
+    page.keyboard.press('Control+3')
+    page.keyboard.press('Control+1')
+    page.keyboard.press('Control+4')
+    assert sent() == [{'type': 'show', 'tab': 3}, {'type': 'show', 'tab': 5}, {'type': 'show', 'tab': 5}], sent()
     # While typing a comment too, which keeps its text.
     page.get_by_text('First paragraph').click()
     page.keyboard.type('half')
-    page.keyboard.press('Control+Tab')
-    assert len(nexts()) == 2 and page.input_value('.vjuu-c textarea') == 'half'
+    page.keyboard.press('Control+2')
+    assert sent()[-1] == {'type': 'show', 'tab': 3} and page.input_value('.vjuu-c textarea') == 'half'
+    # The mouse: a tab shows it, its × closes it.
+    strip.nth(2).locator('.tab-name').click()
+    strip.nth(1).locator('.tab-close').click()
+    assert sent()[-2:] == [{'type': 'show', 'tab': 5}, {'type': 'close', 'tab': 3}], sent()
+    # Ctrl+W closes this tab: its review is sent, as Submit & continue does.
+    page.keyboard.press('Control+w')
+    assert sent()[-1] == {'type': 'done'}
 
 
 def main():
@@ -841,7 +868,7 @@ def main():
             test_choice_keys,
             test_settings,
             test_help,
-            test_next_window,
+            test_tabs,
         ):
             if only and test.__name__ not in only:
                 continue
