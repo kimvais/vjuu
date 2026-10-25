@@ -100,7 +100,7 @@ its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 The resident instance has a tray icon. An orange dot on it means a review window is still open, and hovering it says
 how many. Click it to bring the oldest one forward. Right-click it for a list of the waiting reviews, oldest first: the
 asking session, what it asks (plan, question, permission, turn, or the file names), the repository and branch, and how
-long it has waited. Click one, or press its digit, to bring it forward. The same menu has the settings and stops
+long it has waited. Click one to bring it forward; on Windows, pressing its digit does the same. The same menu has the settings and stops
 vjuu. In a review window, `Ctrl+Tab` brings the next waiting one forward. If a new window
 opens behind others (Windows refuses to hand over focus while you type elsewhere), a notification says so. Switch the
 icon and notifications off with `vjuu config tray off`. On Linux the icon needs a desktop that shows StatusNotifier

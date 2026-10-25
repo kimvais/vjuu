@@ -950,9 +950,9 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     // The waiting windows the tray lists; None makes a new tray icon catch up.
     let mut listed: Option<Vec<(WindowId, String)>> = None;
     let tray_proxy = Arc::new(Mutex::new(proxy.clone()));
-    let new_tray = move || {
+    let new_tray = move |target: &EventLoopWindowTarget<AppEvent>| {
         let proxy = tray_proxy.clone();
-        tray::Tray::new(move |action| {
+        tray::Tray::new(target, move |action| {
             let _ = proxy.lock().expect("proxy lock").send_event(AppEvent::Tray(action));
         })
     };
@@ -981,7 +981,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             // macOS wants the tray made once the loop runs; the other platforms do not mind.
-            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(),
+            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(target),
+            #[cfg(windows)]
+            Event::UserEvent(AppEvent::Tray(tray::Action::Menu)) => {
+                if let Some(tray) = &tray {
+                    tray.show_menu();
+                }
+            }
             Event::UserEvent(AppEvent::Tray(tray::Action::Oldest)) => {
                 if let Some(s) = sessions.values().min_by_key(|s| s.started) {
                     raise(s);
@@ -1060,7 +1066,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
-                    tray = new_tray();
+                    tray = new_tray(target);
                     listed = None;
                 }
             }
@@ -1102,7 +1108,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             _ => {}
         }
-        if let Some(tray) = &tray {
+        if let Some(tray) = &mut tray {
             let open = waiting(&sessions);
             if listed.as_ref() != Some(&open) {
                 tray.show_waiting(&open);

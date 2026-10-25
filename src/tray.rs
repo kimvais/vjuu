@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use tao::event_loop::EventLoopWindowTarget;
 use tao::window::WindowId;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
@@ -11,6 +12,9 @@ use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, 
 /// What the tray asks the event loop to do.
 pub enum Action {
     Oldest,
+    /// Right-click on Windows: show the menu from vjuu's own window (see `Tray::show_menu`).
+    #[cfg(windows)]
+    Menu,
     Open(WindowId),
     Settings,
     Stop,
@@ -22,25 +26,42 @@ type Entries = Arc<Mutex<Vec<(MenuId, WindowId)>>>;
 pub struct Tray {
     icon: TrayIcon,
     entries: Entries,
+    /// The menu as last built, for `show_menu`.
+    #[cfg(windows)]
+    menu: Menu,
+    /// A hidden window that owns the menu while it is open.
+    #[cfg(windows)]
+    owner: tao::window::Window,
 }
 
 impl Tray {
     /// Shows the icon; `send` runs on whichever thread the platform reports clicks on.
-    pub fn new(send: impl Fn(Action) + Clone + Send + Sync + 'static) -> Option<Tray> {
+    pub fn new<T>(
+        target: &EventLoopWindowTarget<T>,
+        send: impl Fn(Action) + Clone + Send + Sync + 'static,
+    ) -> Option<Tray> {
+        let (menu, _) = menu(&[]).ok()?;
         let icon = TrayIconBuilder::new()
             .with_icon(icon(false))
             .with_tooltip("vjuu")
-            .with_menu(Box::new(menu(&[]).ok()?.0))
+            .with_menu(Box::new(menu.clone()))
             .with_menu_on_left_click(false)
+            // tray-icon's menu window is WS_EX_NOACTIVATE: the menu never gets the keyboard, so its digits do nothing.
+            .with_menu_on_right_click(!cfg!(windows))
             .build()
             // No tray on this desktop (a Linux one without a StatusNotifier host): reviews still work.
             .map_err(|e| eprintln!("No tray icon: {e}"))
             .ok()?;
         let click = send.clone();
-        TrayIconEvent::set_event_handler(Some(move |event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                click(Action::Oldest);
+        TrayIconEvent::set_event_handler(Some(move |event| match event {
+            TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } => {
+                click(Action::Oldest)
             }
+            #[cfg(windows)]
+            TrayIconEvent::Click { button: MouseButton::Right, button_state: MouseButtonState::Up, .. } => {
+                click(Action::Menu)
+            }
+            _ => {}
         }));
         let entries = Entries::default();
         let open = entries.clone();
@@ -54,11 +75,35 @@ impl Tray {
                 }
             }
         }));
-        Some(Tray { icon, entries })
+        #[cfg(windows)]
+        let owner = tao::window::WindowBuilder::new()
+            .with_visible(false)
+            .build(target)
+            .map_err(|e| eprintln!("No tray menu window: {e}"))
+            .ok()?;
+        #[cfg(not(windows))]
+        let _ = target;
+        Some(Tray {
+            icon,
+            entries,
+            #[cfg(windows)]
+            menu,
+            #[cfg(windows)]
+            owner,
+        })
+    }
+
+    /// Shows the menu at the cursor, owned by a window that takes the keyboard, so a digit picks a review.
+    #[cfg(windows)]
+    pub fn show_menu(&self) {
+        use tao::platform::windows::WindowExtWindows;
+        use tray_icon::menu::ContextMenu;
+        // SAFETY: `owner` is a live window for as long as `self` is.
+        unsafe { self.menu.show_context_menu_for_hwnd(self.owner.hwnd(), None) };
     }
 
     /// Shows the waiting reviews, oldest first, each with its line for the menu.
-    pub fn show_waiting(&self, waiting: &[(WindowId, String)]) {
+    pub fn show_waiting(&mut self, waiting: &[(WindowId, String)]) {
         let _ = self.icon.set_icon(Some(icon(!waiting.is_empty())));
         let tip = match waiting.len() {
             0 => "vjuu".to_string(),
@@ -68,7 +113,11 @@ impl Tray {
         let _ = self.icon.set_tooltip(Some(tip));
         if let Ok((menu, entries)) = menu(waiting) {
             *self.entries.lock().expect("entries lock") = entries;
-            self.icon.set_menu(Some(Box::new(menu)));
+            self.icon.set_menu(Some(Box::new(menu.clone())));
+            #[cfg(windows)]
+            {
+                self.menu = menu;
+            }
         }
     }
 }
