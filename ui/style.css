@@ -111,6 +111,21 @@ body.maximized .edge { display: none; }
 #context { flex: none; max-width: 30%; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #context:empty { display: none; }
 #name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One tab per review while several wait; the strip takes the session's and the name's place. */
+#tabs { display: none; flex: 1; min-width: 0; gap: 2px; align-self: stretch; padding-top: 6px; overflow: hidden; }
+body.tabbed #tabs { display: flex; }
+body.tabbed #session, body.tabbed #name { display: none; }
+#tabs .tab { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; padding: 0 6px 0 12px; border: 0;
+  border-radius: 6px 6px 0 0; background: transparent; color: var(--muted); }
+#tabs .tab:hover { background: var(--focus); }
+#tabs .tab.active { background: var(--bg); color: var(--fg); box-shadow: inset 0 2px var(--accent); }
+#tabs .tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#tabs .kind { font-size: 12px; color: var(--muted); }
+/* Arrived behind the tab in use and not looked at yet. */
+#tabs .tab.unseen .tab-name::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; background: var(--pick); vertical-align: middle; }
+#tabs .tab-close { padding: 0 5px; border-radius: 4px; opacity: 0.6; }
+#tabs .tab-close:hover { opacity: 1; background: var(--focus); }
 #count { color: var(--fg); font-weight: 600; }
 #statusbar {
   flex: none;

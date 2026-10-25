@@ -1,4 +1,5 @@
 mod config;
+mod host;
 mod platform;
 mod review;
 mod theme;
@@ -16,13 +17,13 @@ use std::{env, fs, thread};
 
 use interprocess::local_socket::{ListenerOptions, Stream, prelude::*};
 use serde::{Deserialize, Serialize};
-use tao::dpi::LogicalSize;
 use tao::event::{Event, StartCause, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{ResizeDirection, Window, WindowBuilder, WindowId};
+use tao::window::{ResizeDirection, Window};
+use wry::WebContext;
 use wry::http::Response;
-use wry::{WebContext, WebView, WebViewBuilder};
 
+use host::{Host, Tab, TabId};
 use platform::{bring_to_front, pipe_name};
 use review::Review;
 
@@ -140,17 +141,25 @@ enum Msg {
     },
     /// The settings panel's "Open themes folder".
     Themes,
-    /// Ctrl+Tab: bring the next waiting review forward.
-    Next,
+    /// A tab picked in the tab strip, or with Ctrl+Tab or Ctrl+1 to Ctrl+9.
+    Show {
+        tab: TabId,
+    },
+    /// A tab's close button: its review is sent as it is.
+    Close {
+        tab: TabId,
+    },
+    /// The window's close button: every tab's review is sent as it is.
+    Quit,
 }
 
 enum AppEvent {
-    /// A window to show; the stream is the client waiting for its review, None when vjuu opened it itself.
+    /// A review to show; the stream is the client waiting for it, None when vjuu opened it itself.
     Open(Request, Option<Stream>),
-    Ui(WindowId, Msg),
+    Ui(TabId, Msg),
     Tray(tray::Action),
-    /// A window's git context, looked up after it opened.
-    Context(WindowId, String),
+    /// A tab's git context, looked up after it opened.
+    Context(TabId, String),
 }
 
 /// Where a finished review goes.
@@ -160,24 +169,6 @@ enum Reply {
 }
 
 type Slot = Arc<Mutex<Option<Request>>>;
-
-struct Session {
-    // Declared before `window` and `_context` so it is dropped first.
-    webview: WebView,
-    window: Window,
-    /// This window's own web context where the platform needs one (see `platform::CONTEXT_PER_WINDOW`).
-    _context: Option<WebContext>,
-    slot: Slot,
-    reply: Option<Reply>,
-    latest: Review,
-    started: Instant,
-    /// The git context, kept to hand to the page again if it arrived before the page could take it.
-    context: Option<String>,
-    /// The settings panel's Apply saved, so a settings-only window can say so when it closes.
-    applied: bool,
-    /// Opened behind the window in use (the `focus` setting off), so it is never brought to the front by itself.
-    background: bool,
-}
 
 fn main() {
     let started = Instant::now();
@@ -935,20 +926,19 @@ fn listen(proxy: EventLoopProxy<AppEvent>) {
     });
 }
 
-/// Runs the window event loop: one visible document (cold) or resident with a pre-warmed spare window.
+/// Runs the event loop: one window with one review (cold), or resident, with a review per tab and a pre-warmed spare.
 fn run(initial: Option<Request>, started: Instant) -> ! {
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     // Keep the webview profile out of the exe's directory (`~/.cargo/bin` after `cargo install`).
     let mut context = WebContext::new(Some(platform::data_dir().join("webview")));
-    let mut sessions: HashMap<WindowId, Session> = HashMap::new();
-    let mut spare: Option<Session> = None;
+    let mut host = Host::new(&event_loop);
     let mut spare_due = None;
-    // Only the resident instance has a tray: it outlives the windows and holds every session's.
+    // Only the resident instance has a tray: it outlives the reviews and holds every session's.
     let resident = initial.is_none();
     let mut tray: Option<tray::Tray> = None;
-    // The waiting windows the tray lists; None makes a new tray icon catch up.
-    let mut listed: Option<Vec<(WindowId, String)>> = None;
+    // The waiting reviews the tray lists; None makes a new tray icon catch up.
+    let mut listed: Option<Vec<(TabId, String)>> = None;
     let tray_proxy = Arc::new(Mutex::new(proxy.clone()));
     let new_tray = move |target: &EventLoopWindowTarget<AppEvent>| {
         let proxy = tray_proxy.clone();
@@ -960,18 +950,9 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let mut focus = config::load().focus;
     match initial {
         Some(request) => {
-            let title = request.title();
             let cwd = request.cwd.clone();
-            let mut s = new_session(&event_loop, &proxy, &mut context, Some(request), focus);
-            look_up_context(&proxy, s.window.id(), cwd);
-            s.window.set_title(&title);
-            s.reply = Some(Reply::Stdout);
-            s.started = started;
-            s.background = !focus;
-            if focus {
-                bring_to_front(&s.window, &s.webview);
-            }
-            sessions.insert(s.window.id(), s);
+            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus);
+            look_up_context(&proxy, id, cwd);
         }
         None => {
             listen(proxy.clone());
@@ -989,76 +970,51 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 }
             }
             Event::UserEvent(AppEvent::Tray(tray::Action::Oldest)) => {
-                if let Some(s) = sessions.values().min_by_key(|s| s.started) {
-                    raise(s);
+                if let Some(id) = host.tabs().min_by_key(|(_, t)| t.started).map(|(id, _)| *id) {
+                    host.raise(id);
                 }
             }
-            Event::UserEvent(AppEvent::Tray(tray::Action::Open(id))) => {
-                if let Some(s) = sessions.get(&id) {
-                    raise(s);
-                }
-            }
-            Event::UserEvent(AppEvent::Ui(id, Msg::Next)) => {
-                let open = waiting(&sessions);
-                let at = open.iter().position(|(w, _)| *w == id).unwrap_or(0);
-                // The one opened after this, or the oldest after the newest.
-                if let Some(s) = open.iter().cycle().nth(at + 1).and_then(|(w, _)| sessions.get(w)) {
-                    raise(s);
-                }
-            }
+            Event::UserEvent(AppEvent::Tray(tray::Action::Open(id))) => host.raise(id),
+            Event::UserEvent(AppEvent::Ui(_, Msg::Show { tab })) => host.show(tab),
             Event::UserEvent(AppEvent::Tray(tray::Action::Settings)) => {
                 let _ = proxy.send_event(AppEvent::Open(settings_request(), None));
             }
             Event::UserEvent(AppEvent::Tray(tray::Action::Stop)) => process::exit(0),
             Event::UserEvent(AppEvent::Context(id, git)) => {
-                if let Some(s) = sessions.get_mut(&id) {
-                    let title = s.slot.lock().expect("slot lock").as_ref().map(Request::title).unwrap_or_default();
-                    s.window.set_title(&format!("{title} · {git}"));
+                if let Some(s) = host.get_mut(id) {
                     s.context = Some(git);
                     show_context(s);
                 }
+                if host.is_active(id)
+                    && let Some(s) = host.get(id)
+                {
+                    host.window.set_title(&s.title());
+                }
             }
             Event::UserEvent(AppEvent::Open(request, conn)) => {
-                let title = request.title();
                 let cwd = request.cwd.clone();
-                let mut s = spare.take().unwrap_or_else(|| new_session(target, &proxy, &mut context, None, true));
-                look_up_context(&proxy, s.window.id(), cwd);
-                *s.slot.lock().expect("slot lock") = Some(request);
-                s.reply = conn.map(Reply::Client);
-                s.started = Instant::now();
-                s.window.set_title(&title);
-                let _ = s.webview.evaluate_script("window.vjuuLoad && vjuuLoad()");
-                s.background = !focus;
-                if focus {
-                    s.window.set_visible(true);
-                    bring_to_front(&s.window, &s.webview);
-                } else {
-                    // Unfocusable while it appears, so Windows does not activate it; clickable again right after.
-                    s.window.set_focusable(false);
-                    s.window.set_visible(true);
-                    s.window.set_focusable(true);
-                }
-                sessions.insert(s.window.id(), s);
+                let id = host.open(&proxy, &mut context, request, conn.map(Reply::Client), Instant::now(), focus);
+                look_up_context(&proxy, id, cwd);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::State { review })) => {
-                if let Some(s) = sessions.get_mut(&id) {
+                if let Some(s) = host.get_mut(id) {
                     s.latest = review;
                 }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Settings { config })) => {
                 match config::save(&config) {
                     Ok(()) => {
-                        if let Some(s) = sessions.get_mut(&id) {
+                        if let Some(s) = host.get_mut(id) {
                             s.applied = true;
                         }
                     }
                     Err(e) => eprintln!("Cannot save {}: {e}", config::path().display()),
                 }
                 match theme::write_compiled(&config.theme) {
-                    // Every open window recolours, not only the one with the panel, and so does the spare.
-                    Ok(()) => sessions.values().chain(&spare).for_each(|s| {
-                        let _ = s.webview.evaluate_script("window.vjuuThemeSaved && vjuuThemeSaved()");
+                    // Every tab recolours, not only the one with the panel, and so does the spare.
+                    Ok(()) => host.webviews().for_each(|webview| {
+                        let _ = webview.evaluate_script("window.vjuuThemeSaved && vjuuThemeSaved()");
                     }),
                     Err(e) => eprintln!("Cannot compile the theme: {e}"),
                 }
@@ -1070,57 +1026,59 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     listed = None;
                 }
             }
-            Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut sessions, id, true),
+            Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut host, id, true),
+            Event::UserEvent(AppEvent::Ui(_, Msg::Close { tab })) => finish(&mut host, tab, true),
+            Event::UserEvent(AppEvent::Ui(_, Msg::Quit))
+            | Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                let ids: Vec<TabId> = host.tabs().map(|(id, _)| *id).collect();
+                ids.into_iter().for_each(|id| finish(&mut host, id, true));
+            }
             Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
-                if let Some(s) = sessions.get(&id) {
+                if let Some(s) = host.get(id) {
                     show_context(s);
-                    if !s.background {
-                        bring_to_front(&s.window, &s.webview);
+                    host.show_strip_in(s);
+                    let active = host.is_active(id);
+                    if active && !s.background {
+                        bring_to_front(&host.window, &s.webview);
                     }
                     // Opened behind on purpose, or the OS kept it there (focus-stealing prevention): say so.
-                    if tray.is_some() && !s.window.is_focused() {
-                        notify(s.window.title());
+                    if tray.is_some() && !(active && host.window.is_focused()) {
+                        notify(s.title());
                     }
                 }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Rendered)) => {
-                if let Some(s) = sessions.get(&id)
+                if let Some(s) = host.get(id)
                     && matches!(s.reply, Some(Reply::Stdout))
                 {
                     eprintln!("rendered in {} ms", s.started.elapsed().as_millis());
                 }
-                finish(&mut sessions, id, false)
+                finish(&mut host, id, false)
             }
-            Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => {
-                finish(&mut sessions, window_id, true)
-            }
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => host.fit(),
             // Activation focuses the native window, not the webview inside it; pass keyboard focus on, or keys
             // go nowhere until the page is clicked (seen with resident windows and after alt-tab).
-            Event::WindowEvent { window_id, event: WindowEvent::Focused(true), .. } => {
-                if let Some(s) = sessions.get(&window_id) {
+            Event::WindowEvent { event: WindowEvent::Focused(true), .. } => {
+                if let Some(s) = host.tabs().find(|(id, _)| host.is_active(*id)).map(|(_, s)| s) {
                     let _ = s.webview.focus();
                 }
             }
-            Event::UserEvent(AppEvent::Ui(id, msg)) => {
-                if let Some(s) = sessions.get(&id) {
-                    window_command(&s.window, msg);
-                }
-            }
+            Event::UserEvent(AppEvent::Ui(_, msg)) => window_command(&host.window, msg),
             _ => {}
         }
         if let Some(tray) = &mut tray {
-            let open = waiting(&sessions);
+            let open = waiting(&host);
             if listed.as_ref() != Some(&open) {
                 tray.show_waiting(&open);
                 listed = Some(open);
             }
         }
-        if spare.is_none() && spare_due.is_some_and(|due| due <= Instant::now()) {
-            spare = Some(new_session(target, &proxy, &mut context, None, true));
+        if spare_due.is_some_and(|due| due <= Instant::now()) {
+            host.warm_spare(&proxy, &mut context);
             spare_due = None;
         }
         // The tray menu's ages count minutes.
-        let tick = (tray.is_some() && !sessions.is_empty()).then(|| Instant::now() + Duration::from_secs(60));
+        let tick = (tray.is_some() && host.tabs().next().is_some()).then(|| Instant::now() + Duration::from_secs(60));
         *control_flow = match spare_due.into_iter().chain(tick).min() {
             Some(due) => ControlFlow::WaitUntil(due),
             None => ControlFlow::Wait,
@@ -1128,36 +1086,16 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     })
 }
 
-fn raise(s: &Session) {
-    s.window.set_minimized(false);
-    bring_to_front(&s.window, &s.webview);
+/// Returns the waiting reviews, oldest first, each with its line for the tray menu.
+fn waiting(host: &Host) -> Vec<(TabId, String)> {
+    let mut open: Vec<&(TabId, Tab)> = host.tabs().collect();
+    open.sort_by_key(|(_, s)| s.started);
+    open.into_iter().map(|(id, s)| (*id, s.label())).collect()
 }
 
-/// Returns the open review windows, oldest first, each with its line for the tray menu.
-fn waiting(sessions: &HashMap<WindowId, Session>) -> Vec<(WindowId, String)> {
-    let mut open: Vec<&Session> = sessions.values().collect();
-    open.sort_by_key(|s| s.started);
-    open.into_iter().map(|s| (s.window.id(), s.label())).collect()
-}
-
-impl Session {
-    /// Returns "fix login · plan · vjuu · main · 4 min": the asking session, what it asks (or the documents), the git
-    /// checkout and how long it has waited; whichever are known.
-    fn label(&self) -> String {
-        let slot = self.slot.lock().expect("slot lock");
-        let (session, what) =
-            slot.as_ref().map(|r| (r.session.clone(), r.kind.clone().unwrap_or_else(|| r.name()))).unzip();
-        [session.flatten(), what, self.context.clone(), Some(tray::age(self.started.elapsed()))]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" · ")
-    }
-}
-
-/// Looks up the git context of `cwd` on a thread and hands it to the window, twice: the checkout at once, and again
-/// with the PR or MR number once `gh` or `glab` answers over the network. The window never waits for either.
-fn look_up_context(proxy: &EventLoopProxy<AppEvent>, id: WindowId, cwd: Option<PathBuf>) {
+/// Looks up the git context of `cwd` on a thread and hands it to the tab, twice: the checkout at once, and again
+/// with the PR or MR number once `gh` or `glab` answers over the network. The tab never waits for either.
+fn look_up_context(proxy: &EventLoopProxy<AppEvent>, id: TabId, cwd: Option<PathBuf>) {
     let Some(cwd) = cwd else { return };
     let proxy = proxy.clone();
     thread::spawn(move || {
@@ -1170,7 +1108,7 @@ fn look_up_context(proxy: &EventLoopProxy<AppEvent>, id: WindowId, cwd: Option<P
     });
 }
 
-fn show_context(s: &Session) {
+fn show_context(s: &Tab) {
     if let Some(git) = &s.context {
         let git = serde_json::to_string(git).expect("string serialises");
         let _ = s.webview.evaluate_script(&format!("window.vjuuContext && vjuuContext({git})"));
@@ -1246,79 +1184,14 @@ fn window_command(window: &Window, msg: Msg) {
             let _ = theme::ensure_shipped();
             platform::open_url(&theme::dir().to_string_lossy());
         }
-        Msg::State { .. } | Msg::Done | Msg::Rendered | Msg::Ready | Msg::Settings { .. } | Msg::Next => {}
-    }
-}
-
-/// Creates a window and webview; without a request it stays hidden until a client hands one over. `focus` false
-/// opens a shown window behind the one in use.
-fn new_session(
-    target: &EventLoopWindowTarget<AppEvent>,
-    proxy: &EventLoopProxy<AppEvent>,
-    context: &mut WebContext,
-    request: Option<Request>,
-    focus: bool,
-) -> Session {
-    // A spare window is built while the user is reading another one: it must not take focus, or their keys
-    // go to the hidden spare.
-    let shown = request.is_some();
-    let builder = WindowBuilder::new()
-        .with_title("vjuu")
-        .with_visible(shown)
-        .with_focused(shown && focus)
-        .with_inner_size(LogicalSize::new(1100.0, 900.0));
-    let window = platform::frame(builder).build(target).unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
-    platform::style_frame(&window);
-    platform::fit_height(&window);
-    let slot: Slot = Arc::new(Mutex::new(request));
-    let proxy = proxy.clone();
-    let id = window.id();
-    let serve_slot = slot.clone();
-    let mut own = platform::CONTEXT_PER_WINDOW.then(|| WebContext::new(Some(platform::data_dir().join("webview"))));
-    let context = own.as_mut().unwrap_or(context);
-    let builder = WebViewBuilder::new_with_web_context(context)
-        .with_focused(shown && focus)
-        // Tells ui/ whether to draw its own title bar and resize edges.
-        .with_initialization_script(format!("window.VJUU_FRAMELESS = {};", platform::FRAMELESS))
-        .with_custom_protocol("vjuu".into(), move |_id, request| serve(request.uri().path(), &serve_slot))
-        .with_url("vjuu://localhost/")
-        .with_navigation_handler(|url| {
-            if is_vjuu(&url) {
-                return true;
-            }
-            // External links go to the default browser so the review page is never replaced.
-            if url.starts_with("http://") || url.starts_with("https://") {
-                platform::open_url(&url);
-            }
-            false
-        })
-        .with_ipc_handler(move |request| {
-            // Only vjuu's own page: an HTML page under review runs its scripts in a frame, and must not be able to
-            // finish the review or fill it in, should the platform hand frames the message channel.
-            if !is_vjuu(&request.uri().to_string()) {
-                eprintln!("Ignored a message from {}", request.uri());
-                return;
-            }
-            match serde_json::from_str::<Msg>(request.body()) {
-                Ok(msg) => {
-                    let _ = proxy.send_event(AppEvent::Ui(id, msg));
-                }
-                Err(e) => eprintln!("Bad message from UI: {e}"),
-            }
-        });
-    let webview =
-        platform::build_webview(builder, &window).unwrap_or_else(|e| fail(&format!("Cannot create webview: {e}")));
-    Session {
-        webview,
-        window,
-        _context: own,
-        slot,
-        reply: None,
-        latest: Review::default(),
-        started: Instant::now(),
-        context: None,
-        applied: false,
-        background: false,
+        Msg::State { .. }
+        | Msg::Done
+        | Msg::Rendered
+        | Msg::Ready
+        | Msg::Settings { .. }
+        | Msg::Show { .. }
+        | Msg::Close { .. }
+        | Msg::Quit => {}
     }
 }
 
@@ -1329,8 +1202,8 @@ fn is_vjuu(url: &str) -> bool {
 }
 
 /// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
-fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
-    let Some(s) = sessions.remove(&id) else { return };
+fn finish(host: &mut Host, id: TabId, save: bool) {
+    let Some(s) = host.remove(id) else { return };
     let (name, only_settings, keep) = match s.slot.lock().expect("slot lock").as_ref() {
         Some(r) => (r.name(), r.sample, r.comments.clone()),
         None => (String::new(), false, None),
@@ -1352,7 +1225,6 @@ fn finish(sessions: &mut HashMap<WindowId, Session>, id: WindowId, save: bool) {
         Some(Reply::Stdout) => {
             // Tear the webview down before exiting, or Chromium logs a window-class error to stderr.
             drop(s.webview);
-            drop(s.window);
             print!("{md}");
             process::exit(0)
         }
