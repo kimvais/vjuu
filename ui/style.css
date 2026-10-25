@@ -256,7 +256,14 @@ body.with-files main, body.with-files #overall-box { margin-left: 280px; }
 #files .add { color: var(--d2h-ins-label-color); font: 12px var(--mono); }
 #files .del { color: var(--d2h-del-label-color); font: 12px var(--mono); }
 #files .badge { background: var(--accent); color: var(--accent-fg); border-radius: 8px; padding: 0 6px; font-size: 11px; font-weight: 600; }
+#files a.viewed .base { font-weight: 400; color: var(--muted); }
+#files .tick { color: var(--d2h-ins-label-color); }
 .d2h-file-wrapper, .doc { scroll-margin-top: 8px; }
+/* A folded file shows only its header: viewed, or generated and not opened. */
+.d2h-file-wrapper.folded .d2h-file-diff, .d2h-file-wrapper.folded .d2h-files-diff { display: none; }
+.d2h-file-header { cursor: pointer; }
+.d2h-file-header .viewed { flex: none; display: flex; gap: 6px; align-items: center; margin-left: 12px; color: var(--muted); font: 13px var(--sans); }
+.d2h-file-header .viewed input { margin: 0; accent-color: var(--accent); }
 #files a.toc { color: var(--muted); }
 #files a.toc.active, #files a.toc:hover { color: var(--fg); }
 #files .heading { overflow: hidden; text-overflow: ellipsis; }
