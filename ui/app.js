@@ -13,9 +13,16 @@ let showChanges = true;
 let focused = null;
 /** key -> {el, a}: every commentable element of the current render. */
 let anchors = new Map();
-/** [{el, doc, file, add, del}]: one per file, for the file list. Rebuilt by render(). */
+/** [{el, doc, part, file, add, del}]: one per file, for the file list. Rebuilt by render(). */
 let targets = [];
 let filesHidden = false;
+/** Diff file key -> folded, where the reviewer chose; otherwise generated files start folded. Survives re-renders. */
+const folded = new Map();
+/** Diff file keys marked viewed. Survives re-renders. */
+const viewed = new Set();
+/** File names of lock files, minified and generated code: folded until opened, as nobody reads them line by line. */
+const GENERATED = /(\.lockb?|-lock\.json|-lock\.yaml|\.lock\.json|^go\.sum|^npm-shrinkwrap\.json|\.min\.js|\.min\.css|\.map|\.pb\.go|_pb2(_grpc)?\.py|\.generated\.\w+)$/;
+const fileKey = (t) => `${t.doc}\n${t.part}\n${t.file}`;
 /** key -> {doc, file, start, end, old, quote, text, editing}. Survives re-renders. */
 const comments = new Map();
 /** key -> {question, answer}: the ```choice blocks of the markdown documents, in order. Survives re-renders. */
@@ -506,7 +513,10 @@ function renderDiff(section, doc, i) {
     const file = wrapper.querySelector('.d2h-file-name').textContent.split(' → ').pop().trim();
     // Side-by-side shows added lines on the right only and deleted ones on the left only.
     const count = (cls) => wrapper.querySelectorAll(`.d2h-code-linenumber.${cls}, .d2h-code-side-linenumber.${cls}`).length;
-    targets.push({ el: wrapper, doc: i, file, add: count('d2h-ins'), del: count('d2h-del') });
+    const t = { el: wrapper, doc: i, part, file, add: count('d2h-ins'), del: count('d2h-del') };
+    targets.push(t);
+    addFoldControls(t);
+    showFold(t);
     const lineText = (tr) =>
       (tr.querySelector('.d2h-code-line-prefix')?.textContent.trim() ?? '') +
       (tr.querySelector('.d2h-code-line-ctn')?.textContent.trimEnd() ?? '');
@@ -535,6 +545,54 @@ function renderDiff(section, doc, i) {
       });
     });
   }
+}
+
+/** Adds the Viewed tick to a diff file's header; a click elsewhere on the header folds or opens the file. */
+function addFoldControls(t) {
+  const header = t.el.querySelector('.d2h-file-header');
+  header.title = 'Fold / open this file (o)';
+  header.onclick = (e) => { if (!e.target.closest('label')) toggleFold(t); };
+  const label = document.createElement('label');
+  label.className = 'viewed';
+  label.title = 'Viewed: folds the file and ticks it in the sidebar (x)';
+  // A focused checkbox would take the review keys as a field does.
+  label.onmousedown = (e) => e.preventDefault();
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.onchange = () => toggleViewed(t);
+  label.append(box, 'Viewed');
+  header.append(label);
+}
+
+function showFold(t) {
+  const k = fileKey(t);
+  const shut = folded.get(k) ?? GENERATED.test(t.file.split(/[\\/]/).pop());
+  t.el.classList.toggle('folded', shut);
+  t.el.querySelector('.viewed input').checked = viewed.has(k);
+  // The cursor cannot stay on a hidden line; it waits on the header, where o opens the file again.
+  if (shut && t.el.contains(focused)) setFocus(t.el.querySelector('.d2h-file-header'));
+  else if (!shut && focused?.matches('.d2h-file-header') && t.el.contains(focused)) setFocus(t.el.querySelector('[data-key]'));
+}
+
+/** Marks a diff file viewed, folding it, or unmarks and opens it. */
+function toggleViewed(t) {
+  const k = fileKey(t);
+  if (viewed.has(k)) viewed.delete(k); else viewed.add(k);
+  folded.set(k, viewed.has(k));
+  showFold(t);
+  renderFileList();
+}
+
+function toggleFold(t) {
+  folded.set(fileKey(t), !t.el.classList.contains('folded'));
+  showFold(t);
+}
+
+/** Returns the diff file under the cursor, or else at the top of the view; null without one. */
+function currentFile() {
+  const files = targets.filter((t) => t.add !== undefined);
+  if (!files.length) return null;
+  return files.find((t) => t.el.contains(focused)) ?? files[activeTarget(files)];
 }
 
 function renderComments() {
@@ -652,6 +710,10 @@ function renderFileList() {
     if (t.add !== undefined) a.append(span('add', `+${t.add}`), span('del', `−${t.del}`));
     const n = perFile.get(`${t.doc}\n${t.file}`);
     if (n) a.append(span('badge', n));
+    if (t.add !== undefined && viewed.has(fileKey(t))) {
+      a.classList.add('viewed');
+      a.append(span('tick', '✓'));
+    }
     rows.push(a);
   }
   nav.replaceChildren(...rows);
@@ -933,8 +995,8 @@ function jumpFile(delta) {
   const cur = focused ? list.findLastIndex(atOrBefore) : activeTarget(list);
   const next = list[Math.min(Math.max(cur + delta, 0), list.length - 1)];
   next.el.scrollIntoView({ block: 'start' });
-  const first = next.el.matches('[data-key]')
-    ? next.el
+  const first = next.el.matches('.folded') ? next.el.querySelector('.d2h-file-header')
+    : next.el.matches('[data-key]') ? next.el
     : next.el.querySelector('[data-key]') ?? next.el.querySelector('iframe')?.contentDocument?.querySelector('[data-key]');
   if (first) setFocus(first);
 }
@@ -961,7 +1023,8 @@ function onKey(e) {
     return;
   }
   if (inField || e.ctrlKey || e.altKey || e.metaKey) return;
-  const all = deep('[data-key]');
+  // The lines of folded files are hidden; their headers stand in for them.
+  const all = deep('[data-key], .folded .d2h-file-header').filter((el) => !el.dataset.key || !el.closest('.folded'));
   // Arrows and the vim-style letters do the same thing.
   const key = { ArrowDown: 'j', ArrowUp: 'k', ArrowRight: 'n', ArrowLeft: 'p' }[e.key] ?? e.key;
   // Digits pick an option of the choice block under the cursor, or of the only one in the review.
@@ -981,7 +1044,9 @@ function onKey(e) {
     commentOn(s.el, s.a);
   } else if (key === 'c' || key === 'Enter') {
     const el = focused ?? move(all, 0);
-    if (el) startComment(el);
+    if (el?.dataset.key) startComment(el);
+  } else if ((e.key === 'x' || e.key === 'o') && currentFile()) {
+    if (e.key === 'x') toggleViewed(currentFile()); else toggleFold(currentFile());
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
   } else if (e.key === 'd' && hasChanges()) {

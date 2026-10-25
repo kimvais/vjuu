@@ -460,6 +460,58 @@ def test_directory_tree(page, url, work):
     ], got
 
 
+def test_folded_files(page, url, work):
+    # Outside a diff there is no file to mark or fold.
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    page.keyboard.press('x')
+    page.keyboard.press('o')
+    assert page.locator('.folded, .viewed').count() == 0
+
+    files = ['src/app.py', 'Cargo.lock', 'ui/x.min.js', 'src/lib.py']
+    diff = ''.join(_DIFF.replace('src/app.py', f) for f in files)
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': diff})
+    folded = lambda: page.eval_on_selector_all(
+        '.d2h-file-wrapper', "ws => ws.map((w) => w.classList.contains('folded'))"
+    )
+    ticked = lambda: page.locator('#files a.viewed .base').all_inner_texts()
+    cursor = lambda: page.evaluate("""() => {
+        const el = document.querySelector('.focused');
+        const file = [...document.querySelectorAll('.d2h-file-wrapper')].indexOf(el.closest('.d2h-file-wrapper'));
+        return el.dataset.key ? el.dataset.key.split('\\n').slice(2).join(' ') : `header ${file}`;
+    }""")
+    # Lock and minified files start folded, not viewed; the others open.
+    assert folded() == [False, True, True, False] and ticked() == []
+    # The cursor steps over a folded file's lines, onto its header.
+    for _ in range(5):
+        page.keyboard.press('j')
+    assert cursor() == 'src/app.py 4-4', cursor()
+    page.keyboard.press('j')
+    assert cursor() == 'header 1', cursor()
+    page.keyboard.press('Enter')  # a header takes no comment
+    assert page.locator('.vjuu-c').count() == 0
+    page.keyboard.press('j')
+    page.keyboard.press('j')
+    assert cursor() == 'src/lib.py 1-1', cursor()
+    page.keyboard.press('ArrowLeft')  # previous file: folded, so its header
+    assert cursor() == 'header 2', cursor()
+    page.keyboard.press('k')
+    page.keyboard.press('o')  # opens it, the cursor on its first line
+    assert folded() == [False, False, True, False] and cursor() == 'Cargo.lock 1-1', cursor()
+    # Viewed folds the file, ticks it, and leaves the cursor on its header; again unmarks and opens it.
+    page.keyboard.press('x')
+    assert folded() == [False, True, True, False] and ticked() == ['Cargo.lock'] and cursor() == 'header 1'
+    assert page.locator('.d2h-file-wrapper').nth(1).locator('.viewed input').is_checked()
+    page.keyboard.press('x')
+    assert folded() == [False, False, True, False] and ticked() == []
+    # The mouse: the Viewed box, and the header to fold or open; the keys still work afterwards.
+    page.locator('.d2h-file-wrapper').nth(3).locator('.viewed').click()
+    page.locator('.d2h-file-wrapper').nth(2).locator('.d2h-file-name').click()
+    assert folded() == [False, False, False, True] and ticked() == ['lib.py']
+    page.keyboard.press('v')  # survives a re-render
+    assert folded() == [False, False, False, True] and ticked() == ['lib.py']
+    assert page.locator('.d2h-file-wrapper').nth(3).locator('.viewed input').is_checked()
+
+
 def test_comment_box_wraps_within_view(page, url, work):
     # A line wider than the view makes the comment row as wide as the table; the box must stay visible.
     long = _DIFF.replace('+def new():', '+def new(): ' + 'pass; ' * 80)
@@ -764,6 +816,7 @@ def main():
             test_unsaved_comment_is_kept,
             test_same_file_twice_in_one_diff,
             test_directory_tree,
+            test_folded_files,
             test_comment_box_wraps_within_view,
             test_markdown_file_in_a_diff_uses_code_size,
             test_markdown_html_is_not_rendered,

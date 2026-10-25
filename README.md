@@ -125,6 +125,8 @@ notification when the tray is on.
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
 | `d` | A revised plan (or `--previous`): toggle its changes / the full file |
+| `x` | Mark the diff file under the cursor viewed: folds it and ticks it in the sidebar; again to unmark |
+| `o` | Fold / open the diff file under the cursor; lock files, minified and generated files start folded |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+,` (`⌘,` on macOS) | Settings |
 | `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
@@ -132,7 +134,7 @@ notification when the tray is on.
 
 Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
 rows) and click **Comment** or press `c`. Links still open, except on HTML pages, where only in-page links work; clicks
-inside a comment edit it.
+inside a comment edit it. In a diff, click a file's header to fold or open it, or tick its **Viewed** box.
 
 Themes, picked in the settings (`Ctrl+,`, or the gear in the title bar): **Light** (GitHub) and **Graphite** (Monokai code colours on
 neutral dark grey), GitHub Dark, GitLab Light and Dark, Dracula, One Dark, Nord, Tokyo Night, Solarized, Gruvbox and
