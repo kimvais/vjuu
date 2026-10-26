@@ -112,6 +112,18 @@ pub fn spawn_detached(command: &mut Command) {
     let _ = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
 }
 
+/// Keeps a console program from opening a window. The resident instance is detached and has no console, so Windows
+/// would give each child (git, gh, glab) one of its own: a terminal window flashing up and closing.
+pub fn no_window(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 /// Opens an http(s) link in the default browser.
 pub fn open_url(url: &str) {
     let opener = if cfg!(windows) {
