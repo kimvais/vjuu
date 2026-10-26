@@ -1117,7 +1117,12 @@ fn show_context(s: &Tab) {
 
 /// Returns a command's trimmed output, or None when it fails, prints nothing or is not installed.
 fn run_in(cwd: &Path, program: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new(program).current_dir(cwd).args(args).stdin(process::Stdio::null()).output().ok()?;
+    let out = platform::no_window(&mut Command::new(program))
+        .current_dir(cwd)
+        .args(args)
+        .stdin(process::Stdio::null())
+        .output()
+        .ok()?;
     let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
     (out.status.success() && !text.is_empty()).then_some(text)
 }
