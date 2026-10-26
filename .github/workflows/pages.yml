@@ -35,6 +35,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
         run: |
+          # ubuntu-latest became 26.04, which ships without apt-ftparchive.
+          sudo apt-get update -qq && sudo apt-get install -y -qq apt-utils
           gh release download --repo "$GITHUB_REPOSITORY" --pattern '*.deb' --dir dist
           packaging/apt/build-repo.sh dist site/apt
       - uses: actions/upload-pages-artifact@v3
