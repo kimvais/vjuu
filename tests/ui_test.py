@@ -600,6 +600,31 @@ def test_markdown_html_is_not_rendered(page, url, work):
     assert page.evaluate('window.__pwned') is None
 
 
+def test_mermaid_diagram(page, url, work):
+    text = (
+        '# Flow\n\n```mermaid\ngraph TD\n  A[Start] --> B["<img src=x onerror=window.__pwned=1>"]\n'
+        '  click A call alert()\n```\n\n```mermaid\nnot a diagram at all\n```\n'
+    )
+    _open(page, url, work, {'name': 'flow.md', 'kind': 'md', 'text': text})
+    page.wait_for_selector('pre.mermaid svg', timeout=10000)
+    # Strict mode sanitises labels: an image may stay, as in markdown, but no handler on anything, and no click calls.
+    handlers = "[...document.querySelectorAll('pre.mermaid svg *')].filter((e) => [...e.attributes].some((a) => a.name.startsWith('on'))).length"
+    assert page.evaluate(handlers) == 0
+    assert page.evaluate('window.__pwned') is None
+    assert 'Start' in page.locator('pre.mermaid').first.text_content()
+    # The diagram comments like any block, quoting its source.
+    page.locator('.diagram').first.click(position={'x': 5, 'y': 5})
+    _comment(page, 'B first')
+    [c] = _review(page)['comments']
+    assert (c['start'], c['end'], c['quote'].splitlines()[1]) == (3, 7, 'graph TD'), c
+
+
+def test_no_mermaid_without_diagrams(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    page.wait_for_timeout(200)
+    assert page.evaluate("[...document.scripts].some((s) => s.src.includes('mermaid'))") is False
+
+
 _HTML = """<!doctype html>
 <html><head><link rel="stylesheet" href="site.css"></head><body>
 <h1>Title</h1>
@@ -909,6 +934,8 @@ def main():
             test_comment_box_wraps_within_view,
             test_markdown_file_in_a_diff_uses_code_size,
             test_markdown_html_is_not_rendered,
+            test_mermaid_diagram,
+            test_no_mermaid_without_diagrams,
             test_html_page,
             test_choices,
             test_choice_keys,

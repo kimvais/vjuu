@@ -1300,6 +1300,7 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         "/vendor/hljs-languages.min.js" => {
             (Cow::Borrowed(include_bytes!("../ui/vendor/hljs-languages.min.js")), "text/javascript")
         }
+        "/vendor/mermaid.min.js" => (Cow::Borrowed(include_bytes!("../ui/vendor/mermaid.min.js")), "text/javascript"),
         "/vendor/diff2html.min.css" => (Cow::Borrowed(include_bytes!("../ui/vendor/diff2html.min.css")), "text/css"),
         "/vendor/inter.woff2" => (Cow::Borrowed(include_bytes!("../ui/vendor/inter.woff2")), "font/woff2"),
         "/vendor/jetbrains-mono.woff2" => {

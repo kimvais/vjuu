@@ -389,8 +389,14 @@ function renderMarkdown(section, doc, i) {
   };
   const md = window.markdownit({ linkify: true, highlight });
   const fence = md.renderer.rules.fence;
-  md.renderer.rules.fence = (tokens, idx, ...rest) =>
-    tokens[idx].info.trim() === 'choice' ? choiceHtml(tokens[idx]) : fence(tokens, idx, ...rest);
+  md.renderer.rules.fence = (tokens, idx, ...rest) => {
+    const t = tokens[idx];
+    const info = t.info.trim();
+    if (info === 'choice') return choiceHtml(t);
+    // Drawn by drawDiagrams() once mermaid has loaded; until then, and if it fails, the source shows.
+    if (info === 'mermaid') return `<div class="diagram" data-map="${t.map.join(',')}"><pre class="mermaid">${escapeHtml(t.content)}</pre></div>`;
+    return fence(tokens, idx, ...rest);
+  };
   const lines = doc.text.split(/\r?\n/);
   const tokens = md.parse(doc.text, {});
   for (const t of tokens) {
@@ -400,6 +406,8 @@ function renderMarkdown(section, doc, i) {
   article.className = 'markdown';
   article.innerHTML = md.renderer.render(tokens, md.options, {});
   section.append(article);
+  const diagrams = [...article.querySelectorAll('pre.mermaid')];
+  if (diagrams.length) drawDiagrams(diagrams);
   // Relative images resolve against each document's own folder, served by vjuu as files/<i>/.
   for (const img of article.querySelectorAll('img[src]')) {
     const src = img.getAttribute('src');
@@ -420,6 +428,15 @@ function renderMarkdown(section, doc, i) {
     while (end > from + 1 && !lines[end - 1].trim()) end--;
     anchor(el, { doc: i, file: doc.name, start: from + 1, end, old: false, quote: lines.slice(from, end).join('\n') });
   }
+}
+
+/** Draws ```mermaid blocks. The library is larger than the rest of the UI together, so it loads only when needed. */
+async function drawDiagrams(nodes) {
+  await loadScript('vendor/mermaid.min.js');
+  const dark = getComputedStyle(document.documentElement).colorScheme.includes('dark');
+  // strict: the diagram is agent output drawn next to window.ipc, so no HTML in labels and no click handlers.
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+  await mermaid.run({ nodes, suppressErrors: true });
 }
 
 const OPTION = /^(?:[-*]|\d+[.):])\s+(.*)$/;
