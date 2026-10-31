@@ -246,8 +246,8 @@ windows.
 
 Each hook gives up after an hour, and Claude Code carries on as if vjuu were not there.
 
-**Question gate.** Once a review ends with a verdict, a turn that closes with "say ship", "Want me to…?" or any other
-question in prose only costs you a turn: the OK already came through vjuu, or no decision was needed. When Claude ends
+**Question gate.** Once a review ends with a verdict, a turn that closes with "say ship", "Want me to…?", "Reply
+**yes** and I'll…", "waiting on your go" or any other question or request for a go-ahead in prose only costs you a turn: the OK already came through vjuu, or no decision was needed. When Claude ends
 a turn like that, the gate sends it back once, telling Claude to take the step (in a worktree under your `worktrees`
 folder, that means running `/ship`) or to put a real decision in a vjuu review. It does not judge whether a question
 was real. If Claude asks again anyway, the turn ends and the closing line goes to `gate.log` in vjuu's data folder. It

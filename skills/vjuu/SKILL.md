@@ -110,8 +110,9 @@ user changed it.
   "Proceed?".
 - **A choice between real alternatives** goes through vjuu too, as a `choice` block. The terminal's multiple-choice
   question is allowed only when the question and its options fit in under 10 lines. When in doubt, use vjuu.
-- **Never end a turn with a prose question** ("say ship", "say go", "Want me to…?", "Shall I…?"). If the step needs
-  no decision, take it. vjuu's question gate (a Stop hook, on by default) sends such a turn back once.
+- **Never end a turn with a prose question** ("say ship", "say go", "Want me to…?", "Shall I…?") or a request for a
+  go-ahead phrased as a statement ("Reply **yes** and I'll…", "waiting on your go"). If the step needs no decision,
+  take it. vjuu's question gate (a Stop hook, on by default) sends such a turn back once.
 
 If the session restarted or the output was lost, `vjuu last` prints the most recent review again.
 
