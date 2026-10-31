@@ -151,6 +151,7 @@ tray is on.
 | `Esc` | Cancel the comment being written; close the settings or the help |
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
+| `w` | Ignore whitespace changes in a diff: a reindented line shows as unchanged; again to show them |
 | `d` | A revised plan (or `--previous`): toggle its changes / the full file |
 | `x` | Mark the diff file under the cursor viewed: folds it and ticks it in the sidebar; again to unmark |
 | `o` | Fold / open the diff file under the cursor; lock files, minified and generated files start folded |
