@@ -61,10 +61,19 @@ However you installed it:
 vjuu setup
 ```
 
-It installs the `vjuu` skill, which tells agents to run `vjuu` in the background instead of asking you to open
-files, for Claude Code (`~/.claude/skills`) and Codex (`~/.agents/skills`), whichever you have. Run it again after
-an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@vjuu` after
-`claude plugin marketplace add kimvais/vjuu`); use one or the other, not both.
+It installs three skills for Claude Code (`~/.claude/skills`) and Codex (`~/.agents/skills`), whichever you have:
+
+| Skill | What it does |
+|---|---|
+| `vjuu` | tells agents to run `vjuu` in the background instead of asking you to open files |
+| `ship` | commits what is left, rebases, pushes, opens a ready PR (GitHub) or MR (GitLab) if there is none, watches CI; never merges |
+| `sync` | rebases the branch onto the default branch and pushes it with `--force-with-lease` |
+
+`ship` and `sync` are what the question gate tells Claude to run instead of asking "say ship". If you already have
+your own (a skill without vjuu's marker line, or `~/.claude/commands/ship.md`), setup keeps yours. Run it again after
+an upgrade. The skills are also a Claude Code plugin (`claude plugin install vjuu@vjuu` after
+`claude plugin marketplace add kimvais/vjuu`), where they are `/vjuu:ship` and `/vjuu:sync`; use one or the other,
+not both.
 
 ## Usage
 
@@ -83,7 +92,7 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `vjuu last` | print the most recent review again |
 | `vjuu start` | start the resident instance in the tray, e.g. at login; double-clicking `vjuu.exe` does the same |
 | `vjuu stop` | stop the resident instance (before upgrading the exe) |
-| `vjuu setup` | install the skill for Claude Code and Codex |
+| `vjuu setup` | install the vjuu, ship and sync skills for Claude Code and Codex, and the question gate |
 | `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |
 | `vjuu --help`, `vjuu --version` | all of the above, briefly; the version |
 
@@ -275,7 +284,7 @@ nothing when a window opens. After editing the theme in use, pick it and **Apply
 
 ### Without the plugin
 
-`vjuu setup` installs the skill and the question gate; it leaves the gate out when the vjuu plugin is enabled, as the
+`vjuu setup` installs the skills and the question gate; it leaves the gate out when the vjuu plugin is enabled, as the
 plugin has its own. To get the other hooks too, add them to `~/.claude/settings.json`; the settings above still
 switch them:
 
