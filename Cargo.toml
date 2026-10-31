@@ -1,6 +1,6 @@
 [package]
 name = "vjuu"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 description = "Fast review window for AI-agent handoffs: markdown, diffs and code with inline comments."
 license = "MIT"
