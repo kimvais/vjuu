@@ -1,8 +1,8 @@
 # vjuu
 
-> vjuu is a fast local review window for agent handoffs. When a coding agent (Claude Code, Codex) would tell the user to "open X and review it", it runs `vjuu X` instead: a window opens with the markdown, diff, source file or HTML page, the user comments on lines and clicks Submit & continue, and the comments come back to the agent on stdout as markdown anchored to `file:line`.
+> vjuu is a fast local review window for agent handoffs. When a coding agent (Claude Code, Codex) would tell the user to "open X and review it", it runs `vjuu X` instead: a window opens with the markdown, diff, source file or HTML page, the user comments on lines and ends with a verdict (approved, redo or discard), and the verdict and comments come back to the agent on stdout as markdown anchored to `file:line`.
 
-`vjuu` blocks until the user clicks Submit & continue or closes the window, so agents should run it in the background and read its output when it exits. Every review is also saved, and `vjuu last` prints the most recent one again.
+`vjuu` blocks until the user gives a verdict or closes the window (a discard), so agents should run it in the background and read its output when it exits. Every review is also saved, and `vjuu last` prints the most recent one again.
 
 Usage:
 

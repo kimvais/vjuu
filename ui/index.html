@@ -29,7 +29,7 @@
   <div id="window-controls">
     <button data-cmd="minimize" title="Minimize">&#xE921;</button>
     <button data-cmd="maximize" id="max" title="Maximize">&#xE922;</button>
-    <button data-cmd="close" id="close" title="Close: sends every review as it is">&#xE8BB;</button>
+    <button data-cmd="close" id="close" title="Close: discards every review">&#xE8BB;</button>
   </div>
 </header>
 <nav id="files" hidden title="Files (f to hide)"></nav>
@@ -44,7 +44,11 @@
 <footer id="statusbar">
   <span id="count"></span>
   <span id="hint">&uarr;&darr; move &middot; Enter or click to comment &middot; &larr;&rarr; files &middot; F1 all keys</span>
-  <button id="done" title="Send the review to the agent and close (Ctrl+Enter)">Submit &amp; continue <kbd>Ctrl</kbd><kbd>Enter</kbd></button>
+  <div id="verdicts">
+    <button data-verdict="discard" title="Drop the comments; the agent does nothing (Ctrl+Z, also closing the window)">Discard <kbd>Ctrl</kbd><kbd>Z</kbd></button>
+    <button data-verdict="redo" title="The agent addresses the comments, then opens vjuu again (Ctrl+R)">Redo <kbd>Ctrl</kbd><kbd>R</kbd></button>
+    <button data-verdict="approved" id="approve" title="The agent proceeds without asking again, applying minor comments (Ctrl+S)">Approve <kbd>Ctrl</kbd><kbd>S</kbd></button>
+  </div>
 </footer>
 <dialog id="settings">
   <h2>Settings</h2>
@@ -76,8 +80,10 @@
     <tr><td><kbd>&uarr;</kbd> <kbd>&darr;</kbd> or <kbd>k</kbd> <kbd>j</kbd></td><td>Previous / next line or block</td></tr>
     <tr><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>p</kbd> <kbd>n</kbd></td><td>Previous / next file; in a single markdown file, heading</td></tr>
     <tr><td><kbd>Enter</kbd> or <kbd>c</kbd></td><td>Comment on the current line, or on the selected text</td></tr>
-    <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>In a comment: save it. In settings: Apply. Anywhere else: Submit &amp; continue</td></tr>
-    <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Enter</kbd></td><td>Submit &amp; continue, from anywhere</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>In a comment: save it. In settings: Apply. Nothing anywhere else</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>S</kbd></td><td>Approve: the agent proceeds without asking again</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>R</kbd></td><td>Redo: the agent addresses your comments, then opens vjuu again</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Z</kbd></td><td>Discard: drop the comments, the agent does nothing; in a comment, undo</td></tr>
     <tr><td><kbd>Esc</kbd></td><td>Cancel the comment being written; close settings or this help</td></tr>
     <tr><td><kbd>1</kbd>&ndash;<kbd>9</kbd></td><td>Pick that option of the choice block under the cursor; again to take it back</td></tr>
     <tr><td><kbd>v</kbd></td><td>Toggle unified / side-by-side diff</td></tr>
@@ -87,7 +93,7 @@
     <tr><td><kbd>f</kbd></td><td>Hide / show the sidebar</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Tab</kbd> / <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Tab</kbd></td><td>Next / previous tab</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>1</kbd>&ndash;<kbd>9</kbd></td><td>That tab</td></tr>
-    <tr><td><kbd>Ctrl</kbd> <kbd>W</kbd></td><td>Close the tab: sends its review as it is</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>W</kbd></td><td>Close the tab: discards its review</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>,</kbd></td><td>Settings (<kbd>&#x2318;</kbd> <kbd>,</kbd> on macOS)</td></tr>
     <tr><td><kbd>F1</kbd></td><td>This help</td></tr>
   </table>

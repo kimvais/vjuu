@@ -15,7 +15,7 @@
   <meta property="og:url" content="https://vjuu.it/">
   <meta property="og:site_name" content="vjuu">
   <meta property="og:title" content="vjuu: a review window for Claude Code and Codex">
-  <meta property="og:description" content="Don't open the file. Your agent already did. Comment on lines, click Submit &amp; continue, and your comments go back to the agent.">
+  <meta property="og:description" content="Don't open the file. Your agent already did. Comment on lines, approve or ask for a redo, and your verdict and comments go back to the agent.">
   <!-- The top 2:1 of diff.png, 1280x640, the same image as the GitHub repository's social preview. -->
   <meta property="og:image" content="https://vjuu.it/img/social.jpg">
   <meta property="og:image:width" content="1280">
@@ -449,7 +449,7 @@
         <!-- Finnish: "rallienglanti", English as Finnish rally drivers speak it. -->
         <p class="say"><b>vjuu</b> [vjuː]: "view", in rally English.</p>
         <h1>Don't open the file. <span>Your agent already did.</span></h1>
-        <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, click Submit &amp; continue, and your comments go straight back to the agent.</p>
+        <p>Instead of telling you to "open X and review it", your agent runs <code>vjuu X</code>. A window opens with the markdown, diff or source. You comment on the lines, approve or ask for a redo, and your comments go straight back to the agent.</p>
         <div class="shots" role="group" aria-label="Demo and screenshots">
           <figure class="shot">
             <video src="img/demo.mp4" poster="img/demo.jpg" width="1920" height="1008" autoplay muted loop playsinline aria-label="A Claude Code session in plan mode. Its question opens in vjuu and is answered with a click; the plan opens in vjuu and gets a comment, and Claude revises it; after the code is written, the diff opens in vjuu, a comment asks for a docstring, and Claude adds it."></video>
@@ -460,7 +460,7 @@
             <figcaption>A diff side by side, with a comment under the added line.</figcaption>
           </figure>
           <figure class="shot">
-            <img src="img/markdown.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and a Submit &amp; continue button at the bottom.">
+            <img src="img/markdown.png" width="2560" height="1600" loading="lazy" alt="vjuu showing a markdown plan with two comments attached to lines, a table of contents on the left and an Approve button at the bottom.">
             <figcaption>A plan, with a comment on two of its lines.</figcaption>
           </figure>
           <figure class="shot">
@@ -529,7 +529,7 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
           <p>So I did the obvious thing and, without even googling whether it already exists (it probably does), built a tool &amp; skill for it: vjuu opens a GitHub / GitLab style review view locally for diffs and markdown alike, I leave inline comments, and they go straight back to the calling session. Not googling first shows, sure ... but so does a review window that opens in well under a second.</p>
           <p>Now Claude opens the thing itself and I just comment. Not counting how many times I've closed it with "No comments." already today (more than I'm willing to admit).</p>
         </div>
-        <p class="bonus">Bonus: it's keyboard first, everything has a keyboard shortcut (arrows to move, Enter to comment, Ctrl+Enter when done), and dark mode follows your system out of the box.</p>
+        <p class="bonus">Bonus: it's keyboard first, everything has a keyboard shortcut (arrows to move, Enter to comment, Ctrl+S to approve, Ctrl+R to redo), and dark mode follows your system out of the box.</p>
       </div>
     </section>
 
@@ -547,7 +547,7 @@ sudo apt update &amp;&amp; sudo apt install vjuu</pre></dd>
           <li class="panel">
             <p class="eyebrow">Comment</p>
             <h3>On a line or a selection.</h3>
-            <p>Click a line, or select across lines, paragraphs or diff rows. Keyboard first: arrows to move, Enter to comment, Ctrl+Enter when done.</p>
+            <p>Click a line, or select across lines, paragraphs or diff rows. Keyboard first: arrows to move, Enter to comment, Ctrl+S to approve, Ctrl+R to redo.</p>
           </li>
           <li class="panel">
             <p class="eyebrow">Return</p>

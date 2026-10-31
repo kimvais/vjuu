@@ -1,4 +1,4 @@
-# Manual test: opens vjuu while another app has focus, then types j, c, x, Ctrl+Enter, Ctrl+Shift+Enter.
+# Manual test: opens vjuu while another app has focus, then types j, c, x, Ctrl+Enter, Ctrl+S.
 # If the page had keyboard focus, the review comes back with a comment "x". It moves focus and sends real
 # keystrokes (only while vjuu is in front), so don't type during the run.
 # Usage: tests/keyboard_focus.ps1 -HomeHwnd (Get-Process explorer | Where-Object MainWindowHandle -ne 0)[0].MainWindowHandle
@@ -36,7 +36,7 @@ foreach ($round in 'cold', 'resident') {
     [System.Windows.Forms.SendKeys]::SendWait('c'); Start-Sleep -Milliseconds 200
     [System.Windows.Forms.SendKeys]::SendWait('x'); Start-Sleep -Milliseconds 200
     [System.Windows.Forms.SendKeys]::SendWait('^{ENTER}'); Start-Sleep -Milliseconds 200
-    [System.Windows.Forms.SendKeys]::SendWait('^+{ENTER}')
+    [System.Windows.Forms.SendKeys]::SendWait('^s')
     $exited = $client.WaitForExit(3000)
     if (-not $exited) { Stop-Process -Id $client.Id -Force }
     $result = (Get-Content $out -Raw -ErrorAction SilentlyContinue) -replace "`r?`n", ' | '

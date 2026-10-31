@@ -6,8 +6,8 @@ description: Use whenever you would ask the user to open, read, look over or rev
 # vjuu
 
 `vjuu` shows a markdown file or a diff in a window where the user leaves line comments. It blocks
-until they click Submit & continue, then prints the review as markdown on stdout. Use it instead of saying "open X
-and review it" or pasting long content into chat for review.
+until they give a verdict (approved, redo or discard), then prints it and the review as markdown on stdout. Use it
+instead of saying "open X and review it" or pasting long content into chat for review.
 
 ## Replies longer than 20 lines
 
@@ -56,6 +56,7 @@ tell which session's window this is. Tell the user in one line that the review w
 Output looks like:
 
 ```
+approved
 # Review: docs/plan.md (2 comments)
 
 ## Choice: How should vjuu handle artifacts?
@@ -70,6 +71,7 @@ the user's comment
 general comment
 ```
 
+- The first line is the verdict: `approved`, `redo` or `discard`. Act on it as below; never ask what it meant.
 - `## Choice: <question>` is followed by the label the user picked, or `No answer.`: ask again rather than pick
   for them.
 - Each `## file:line` section is one comment; `(old)` means a deleted line, numbered in the old file.
@@ -77,8 +79,29 @@ general comment
   id or heading. Find the quoted text in the source near it.
 - Treat comments as the user's instructions for that spot: act on each one, then say per comment what
   you did. A question in a comment gets an answer, not an edit.
-- `No comments.` means the user closed it without remarks: ask whether they approve rather than assume.
+- `No comments.` means the user left no remarks; the verdict still says what to do.
 - `No changes to review.` means the git diff was empty: check the arguments.
+
+## Act on the verdict
+
+**`approved`**: proceed without asking again. What proceeding means depends on what was reviewed:
+
+| Reviewed | Then |
+|---|---|
+| Commits in a `.wt/` worktree | run `/ship` |
+| A plan | carry it out |
+| Drafted MR comments, a Slack message | post it |
+| A change in the user's own checkout | commit it, no push |
+
+With comments, apply the minor ones, then proceed. A comment that changes behaviour makes it a `redo` instead.
+
+**`redo`**: act on every comment, then open vjuu again with the result. Loop until `approved` or `discard`.
+
+**`discard`**: stop. No push, no follow-up question. Closing the window is a discard too.
+
+In a `.wt/` worktree, finished committed work ships without asking, even when vjuu was not involved. Ending a message
+with "say ship", "say go" or "Want me to…?" for something that needs no decision is a bug: ask only for a real choice
+between alternatives (as a `choice` block), something destructive, or something that costs money.
 
 If the session restarted or the output was lost, `vjuu last` prints the most recent review again.
 

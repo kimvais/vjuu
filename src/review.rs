@@ -33,8 +33,44 @@ pub struct Review {
     pub choices: Vec<Choice>,
 }
 
-/// Returns the review as markdown for the agent to read.
-pub fn to_markdown(name: &str, review: &Review) -> String {
+/// How the user ended a review, each on its own key; the first line of the output, so the agent never infers it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Verdict {
+    /// Proceed without asking again; minor comments are applied on the way.
+    Approved,
+    /// Address the comments, then open vjuu again.
+    Redo,
+    /// Drop the comments and do nothing. Closing the window or a tab is this too.
+    Discard,
+}
+
+impl Verdict {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Verdict::Approved => "approved",
+            Verdict::Redo => "redo",
+            Verdict::Discard => "discard",
+        }
+    }
+
+    /// Returns the verdict on a review's first line; None for empty output (vjuu failed) or anything else.
+    pub fn of(review: &str) -> Option<Verdict> {
+        match review.lines().next()?.trim() {
+            "approved" => Some(Verdict::Approved),
+            "redo" => Some(Verdict::Redo),
+            "discard" => Some(Verdict::Discard),
+            _ => None,
+        }
+    }
+}
+
+/// Returns the review as markdown for the agent to read, the verdict on its first line.
+pub fn to_markdown(name: &str, review: &Review, verdict: Verdict) -> String {
+    format!("{}\n{}", verdict.as_str(), body(name, review))
+}
+
+fn body(name: &str, review: &Review) -> String {
     let overall = review.overall.trim();
     let mut comments: Vec<&Comment> = review.comments.iter().filter(|c| !c.text.trim().is_empty()).collect();
     if comments.is_empty() && overall.is_empty() && review.choices.iter().all(|c| c.answer.is_empty()) {
@@ -92,7 +128,7 @@ mod tests {
             choices: vec![choice("Which approach?", "Snapshot"), choice("Ship now?", "")],
         };
         assert_eq!(
-            to_markdown("plan.md", &review),
+            body("plan.md", &review),
             "# Review: plan.md (1 comment)\n\
              \n## Choice: Which approach?\nSnapshot\n\
              \n## Choice: Ship now?\nNo answer.\n\
@@ -100,9 +136,9 @@ mod tests {
         );
         // A pick alone is an answer; unanswered choices alone are not.
         let picked = Review { choices: vec![choice("Which?", "B")], ..Review::default() };
-        assert_eq!(to_markdown("p.md", &picked), "# Review: p.md\n\n## Choice: Which?\nB\n");
+        assert_eq!(body("p.md", &picked), "# Review: p.md\n\n## Choice: Which?\nB\n");
         let skipped = Review { choices: vec![choice("Which?", "")], ..Review::default() };
-        assert_eq!(to_markdown("p.md", &skipped), "# Review: p.md\nNo comments.\n");
+        assert_eq!(body("p.md", &skipped), "# Review: p.md\nNo comments.\n");
     }
 
     #[test]
@@ -112,7 +148,7 @@ mod tests {
         let plain = comment("site/index.html", 0, 0, false, "Plain", "ok");
         let review = Review { comments: vec![c, plain], ..Review::default() };
         assert_eq!(
-            to_markdown("site/index.html", &review),
+            body("site/index.html", &review),
             "# Review: site/index.html (2 comments)\n\
              \n## site/index.html (#install)\n> Run it.\n\nsay how\n\
              \n## site/index.html\n> Plain\n\nok\n"
@@ -120,8 +156,21 @@ mod tests {
     }
 
     #[test]
+    fn verdict_comes_first() {
+        let review = Review { comments: vec![comment("a.md", 1, 1, false, "x", "why?")], ..Review::default() };
+        for verdict in [Verdict::Approved, Verdict::Redo, Verdict::Discard] {
+            let md = to_markdown("a.md", &review, verdict);
+            assert_eq!(md, format!("{}\n# Review: a.md (1 comment)\n\n## a.md:1\n> x\n\nwhy?\n", verdict.as_str()));
+            assert_eq!(Verdict::of(&md), Some(verdict));
+        }
+        for unknown in ["", "\n", "# Review: a.md\nNo comments.\n", "approve\n", "Approved\n"] {
+            assert_eq!(Verdict::of(unknown), None, "{unknown:?}");
+        }
+    }
+
+    #[test]
     fn empty_review() {
-        assert_eq!(to_markdown("a.md", &Review::default()), "# Review: a.md\nNo comments.\n");
+        assert_eq!(body("a.md", &Review::default()), "# Review: a.md\nNo comments.\n");
     }
 
     #[test]
@@ -131,7 +180,7 @@ mod tests {
             overall: " ".into(),
             ..Review::default()
         };
-        assert_eq!(to_markdown("a.md", &review), "# Review: a.md\nNo comments.\n");
+        assert_eq!(body("a.md", &review), "# Review: a.md\nNo comments.\n");
     }
 
     #[test]
@@ -145,7 +194,7 @@ mod tests {
             ..Review::default()
         };
         assert_eq!(
-            to_markdown("diff", &review),
+            body("diff", &review),
             "# Review: diff (2 comments)\n\
              \n## a.py:10-12\n> l1\n> l2\n> l3\n\nsplit this\n\
              \n## b.py:3 (old)\n> -gone\n\nwhy removed?\n\
@@ -157,7 +206,7 @@ mod tests {
     fn long_quote_is_truncated() {
         let quote = (1..=8).map(|i| i.to_string()).collect::<Vec<_>>().join("\n");
         let review = Review { comments: vec![comment("a.md", 1, 8, false, &quote, "t")], ..Review::default() };
-        let md = to_markdown("a.md", &review);
+        let md = body("a.md", &review);
         assert!(md.starts_with("# Review: a.md (1 comment)\n"), "{md}");
         assert!(md.contains("> 6\n> …\n"), "{md}");
         assert!(!md.contains("> 7"), "{md}");

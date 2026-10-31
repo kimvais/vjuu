@@ -7,8 +7,8 @@
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#install)
 
 A fast review window for agent handoffs. When an agent would say "open X and review it", it runs
-`vjuu X` instead: a window opens with the markdown or diff, you comment on lines, click **Submit & continue**, and
-your comments come back to the agent as markdown on stdout, anchored to `file:line`.
+`vjuu X` instead: a window opens with the markdown or diff, you comment on lines and end with **Approve**, **Redo**
+or **Discard**. The verdict and your comments come back to the agent as markdown on stdout, anchored to `file:line`.
 
 [![A Claude Code session where a question, a plan and a diff each open in vjuu and get answered there](site/img/demo.gif)](https://www.youtube.com/watch?v=EqzmtuNQzv4)
 
@@ -87,8 +87,16 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |
 | `vjuu --help`, `vjuu --version` | all of the above, briefly; the version |
 
-`vjuu` blocks until you click **Submit & continue** or close the window. Every review is also saved to
-`%LOCALAPPDATA%\vjuu\reviews\`, so a later session can pick it up with `vjuu last`.
+`vjuu` blocks until you give a verdict or close the window:
+
+| Verdict | Key | The agent |
+|---|---|---|
+| **Approve** | `Ctrl+S` | proceeds without asking again; applies minor comments on the way |
+| **Redo** | `Ctrl+R` | addresses your comments, then opens vjuu again |
+| **Discard** | `Ctrl+Z`, or closing the window or tab | drops the comments and does nothing |
+
+Every review is also saved to `%LOCALAPPDATA%\vjuu\reviews\`, a discarded one with its comments, so a later session
+can pick it up with `vjuu last`.
 
 ## Why it opens fast
 
@@ -98,8 +106,8 @@ pipe and the review appears almost at once. The spare tab preloads fonts and ren
 its WebView2 processes; `vjuu stop` ends it. `VJUU_COLD=1` skips it.
 
 The resident instance keeps every review in one window, a tab each, with a session's tabs side by side. One review
-shows no tab strip. Closing a tab (its `×` or `Ctrl+W`) sends its review as it is, as **Submit & continue** does;
-closing the window sends every review as it is.
+shows no tab strip. Closing a tab (its `×` or `Ctrl+W`) discards its review; closing the window discards every
+review.
 
 It also has a tray icon. An orange dot on it means a review is still open, and hovering it says how many. Click it to
 bring the oldest one forward. Right-click it for a list of the waiting reviews, oldest first: the asking session, what
@@ -127,7 +135,10 @@ tray is on.
 | `↑` / `↓` (or `k` / `j`) | Previous / next line or block |
 | `←` / `→` (or `p` / `n`) | Previous / next file; with a single markdown file, previous / next heading |
 | `Enter` (or `c`) | Comment on the current line, or on the selected text |
-| `Ctrl+Enter` | In a comment: save it. In the settings: **Apply**. Anywhere else: **Submit & continue** |
+| `Ctrl+Enter` | In a comment: save it. In the settings: **Apply**. Nothing anywhere else |
+| `Ctrl+S` | **Approve**: the agent proceeds without asking again |
+| `Ctrl+R` | **Redo**: the agent addresses your comments, then opens vjuu again |
+| `Ctrl+Z` | **Discard**: drop the comments, the agent does nothing; in a comment, undo |
 | `Esc` | Cancel the comment being written; close the settings or the help |
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
 | `v` | Toggle unified / side-by-side diff |
@@ -137,9 +148,8 @@ tray is on.
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | `Ctrl+1`–`Ctrl+9` | That tab |
-| `Ctrl+W` | Close the tab: sends its review as it is |
+| `Ctrl+W` | Close the tab: discards its review |
 | `Ctrl+,` (`⌘,` on macOS) | Settings |
-| `Ctrl+Shift+Enter` | Submit & continue, from anywhere |
 | `F1` | Help: the version and these keys |
 
 Click any line or block to comment on it. To comment on a range, select text (across lines, paragraphs or diff
@@ -156,6 +166,7 @@ another while it is dark, and the dark one when the system does not say. Picking
 ## Output
 
 ```
+redo
 # Review: docs/design.md (2 comments)
 
 ## docs/design.md:12-14
@@ -167,6 +178,7 @@ The comment.
 General comment, if any.
 ```
 
+The first line is the verdict: `approved`, `redo` or `discard`. A discarded review sends no comments.
 Deleted diff lines are marked `(old)` and use the old file's line number. A rendered HTML page has no line numbers:
 its comments quote the text and say where it is, as `## site/index.html (#install)` (the nearest id) or
 `## site/index.html (under "Install")` (the nearest heading).
@@ -197,31 +209,31 @@ An unanswered choice reads `No answer.`
 The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All four are on by default.
 The first vjuu window after a fresh install opens on the settings panel, where you can switch each one off.
 
-**Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. Comment on it and click **Submit & continue**, and
-Claude revises the plan and asks again. A comment that asks for nothing ("LGTM") just brings the plan back once more.
+**Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. **Approve** and Claude leaves plan
+mode and carries it out, applying minor comments on the way. **Redo** and Claude revises the plan and asks again.
 A revised plan opens as its changes since the version you last saw, with your earlier comments on the lines they were
 on; press `d` for the full plan. vjuu keeps the plan and the comments per session in its data folder, under
 `sessions/claude/<session id>`.
-Click **Submit & continue** without comments, or close the window, and Claude Code's own approval prompt follows as usual. That
-prompt is where you choose how Claude continues.
+**Discard**, or close the window, and Claude Code's own approval prompt follows as usual.
 
 **Questions.** When Claude asks you something (its `AskUserQuestion` tool), the questions open in vjuu as buttons,
-under the message that led to them. Pick an answer to each and click **Submit & continue**, and they go to Claude as if picked in the
+under the message that led to them. Pick an answer to each and **Approve**, and they go to Claude as if picked in the
 terminal. Comment anywhere, or leave a question unanswered, and Claude gets your picks and comments to read instead, so
-you can answer in your own words. Nothing times out. Close the window without picking, and Claude Code's own picker
+you can answer in your own words. Nothing times out. **Discard**, or close the window, and Claude Code's own picker
 asks. Questions that take several answers stay in that picker, as vjuu's buttons pick one.
 
 **Turn review.** When Claude finishes a turn in which it edited files, the diff of those files opens in vjuu, new files
-included. Comment and click **Submit & continue**, and Claude acts on your comments straight away. Click **Submit & continue** without comments
-and the turn ends. Turns without edits, edits outside the git repository, and a diff you already reviewed open
-nothing. The diff is the files'
+included. **Redo** and Claude acts on your comments straight away, and the result opens again. **Approve** and Claude
+goes on to the next step (commit, ship) without asking. **Discard** and the turn ends. Turns without edits, edits
+outside the git repository, and a diff you already reviewed open nothing. The diff is the files'
 uncommitted changes, so changes an earlier turn made to the same files show too.
 
 **Permission prompts.** When Claude Code would ask whether Claude may run a command, edit a file or use another tool,
 the request opens in vjuu: the command in full, the edit as a diff. Pick **Allow**, **Always allow** (Claude Code's
-suggested rule, such as every `npm test` from now on) or **Deny**. Comment without a pick, and it is denied with your
-comment as the reason, so Claude can try another way; a comment next to **Allow** does not reach Claude. Close the
-window without picking, and Claude Code's own prompt asks. Plans and questions keep their own windows.
+suggested rule, such as every `npm test` from now on) or **Deny**. Without a pick, **Approve** allows it once and
+**Redo** denies it with your comment as the reason, so Claude can try another way; a comment next to **Allow** does not
+reach Claude. **Discard**, or close the window, and Claude Code's own prompt asks. Plans and questions keep their own
+windows.
 
 Each hook gives up after an hour, and Claude Code carries on as if vjuu were not there.
 
