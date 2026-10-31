@@ -80,7 +80,7 @@ async function load() {
 }
 
 const settings = $('#settings');
-const HOOKS = ['plan', 'ask', 'turn', 'permission'];
+const HOOKS = ['plan', 'ask', 'turn', 'permission', 'gate'];
 
 /** Fills a <select> with [value, label] options and picks one. */
 function fillSelect(select, options, value) {

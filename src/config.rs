@@ -17,13 +17,22 @@ pub struct Config {
     pub tray: bool,
     /// Bring each new window to the front; off, it opens behind the window in use, with a notification.
     pub focus: bool,
+    /// Where the agent's git worktrees live, relative to the repository root; the gate and the skills name it.
+    pub worktrees: String,
     pub hooks: Hooks,
     pub theme: Theme,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { tray: true, focus: true, hooks: Hooks::default(), theme: Theme::default() }
+        Self {
+            tray: true,
+            focus: true,
+            // Where Claude Code's own `--worktree` puts them.
+            worktrees: ".claude/worktrees".into(),
+            hooks: Hooks::default(),
+            theme: Theme::default(),
+        }
     }
 }
 
@@ -51,11 +60,13 @@ pub struct Hooks {
     pub ask: bool,
     pub turn: bool,
     pub permission: bool,
+    /// The Stop hook that sends back a turn ending in a prose question.
+    pub gate: bool,
 }
 
 impl Default for Hooks {
     fn default() -> Self {
-        Self { plan: true, ask: true, turn: true, permission: true }
+        Self { plan: true, ask: true, turn: true, permission: true, gate: true }
     }
 }
 
@@ -80,6 +91,21 @@ impl Config {
             "ask" => self.hooks.ask = on()?,
             "turn" => self.hooks.turn = on()?,
             "permission" => self.hooks.permission = on()?,
+            "gate" => self.hooks.gate = on()?,
+            "worktrees" => {
+                let folder = value.trim().trim_end_matches(['/', '\\']);
+                if folder.is_empty()
+                    || std::path::Path::new(folder).is_absolute()
+                    // Not absolute to Windows, but outside the repository all the same.
+                    || folder.starts_with(['/', '\\'])
+                    || folder.split(['/', '\\']).any(|p| p == "..")
+                {
+                    return Err(format!(
+                        "Unknown worktree folder `{value}`: use a folder inside the repository, such as .wt."
+                    ));
+                }
+                self.worktrees = folder.to_string();
+            }
             "tray" => self.tray = on()?,
             "focus" => self.focus = on()?,
             "theme" => self.theme.name = theme(true)?,
@@ -87,7 +113,7 @@ impl Config {
             "theme.dark" => self.theme.dark = theme(false)?,
             _ => {
                 return Err(format!(
-                    "Unknown setting `{key}`: use plan, ask, turn, permission, tray, focus, theme, theme.light or theme.dark."
+                    "Unknown setting `{key}`: use plan, ask, turn, permission, gate, tray, focus, worktrees, theme, theme.light or theme.dark."
                 ));
             }
         }
@@ -130,7 +156,8 @@ mod tests {
             Config {
                 tray: true,
                 focus: true,
-                hooks: Hooks { plan: true, ask: true, turn: false, permission: true },
+                worktrees: ".claude/worktrees".into(),
+                hooks: Hooks { plan: true, ask: true, turn: false, permission: true, gate: true },
                 theme: Theme::default()
             }
         );
@@ -142,11 +169,13 @@ mod tests {
         let mut config = Config::default();
         config.set("ask", "off").unwrap();
         config.set("tray", "off").unwrap();
+        config.set("gate", "off").unwrap();
+        config.set("worktrees", ".wt/").unwrap();
         let text = config.to_toml();
         assert_eq!(
             text,
             format!(
-                "{HEADER}tray = false\nfocus = true\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\n\n\
+                "{HEADER}tray = false\nfocus = true\nworktrees = \".wt\"\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\ngate = false\n\n\
                  [theme]\nname = \"auto\"\nlight = \"light\"\ndark = \"graphite\"\n"
             )
         );
@@ -157,9 +186,17 @@ mod tests {
     fn rejects_unknown_settings_and_values() {
         let mut config = Config::default();
         // A theme needs its file; "auto" is a pick for `theme` only.
-        for (key, value) in
-            [("theme", "on"), ("theme.dark", "auto"), ("theme.light", "../x"), ("plan", "yes"), ("", "")]
-        {
+        for (key, value) in [
+            ("theme", "on"),
+            ("theme.dark", "auto"),
+            ("theme.light", "../x"),
+            ("plan", "yes"),
+            ("gate", "1"),
+            ("worktrees", ""),
+            ("worktrees", "../elsewhere"),
+            ("worktrees", "/abs"),
+            ("", ""),
+        ] {
             assert!(config.set(key, value).is_err(), "{key} {value}");
         }
         assert_eq!(config, Config::default());

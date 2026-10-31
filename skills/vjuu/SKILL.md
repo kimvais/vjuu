@@ -88,7 +88,7 @@ general comment
 
 | Reviewed | Then |
 |---|---|
-| Commits in a `.wt/` worktree | run `/ship` |
+| Commits in a worktree under the worktree folder | run `/ship` |
 | A plan | carry it out |
 | Drafted MR comments, a Slack message | post it |
 | A change in the user's own checkout | commit it, no push |
@@ -99,17 +99,19 @@ With comments, apply the minor ones, then proceed. A comment that changes behavi
 
 **`discard`**: stop. No push, no follow-up question. Closing the window is a discard too.
 
-In a `.wt/` worktree, finished committed work ships without asking, even when vjuu was not involved.
+In a worktree under the worktree folder, finished committed work ships without asking, even when vjuu was not involved.
+The worktree folder is the `worktrees` setting: `vjuu config list` shows it, and it is `.claude/worktrees` unless the
+user changed it.
 
 ## Where real decisions go
 
 - **Destructive steps, anything that costs money, and posting as the user** go through a vjuu review whose options
-  spell out what each one does: "Delete `.wt/a`, `.wt/b`, `.wt/c`", "Post this comment on MR !412 as Kimmo", never
+  spell out what each one does: "Delete the worktrees `a`, `b` and `c`", "Post this comment on MR !412 as you", never
   "Proceed?".
 - **A choice between real alternatives** goes through vjuu too, as a `choice` block. The terminal's multiple-choice
   question is allowed only when the question and its options fit in under 10 lines. When in doubt, use vjuu.
 - **Never end a turn with a prose question** ("say ship", "say go", "Want me to…?", "Shall I…?"). If the step needs
-  no decision, take it. `vjuu gate install` adds a Stop hook that sends such a turn back once.
+  no decision, take it. vjuu's question gate (a Stop hook, on by default) sends such a turn back once.
 
 If the session restarted or the output was lost, `vjuu last` prints the most recent review again.
 

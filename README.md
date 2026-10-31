@@ -85,7 +85,6 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `vjuu stop` | stop the resident instance (before upgrading the exe) |
 | `vjuu setup` | install the skill for Claude Code and Codex |
 | `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |
-| `vjuu gate install`, `vjuu gate uninstall` | add or remove the Stop hook that sends back closing prose questions (see below) |
 | `vjuu --help`, `vjuu --version` | all of the above, briefly; the version |
 
 `vjuu` blocks until you give a verdict or close the window:
@@ -207,7 +206,7 @@ An unanswered choice reads `No answer.`
 
 ## Claude Code hooks
 
-The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All four are on by default.
+The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All five are on by default.
 The first vjuu window after a fresh install opens on the settings panel, where you can switch each one off.
 
 **Plan review.** When Claude finishes a plan in plan mode, the plan opens in vjuu. **Approve** and Claude leaves plan
@@ -238,15 +237,12 @@ windows.
 
 Each hook gives up after an hour, and Claude Code carries on as if vjuu were not there.
 
-### The question gate
-
-Once a review ends with a verdict, a turn that closes with "say ship", "Want me to…?" or any other question in prose
-only costs you a turn: the OK already came through vjuu, or no decision was needed. `vjuu gate install` adds a Stop
-hook (`vjuu hook gate`) to `~/.claude/settings.json` that sends such a turn back once, telling Claude to take the step
-or to put a real decision in a vjuu review. It does not judge whether a question was real. If Claude asks again
-anyway, the turn ends and the closing line goes to `gate.log` in vjuu's data folder. `vjuu gate uninstall` takes the
-hook out again. Both leave your other hooks alone, and running either twice does nothing more. The gate is not part of
-the plugin or the settings panel, because it changes how Claude ends every turn, with or without vjuu open.
+**Question gate.** Once a review ends with a verdict, a turn that closes with "say ship", "Want me to…?" or any other
+question in prose only costs you a turn: the OK already came through vjuu, or no decision was needed. When Claude ends
+a turn like that, the gate sends it back once, telling Claude to take the step (in a worktree under your `worktrees`
+folder, that means running `/ship`) or to put a real decision in a vjuu review. It does not judge whether a question
+was real. If Claude asks again anyway, the turn ends and the closing line goes to `gate.log` in vjuu's data folder. It
+works with or without a vjuu window open; `vjuu config gate off` switches it off.
 
 ### Settings
 
@@ -255,7 +251,8 @@ Click the gear in the title bar and **Apply** (Esc cancels), or use the terminal
 ```
 vjuu config                  # open the settings panel
 vjuu config list             # print the settings and where the file is
-vjuu config turn off         # switch one: plan, ask, turn, permission, tray or focus; on or off
+vjuu config turn off         # switch one: plan, ask, turn, permission, gate, tray or focus; on or off
+vjuu config worktrees .wt    # where your git worktrees live (default .claude/worktrees)
 vjuu config theme graphite   # a theme, or auto; theme.light and theme.dark set Auto's two picks
 ```
 
@@ -278,8 +275,9 @@ nothing when a window opens. After editing the theme in use, pick it and **Apply
 
 ### Without the plugin
 
-`vjuu setup` installs only the skill. To get the hooks too, add them to `~/.claude/settings.json`; the settings above
-still switch them:
+`vjuu setup` installs the skill and the question gate; it leaves the gate out when the vjuu plugin is enabled, as the
+plugin has its own. To get the other hooks too, add them to `~/.claude/settings.json`; the settings above still
+switch them:
 
 ```json
 {
@@ -289,7 +287,10 @@ still switch them:
       { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "vjuu hook ask", "timeout": 3600 }] }
     ],
     "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "vjuu hook permission", "timeout": 3600 }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "vjuu hook turn", "timeout": 3600 }] }]
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "vjuu hook turn", "timeout": 3600 }] },
+      { "hooks": [{ "type": "command", "command": "vjuu hook gate", "timeout": 10 }] }
+    ]
   }
 }
 ```

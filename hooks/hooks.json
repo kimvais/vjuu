@@ -1,5 +1,5 @@
 {
-  "description": "Review Claude Code plans, questions, permission prompts and each turn's edits in vjuu; switch each with `vjuu config`",
+  "description": "Review Claude Code plans, questions, permission prompts and each turn's edits in vjuu, and send back turns that end in a prose question; switch each with `vjuu config`",
   "hooks": {
     "PreToolUse": [
       {
@@ -14,6 +14,9 @@
     "PermissionRequest": [
       { "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "permission"], "timeout": 3600 }] }
     ],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "turn"], "timeout": 3600 }] }]
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "turn"], "timeout": 3600 }] },
+      { "hooks": [{ "type": "command", "command": "vjuu", "args": ["hook", "gate"], "timeout": 10 }] }
+    ]
   }
 }

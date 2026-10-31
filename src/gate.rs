@@ -8,16 +8,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use crate::platform;
+use crate::{config, platform};
 
-/// The command registered in settings.json; also how install and uninstall recognise the entry as vjuu's.
+/// The command registered in settings.json; also how install recognises the entry as vjuu's.
 const COMMAND: &str = "vjuu hook gate";
 
-const REASON: &str = "Do not end the turn with a question or a request for permission in prose. If the next step \
-    needs no decision, take it now instead of asking: in a `.wt/` worktree with finished commits, run /ship (or /sync \
-    when the MR exists) and end the turn with the MR link and the obvious next step, if any. If it is a real decision \
-    (destructive, costs money, posts as the user, or a choice between real alternatives), put it in a vjuu review \
-    whose options spell out what each one does, as the vjuu skill says.";
+/// Returns what the gate tells Claude when it sends a turn back; `worktrees` is the worktree folder setting.
+fn reason(worktrees: &str) -> String {
+    format!(
+        "Do not end the turn with a question or a request for permission in prose. If the next step needs no \
+         decision, take it now instead of asking: in a worktree under `{worktrees}/` with finished commits, run /ship \
+         (or /sync when the PR or MR exists) and end the turn with its link and the obvious next step, if any. If it \
+         is a real decision (destructive, costs money, posts as the user, or a choice between real alternatives), put \
+         it in a vjuu review whose options spell out what each one does, as the vjuu skill says."
+    )
+}
 
 /// Openings of a closing line that asks for permission without a question mark, lowercase.
 const ASKING: &[&str] = &["want me to", "shall i", "should i", "do you want", "let me know if", "let me know when"];
@@ -25,6 +30,10 @@ const ASKING: &[&str] = &["want me to", "shall i", "should i", "do you want", "l
 /// Claude Code's Stop hook: blocks the stop once when the last message ends in a prose question; a second stop
 /// in the same turn ends it, and is logged.
 pub fn hook() -> ! {
+    let config = config::load();
+    if !config.hooks.gate {
+        std::process::exit(0)
+    }
     let event = crate::hook_event();
     let text = event["last_assistant_message"].as_str().map(String::from).or_else(|| {
         let transcript = fs::read_to_string(event["transcript_path"].as_str()?).ok()?;
@@ -32,7 +41,7 @@ pub fn hook() -> ! {
     });
     match judge(event["stop_hook_active"] == true, text.as_deref().unwrap_or_default()) {
         Stop::Pass => {}
-        Stop::Block => println!("{}", json!({ "decision": "block", "reason": REASON })),
+        Stop::Block => println!("{}", json!({ "decision": "block", "reason": reason(&config.worktrees) })),
         Stop::Escape(line) => log_escape(&platform::data_dir().join("gate.log"), &event, line),
     }
     std::process::exit(0)
@@ -89,19 +98,10 @@ fn log_escape(path: &Path, event: &Value, line: &str) {
     }
 }
 
-/// Registers the gate in `settings` (Claude Code's settings.json); returns whether it changed anything.
+/// Registers the gate in `settings` (Claude Code's settings.json) for `vjuu setup`, and returns whether it changed
+/// anything. A missing file is empty settings; one that is not a JSON object is refused rather than overwritten.
+/// The `gate` setting switches it off; installed, it stays, so turning it back on needs no reinstall.
 pub fn install(settings: &Path) -> Result<bool, String> {
-    edit(settings, add)
-}
-
-/// Removes the gate from `settings`; returns whether it changed anything.
-pub fn uninstall(settings: &Path) -> Result<bool, String> {
-    edit(settings, remove)
-}
-
-/// Applies `change` to the settings file, writing it back only when something changed. A missing file is empty
-/// settings; one that is not a JSON object is refused rather than overwritten.
-fn edit(settings: &Path, change: fn(&mut Value) -> bool) -> Result<bool, String> {
     let mut value = match fs::read_to_string(settings) {
         Ok(text) => serde_json::from_str(&text)
             .map_err(|e| format!("{} is not valid JSON, so it was left alone: {e}", settings.display()))?,
@@ -111,7 +111,7 @@ fn edit(settings: &Path, change: fn(&mut Value) -> bool) -> Result<bool, String>
     if !value.is_object() {
         return Err(format!("{} is not a JSON object, so it was left alone.", settings.display()));
     }
-    if !change(&mut value) {
+    if !add(&mut value) {
         return Ok(false);
     }
     let text = serde_json::to_string_pretty(&value).expect("settings serialise") + "\n";
@@ -126,13 +126,18 @@ fn is_gate(hook: &Value) -> bool {
     hook["command"] == COMMAND
 }
 
-/// Adds the gate under `hooks.Stop`, unless it is there already.
+/// Adds the gate under `hooks.Stop`, unless it is there already or the vjuu plugin, which registers it, is enabled.
 fn add(settings: &mut Value) -> bool {
-    let present = settings["hooks"]["Stop"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .any(|entry| entry["hooks"].as_array().into_iter().flatten().any(is_gate));
+    // Claude Code keys enabled plugins as `name@marketplace`.
+    let plugin = settings["enabledPlugins"]
+        .as_object()
+        .is_some_and(|p| p.iter().any(|(k, on)| k.starts_with("vjuu@") && *on == true));
+    let present = plugin
+        || settings["hooks"]["Stop"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|entry| entry["hooks"].as_array().into_iter().flatten().any(is_gate));
     if present {
         return false;
     }
@@ -143,30 +148,6 @@ fn add(settings: &mut Value) -> bool {
     let Some(stop) = stop.as_array_mut() else { return false };
     stop.push(json!({ "hooks": [{ "type": "command", "command": COMMAND, "timeout": 10 }] }));
     true
-}
-
-/// Removes the gate, and the entry, `Stop` list and `hooks` object it leaves empty, so the file is as it was.
-fn remove(settings: &mut Value) -> bool {
-    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else { return false };
-    let Some(stop) = hooks.get_mut("Stop").and_then(Value::as_array_mut) else { return false };
-    let before = stop.len();
-    let mut removed = false;
-    for entry in stop.iter_mut() {
-        if let Some(list) = entry.get_mut("hooks").and_then(Value::as_array_mut) {
-            let n = list.len();
-            list.retain(|h| !is_gate(h));
-            removed |= list.len() != n;
-        }
-    }
-    stop.retain(|entry| entry["hooks"].as_array().is_none_or(|l| !l.is_empty()));
-    removed |= stop.len() != before;
-    if stop.is_empty() {
-        hooks.remove("Stop");
-    }
-    if hooks.is_empty() {
-        settings.as_object_mut().expect("has hooks").remove("hooks");
-    }
-    removed
 }
 
 #[cfg(test)]
@@ -211,6 +192,7 @@ mod tests {
         assert_eq!(judge(true, asking), Stop::Escape("Want me to push?"));
         assert_eq!(judge(false, "Pushed."), Stop::Pass);
         assert_eq!(judge(true, "Pushed."), Stop::Pass);
+        assert!(reason(".wt").contains("a worktree under `.wt/`"), "names the worktree folder setting");
 
         let path = std::env::temp_dir().join(format!("vjuu-gate-log-{}", std::process::id())).join("gate.log");
         let event = json!({ "session_id": "s1", "cwd": "C:/p/vjuu", "stop_hook_active": true });
@@ -239,38 +221,43 @@ mod tests {
     }
 
     #[test]
-    fn install_twice_is_one_entry_and_uninstall_restores() {
+    fn installs_once_beside_other_hooks() {
+        // The plugin registers the gate itself: a second entry would block every question twice.
+        for enabled in [json!({ "vjuu@vjuu": true }), json!({ "vjuu@fork": true, "other@x": false })] {
+            let mut s = settings();
+            s["enabledPlugins"] = enabled;
+            let before = s.clone();
+            assert!(!add(&mut s));
+            assert_eq!(s, before);
+        }
         let mut s = settings();
         assert!(add(&mut s));
         assert!(!add(&mut s), "already there");
-        let gates = s["hooks"]["Stop"].as_array().unwrap().iter().filter(|e| is_gate(&e["hooks"][0])).count();
-        assert_eq!(gates, 1);
-        assert_eq!(s["hooks"]["Stop"][0], settings()["hooks"]["Stop"][0], "other Stop hooks stay first");
-        assert!(remove(&mut s));
-        assert!(!remove(&mut s), "already gone");
-        assert_eq!(s, settings());
-        // Key order survives: the file reads as the user wrote it.
-        assert_eq!(serde_json::to_string(&s).unwrap(), serde_json::to_string(&settings()).unwrap());
-
-        // Settings without hooks get them, and lose them again.
-        let mut bare = json!({ "model": "opus" });
-        assert!(add(&mut bare));
-        assert_eq!(bare["hooks"]["Stop"][0]["hooks"][0]["command"], COMMAND);
-        assert!(remove(&mut bare));
-        assert_eq!(bare, json!({ "model": "opus" }));
+        let mut expected = settings();
+        expected["hooks"]["Stop"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "hooks": [{ "type": "command", "command": COMMAND, "timeout": 10 }] }));
+        assert_eq!(s, expected);
+        // Key order survives, so the file reads as the user wrote it: the gate goes last, other Stop hooks first.
+        assert_eq!(serde_json::to_string(&s).unwrap(), serde_json::to_string(&expected).unwrap());
+        // A disabled plugin does not register it.
+        let mut off = json!({ "enabledPlugins": { "vjuu@vjuu": false } });
+        assert!(add(&mut off));
+        assert_eq!(off["hooks"]["Stop"][0]["hooks"][0]["command"], COMMAND);
     }
 
     #[test]
-    fn install_and_uninstall_the_file() {
+    fn installs_into_the_file() {
         let dir = std::env::temp_dir().join(format!("vjuu-gate-{}", std::process::id()));
         let path = dir.join("settings.json");
         let original = serde_json::to_string_pretty(&settings()).unwrap() + "\n";
         fs::create_dir_all(&dir).unwrap();
         fs::write(&path, &original).unwrap();
         assert_eq!(install(&path), Ok(true));
+        let installed = fs::read_to_string(&path).unwrap();
         assert_eq!(install(&path), Ok(false));
-        assert_eq!(uninstall(&path), Ok(true));
-        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        assert_eq!(fs::read_to_string(&path).unwrap(), installed, "unchanged the second time");
         // Broken settings are never overwritten.
         for broken in ["{ not json", "[1, 2]"] {
             fs::write(&path, broken).unwrap();
