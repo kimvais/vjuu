@@ -67,8 +67,32 @@ fn judge(again: bool, text: &str) -> Stop<'_> {
     }
 }
 
-/// Returns the closing line of `text` when it asks the user something in prose; None for a statement or a code block.
-/// The gate does not judge whether the question is real: Claude asks real ones through vjuu.
+/// Imperatives that open a request for the user's go-ahead (`Reply "yes" and I'll…`), lowercase.
+const PROMPTS: &[&str] = &["say", "reply", "tell me", "type", "approve", "confirm"];
+
+/// Phrases anywhere in a closing line that wait on the user's go-ahead, lowercase.
+const WAITING: &[&str] =
+    &["waiting on your go", "waiting for your go", "once you say so", "when you're ready", "tell me to "];
+
+/// Returns whether `plain`, a lowercase closing line, asks for the user's go-ahead as a statement: a clause that
+/// opens with a prompt and quotes the word to send or promises `and I'll…`, or a phrase that waits on the user.
+/// A report that only quotes something (`The commit says "Refs #188"`) does not count.
+fn requests_go(plain: &str) -> bool {
+    // `**yes**`, `` `go` `` and curly quotes all quote the word to send back.
+    let line = plain.replace("**", "\"").replace(['`', '“', '”'], "\"").replace('’', "'");
+    let prompted = |clause: &str| {
+        PROMPTS.iter().filter_map(|p| clause.strip_prefix(p)).any(|rest| {
+            rest.starts_with(" \"")
+                || (rest.starts_with(' ') && [" and i'll ", " and i will "].iter().any(|a| rest.contains(a)))
+        })
+    };
+    WAITING.iter().any(|w| line.contains(w))
+        || line.split(['.', ':', ';', ',', '!', '?', '(', '—']).any(|clause| prompted(clause.trim_start()))
+}
+
+/// Returns the closing line of `text` when it asks the user something in prose or asks for their go-ahead; None for
+/// a statement or a code block. The gate does not judge whether the question is real: Claude asks real ones
+/// through vjuu.
 fn closing_question(text: &str) -> Option<&str> {
     let line = text.trim_end().lines().next_back()?.trim();
     // The last line of a fenced block is its fence: the message ends in code, not prose.
@@ -76,9 +100,10 @@ fn closing_question(text: &str) -> Option<&str> {
         return None;
     }
     let plain = line.trim_matches(|c: char| matches!(c, '*' | '_' | '`' | '"' | ' ' | ')' | '.' | '!')).to_lowercase();
-    let says = |word: &str| plain.contains(&format!("say {word}")) || plain.contains(&format!("say \"{word}"));
+    // A quoted word (`say "go"`) is a prompt that requests_go finds; this catches the unquoted `say ship`.
     let asks = plain.ends_with('?')
-        || ["go", "ship", "yes", "the word"].iter().any(|w| says(w))
+        || ["go", "ship", "yes", "the word"].iter().any(|w| plain.contains(&format!("say {w}")))
+        || requests_go(&plain)
         || ASKING.iter().any(|a| plain.trim_start_matches(|c: char| !c.is_alphabetic()).starts_with(a));
     asks.then_some(line)
 }
@@ -165,6 +190,17 @@ mod tests {
             "Tests pass. Ready to merge?",
             "1. Done\n2. Let me know if you want the tag pushed.",
             "Say the word and I'll release it.",
+            // Requests for a go-ahead phrased as statements (#92), each answered with a bare go-ahead.
+            "Next: say \"ship\" to push it.",
+            "Next: reply \"go\" and I'll write the sampler and start it on the VM.",
+            "Reply **yes** and I'll deactivate the Express finding in Vanta.",
+            "Next: tell me \"ship it\" and I'll commit, push … and open the MR.",
+            "The #685 changes are still uncommitted, waiting on your go.",
+            "To push, tell me to commit, or commit it yourself and run /sync.",
+            "Type `merge` to land it.",
+            "Next: reply “go” and I’ll start it.",
+            "Approve it and I'll merge.",
+            "The branch is ready to push once you say so.",
         ] {
             assert!(closing_question(text).is_some(), "{text:?}");
         }
@@ -179,6 +215,11 @@ mod tests {
             "Run this:\n\n```\nvjuu --help?\n```",
             "Next: run `cargo test` and paste the first failing line.",
             "Nobody wants me to go there.",
+            // A finished result the user may still choose to ship is a report, not a request (#92).
+            "The commit says \"Refs #188\" rather than \"Closes\", so the issue stays open.",
+            "Renamed the type \"Gate\" to \"Stop\" and I'll note it in the changelog.",
+            "Pushed; CI is green and the PR is open.",
+            "The essay \"go\" is in docs/.",
         ] {
             assert_eq!(closing_question(text), None, "{text:?}");
         }
