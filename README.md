@@ -79,7 +79,7 @@ not both.
 
 | Command | What it does |
 |---|---|
-| `vjuu docs/design.md` | markdown |
+| `vjuu docs/design.md` | markdown; ```` ```mermaid ```` blocks are drawn as diagrams |
 | `vjuu a.md b.md change.diff` | several files in one window, stacked |
 | `vjuu change.diff` | diff or patch file |
 | `vjuu site/index.html` | HTML page or claude.ai artifact, rendered as it looks once loaded; `file://` URLs work too |
@@ -319,7 +319,8 @@ switch them:
   stderr, for startup measurements.
 
 UI libraries are vendored in `ui/vendor` (markdown-it 15.0.3, diff2html 3.4.56 base bundle, highlight.js
-11.12.0 common languages, Inter and JetBrains Mono variable fonts) and embedded in the exe. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu. For the same reason
+11.12.0 common languages, mermaid 11.4.1, Inter and JetBrains Mono variable fonts) and embedded in the exe; mermaid
+loads only for a document with a diagram, at its `strict` security level. Markdown is rendered with raw HTML off: documents are agent output and the page can talk to vjuu. For the same reason
 an HTML page's scripts run only in a sandboxed iframe with an origin of its own, which cannot reach vjuu's page; vjuu
 also ignores messages from anywhere but its own page. Once the page stops changing (or after 3 s), it sends back a copy
 of itself, canvases drawn as images, and you comment on that copy in a second iframe with scripts off. So you review
@@ -327,4 +328,4 @@ one state of the page: buttons, tabs and timers do not work, and network request
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Bundled libraries and fonts keep their own licenses, in [ui/vendor/licenses](ui/vendor/licenses): markdown-it and diff2html (MIT), highlight.js (BSD-3-Clause), Inter and JetBrains Mono (SIL Open Font License 1.1).
+MIT, see [LICENSE](LICENSE). Bundled libraries and fonts keep their own licenses, in [ui/vendor/licenses](ui/vendor/licenses): markdown-it, diff2html and mermaid (MIT), highlight.js (BSD-3-Clause), Inter and JetBrains Mono (SIL Open Font License 1.1).

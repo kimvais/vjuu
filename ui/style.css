@@ -176,6 +176,9 @@ article.markdown pre, article.markdown code { background: var(--code-bg); border
 article.markdown pre { padding: 14px 16px; overflow-x: auto; line-height: 1.55; border: 1px solid var(--border); }
 article.markdown code { padding: 2px 5px; color: var(--inline-code); }
 article.markdown pre code { padding: 0; color: var(--fg); background: none; border: 0; }
+/* A drawn diagram: mermaid marks it data-processed and replaces the source with an SVG. */
+article.markdown pre.mermaid[data-processed] { background: none; border: 0; text-align: center; }
+article.markdown pre.mermaid svg { max-width: 100%; height: auto; }
 article.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
 article.markdown th, article.markdown td { border: 1px solid var(--border); padding: 6px 12px; }
 article.markdown th { background: var(--code-bg); font-weight: 600; text-align: left; }
