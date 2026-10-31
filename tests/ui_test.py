@@ -600,6 +600,19 @@ def test_markdown_html_is_not_rendered(page, url, work):
     assert page.evaluate('window.__pwned') is None
 
 
+def test_right_to_left_text(page, url, work):
+    text = 'English first.\n\nمرحبا بالعالم\n\n- שלום עולם\n- left again\n'
+    _open(page, url, work, {'name': 'x.md', 'kind': 'md', 'text': text})
+    # Where each block's text sits: flush right for Arabic and Hebrew, flush left for English.
+    edges = page.evaluate("""() => [...document.querySelectorAll('article p, article li')].map((el) => {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        const text = r.getBoundingClientRect(), box = el.getBoundingClientRect();
+        return [Math.round(text.left - box.left) <= 1, Math.round(box.right - text.right) <= 1];
+    })""")
+    assert edges == [[True, False], [False, True], [False, True], [True, False]], edges
+
+
 _HTML = """<!doctype html>
 <html><head><link rel="stylesheet" href="site.css"></head><body>
 <h1>Title</h1>
@@ -909,6 +922,7 @@ def main():
             test_comment_box_wraps_within_view,
             test_markdown_file_in_a_diff_uses_code_size,
             test_markdown_html_is_not_rendered,
+            test_right_to_left_text,
             test_html_page,
             test_choices,
             test_choice_keys,

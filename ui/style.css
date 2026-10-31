@@ -178,8 +178,10 @@ article.markdown code { padding: 2px 5px; color: var(--inline-code); }
 article.markdown pre code { padding: 0; color: var(--fg); background: none; border: 0; }
 article.markdown table { border-collapse: collapse; display: block; overflow-x: auto; }
 article.markdown th, article.markdown td { border: 1px solid var(--border); padding: 6px 12px; }
-article.markdown th { background: var(--code-bg); font-weight: 600; text-align: left; }
+article.markdown th { background: var(--code-bg); font-weight: 600; text-align: start; }
 article.markdown tr:nth-child(2n) td { background: color-mix(in srgb, var(--code-bg) 60%, transparent); }
+/* Each paragraph runs in the direction of its own first letter, so Arabic or Hebrew reads right to left among English. */
+article.markdown :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, th, td) { unicode-bidi: plaintext; }
 article.markdown img { max-width: 100%; border-radius: 6px; }
 article.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
 article.markdown blockquote { padding: 0.6em 1em; border-left: 4px solid var(--accent); background: var(--code-bg); border-radius: 0 6px 6px 0; color: var(--muted); }
@@ -218,8 +220,8 @@ a { color: var(--accent); }
   font: 14px/1.5 var(--sans);
   white-space: normal;
 }
-.comment .text { flex: 1; white-space: pre-wrap; cursor: text; }
-.comment textarea { width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+.comment .text { flex: 1; white-space: pre-wrap; cursor: text; unicode-bidi: plaintext; }
+.comment textarea { unicode-bidi: plaintext; width: 100%; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
 tr.vjuu-c td { padding: 0 8px; }
 /* A comment row spans the whole table, which long lines make wider than the view: keep the box the visible
    width and pinned to the left, so it wraps instead of scrolling the diff sideways while you type. */
