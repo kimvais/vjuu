@@ -145,6 +145,7 @@ tray is on.
 | `←` / `→` (or `p` / `n`) | Previous / next file; with a single markdown file, previous / next heading |
 | `Enter` (or `c`) | Comment on the current line, or on the selected text |
 | `Ctrl+Enter` | In a comment: save it. In the settings: **Apply**. Nothing anywhere else |
+| `Ctrl+V` | In a comment: paste an image too. vjuu saves it under `reviews/images` and the comment links its file, for the agent to read |
 | `Ctrl+S` | **Approve**: the agent proceeds without asking again |
 | `Ctrl+R` | **Redo**: the agent addresses your comments, then opens vjuu again |
 | `Ctrl+Z` | **Discard**: drop the comments, the agent does nothing; in a comment, undo |
