@@ -19,7 +19,7 @@ _THEMES = _UI.parent / 'themes'
 _CONFIG = {
     'tray': True,
     'focus': False,
-    'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False},
+    'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False, 'gate': True},
     'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     'themes': [{'name': 'graphite', 'scheme': 'dark'}, {'name': 'light', 'scheme': 'light'}],
     'version': '9.9.9',
@@ -780,9 +780,10 @@ def test_settings(page, url, work):
     page.goto(url)
     page.wait_for_selector('#settings[open]')
     checked = lambda: [
-        page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn', 'permission', 'tray', 'focus')
+        page.is_checked(f'#settings [name={h}]')
+        for h in ('plan', 'ask', 'turn', 'permission', 'gate', 'tray', 'focus')
     ]
-    assert checked() == [True, False, True, False, True, False]
+    assert checked() == [True, False, True, False, True, True, False]
     # Review keys do nothing while it is open.
     page.keyboard.press('j')
     assert page.locator('.focused').count() == 0
@@ -794,13 +795,13 @@ def test_settings(page, url, work):
     # The gear opens it again with the saved settings; Apply saves and leaves the review open.
     page.click('#settings-open')
     page.wait_for_selector('#settings[open]')
-    assert checked() == [True, False, True, False, True, False]
+    assert checked() == [True, False, True, False, True, True, False]
     page.click('#settings [name=turn]')
     page.keyboard.press('Control+Enter')  # Apply, and nothing else
     assert msgs('settings')[-1]['config'] == {
         'tray': True,
         'focus': False,
-        'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False},
+        'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False, 'gate': True},
         'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     }
     assert not page.is_visible('#settings') and msgs('done') == []

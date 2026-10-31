@@ -1,4 +1,5 @@
 mod config;
+mod gate;
 mod host;
 mod platform;
 mod review;
@@ -48,7 +49,7 @@ Usage:
   vjuu setup                     Install the skill for Claude Code and Codex
   vjuu start                     Start the resident instance in the tray (also: double-click vjuu.exe)
   vjuu stop                      Stop the resident instance (before upgrading)
-  vjuu hook <name>               Claude Code hooks: plan, ask, turn or permission
+  vjuu hook <name>               Claude Code hooks: plan, ask, turn, permission or gate
 
   vjuu -h, --help                Show this
   vjuu -v, --version             Show the version
@@ -210,6 +211,7 @@ fn main() {
         ["hook", "turn"] => hook_turn(),
         ["hook", "ask"] => hook_ask(),
         ["hook", "permission"] => hook_permission(),
+        ["hook", "gate"] => gate::hook(),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -269,11 +271,16 @@ fn claude_session_title() -> Option<String> {
     session_title(&env::var("CLAUDE_CODE_SESSION_ID").ok()?)
 }
 
+/// Returns Claude Code's config folder: `CLAUDE_CONFIG_DIR`, or `~/.claude`.
+fn claude_dir() -> Option<PathBuf> {
+    env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
+        env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude"))
+    })
+}
+
 /// Returns the `/rename` name of the Claude Code session with this id.
 fn session_title(id: &str) -> Option<String> {
-    let root = env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
-        env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude"))
-    })?;
+    let root = claude_dir()?;
     // The project folder is the session's start directory, mangled; finding the id is simpler than mangling.
     let file = fs::read_dir(root.join("projects"))
         .ok()?
@@ -1399,6 +1406,17 @@ fn setup() -> Request {
     }
     for path in written {
         println!("Installed {}", path.display());
+    }
+    // The question gate, on by default; the plugin registers its own, so it is skipped when the plugin is enabled.
+    if let Some(claude) = claude_dir().filter(|d| d.is_dir()) {
+        let settings = claude.join("settings.json");
+        match gate::install(&settings) {
+            Ok(true) => {
+                println!("Added the question gate to {} (`vjuu config gate off` switches it off)", settings.display())
+            }
+            Ok(false) => {}
+            Err(e) => eprintln!("Did not add the question gate: {e}"),
+        }
     }
     // Written first, so the first review window does not show the panel a second time.
     if config::path().exists() || config::save(&config::Config::default()).is_err() {
