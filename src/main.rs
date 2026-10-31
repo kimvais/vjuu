@@ -46,7 +46,7 @@ Usage:
   vjuu config list               Print the settings and where they are saved
   vjuu config <setting> <value>  Change one: plan, ask, turn, permission, tray or focus (on / off),
                                  theme (a theme or auto), theme.light or theme.dark (a theme)
-  vjuu setup                     Install the skill for Claude Code and Codex
+  vjuu setup                     Install the vjuu, ship and sync skills for Claude Code and Codex
   vjuu start                     Start the resident instance in the tray (also: double-click vjuu.exe)
   vjuu stop                      Stop the resident instance (before upgrading)
   vjuu hook <name>               Claude Code hooks: plan, ask, turn, permission or gate
@@ -1400,12 +1400,15 @@ fn print_last() -> ! {
 /// Installs the skill for each agent found in the home directory; on a fresh install, then opens the settings.
 fn setup() -> Request {
     let home = env::home_dir().unwrap_or_else(|| fail("Cannot find the home directory."));
-    let written = install_skill(&home).unwrap_or_else(|e| fail(&format!("Cannot install the skill: {e}")));
-    if written.is_empty() {
+    let done = install_skill(&home).unwrap_or_else(|e| fail(&format!("Cannot install the skills: {e}")));
+    if done.written.is_empty() {
         fail("Found neither Claude Code (~/.claude) nor Codex (~/.codex). Install one, then run `vjuu setup` again.");
     }
-    for path in written {
+    for path in done.written {
         println!("Installed {}", path.display());
+    }
+    for path in done.kept {
+        println!("Kept your own {}", path.display());
     }
     // The question gate, on by default; the plugin registers its own, so it is skipped when the plugin is enabled.
     if let Some(claude) = claude_dir().filter(|d| d.is_dir()) {
@@ -1425,21 +1428,48 @@ fn setup() -> Request {
     settings_request()
 }
 
-/// Writes the skill for Claude Code and Codex, where installed, and returns the files written.
-fn install_skill(home: &Path) -> std::io::Result<Vec<PathBuf>> {
-    // Codex reads user skills from ~/.agents/skills, a folder other agents share.
+/// The skills `vjuu setup` installs, by name. ship and sync are what the question gate tells Claude to run.
+const SKILLS: [(&str, &str); 3] = [
+    ("vjuu", SKILL),
+    ("ship", include_str!("../skills/ship/SKILL.md")),
+    ("sync", include_str!("../skills/sync/SKILL.md")),
+];
+/// Opens the comment in every skill vjuu ships but its own; a file without it is the user's, and never overwritten.
+const SHIPPED: &str = "<!-- Shipped with vjuu;";
+
+/// What `install_skill` did.
+#[derive(Debug, Default, PartialEq)]
+struct Installed {
+    written: Vec<PathBuf>,
+    /// Skills left out because the user has their own by that name: a skill without vjuu's marker, or a command.
+    kept: Vec<PathBuf>,
+}
+
+/// Writes the skills for Claude Code and Codex, where installed. The vjuu skill is always replaced; ship and sync
+/// only where they are vjuu's own, so a user's `/ship` keeps working.
+fn install_skill(home: &Path) -> std::io::Result<Installed> {
+    // Codex reads user skills from ~/.agents/skills, a folder other agents share, and its own commands from prompts.
     // shortcut: ignores CLAUDE_CONFIG_DIR and CODEX_HOME; honour them if someone moves their config.
-    let mut written = Vec::new();
-    for (agent, skills) in [(".claude", ".claude"), (".codex", ".agents")] {
-        if home.join(agent).is_dir() {
-            let dir = home.join(skills).join("skills").join("vjuu");
+    let mut done = Installed::default();
+    for (agent, skills, commands) in [(".claude", ".claude", "commands"), (".codex", ".agents", "prompts")] {
+        if !home.join(agent).is_dir() {
+            continue;
+        }
+        for (name, text) in SKILLS {
+            let dir = home.join(skills).join("skills").join(name);
             let path = dir.join("SKILL.md");
+            let command = home.join(agent).join(commands).join(format!("{name}.md"));
+            let theirs = fs::read_to_string(&path).is_ok_and(|old| !old.contains(SHIPPED));
+            if name != "vjuu" && (theirs || command.is_file()) {
+                done.kept.push(if theirs { path } else { command });
+                continue;
+            }
             fs::create_dir_all(&dir)?;
-            fs::write(&path, SKILL)?;
-            written.push(path);
+            fs::write(&path, text)?;
+            done.written.push(path);
         }
     }
-    Ok(written)
+    Ok(done)
 }
 
 fn fail(msg: &str) -> ! {
@@ -1450,9 +1480,9 @@ fn fail(msg: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::{
-        SKILL, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill, is_diff, is_vjuu, kind_of,
-        last_assistant_text, plan_decision, previous_plan, revised_doc, session_dir, transcript_title, turn_diff,
-        turn_feedback, turn_started, unix_seconds,
+        Installed, SHIPPED, SKILL, SKILLS, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill,
+        is_diff, is_vjuu, kind_of, last_assistant_text, plan_decision, previous_plan, revised_doc, session_dir,
+        transcript_title, turn_diff, turn_feedback, turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
 
@@ -1902,23 +1932,39 @@ mod tests {
     }
 
     #[test]
-    fn installs_the_skill_only_for_agents_present() {
+    fn installs_the_skills_only_for_agents_present() {
         let home = std::env::temp_dir().join(format!("vjuu-setup-{}", std::process::id()));
+        let skill = |root: &str, name: &str| home.join(root).join("skills").join(name).join("SKILL.md");
+        let all = |root: &str| ["vjuu", "ship", "sync"].map(|n| skill(root, n));
         fs::create_dir_all(&home).unwrap();
-        assert!(install_skill(&home).unwrap().is_empty());
+        assert_eq!(install_skill(&home).unwrap(), Installed::default());
         fs::create_dir_all(home.join(".codex")).unwrap();
-        assert_eq!(install_skill(&home).unwrap(), [home.join(".agents").join("skills").join("vjuu").join("SKILL.md")]);
+        assert_eq!(install_skill(&home).unwrap().written, all(".agents"));
         fs::create_dir_all(home.join(".claude")).unwrap();
-        let written = install_skill(&home).unwrap();
-        assert_eq!(
-            written,
-            [
-                home.join(".claude").join("skills").join("vjuu").join("SKILL.md"),
-                home.join(".agents").join("skills").join("vjuu").join("SKILL.md")
-            ]
-        );
-        // Running it again (after an upgrade) overwrites the old skill.
-        assert!(written.iter().all(|p| fs::read_to_string(p).unwrap() == SKILL));
+        let done = install_skill(&home).unwrap();
+        assert_eq!(done.written, [all(".claude"), all(".agents")].concat());
+        // Running it again (after an upgrade) overwrites vjuu's own skills.
+        for (path, (_, text)) in done.written.iter().zip(SKILLS.iter().chain(SKILLS.iter())) {
+            assert_eq!(&fs::read_to_string(path).unwrap(), text, "{}", path.display());
+        }
+        assert!(SKILLS[1..].iter().all(|(_, text)| text.contains(SHIPPED)) && !SKILL.contains(SHIPPED));
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn keeps_the_users_own_ship_and_sync() {
+        let home = std::env::temp_dir().join(format!("vjuu-setup-own-{}", std::process::id()));
+        let own_skill = home.join(".claude").join("skills").join("ship").join("SKILL.md");
+        let own_command = home.join(".claude").join("commands").join("sync.md");
+        for file in [&own_skill, &own_command] {
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, "mine").unwrap();
+        }
+        let done = install_skill(&home).unwrap();
+        assert_eq!(done.kept, [own_skill.clone(), own_command.clone()]);
+        assert_eq!(done.written, [home.join(".claude").join("skills").join("vjuu").join("SKILL.md")]);
+        assert_eq!(fs::read_to_string(&own_skill).unwrap(), "mine");
+        assert!(!home.join(".claude").join("skills").join("sync").exists());
         fs::remove_dir_all(&home).unwrap();
     }
 }
