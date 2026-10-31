@@ -770,6 +770,29 @@ def test_choice_keys(page, url, work):
     assert [c['answer'] for c in _review(page)['choices']] == ['', 'No']
 
 
+def test_multi_choice(page, url, work):
+    text = '```choice multi\nWhich checks?\n- Lint\n- Tests\n- Docs: the README\n```\n'
+    _open(page, url, work, {'name': 'ask.md', 'kind': 'md', 'text': text})
+    answer = lambda: _review(page)['choices'][0]['answer']
+    # Ticked out of order, sent in the order listed; a second press unticks only that one.
+    page.keyboard.press('3')
+    page.keyboard.press('1')
+    assert answer() == 'Lint, Docs'
+    assert page.locator('.choice button.picked').count() == 2
+    page.keyboard.press('3')
+    assert answer() == 'Lint'
+    page.locator('.choice button', has_text='Tests').click()
+    assert answer() == 'Lint, Tests'
+    # The hint is not part of the question that goes back.
+    assert _review(page)['choices'][0]['question'] == 'Which checks?'
+    # A plain block still picks one, and an unknown info string is a code block, not a choice.
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': '```choice multiple\n- A\n```\n\n' + _CHOICE})
+    assert page.locator('.choice').count() == 1
+    page.keyboard.press('1')
+    page.keyboard.press('2')
+    assert _review(page)['choices'][0]['answer'] == 'Live page'
+
+
 def test_settings(page, url, work):
     (work / 'config.json').write_text(json.dumps(_CONFIG))
     msgs = lambda kind: [m for m in page.evaluate('window.__msgs || []') if m['type'] == kind]
@@ -912,6 +935,7 @@ def main():
             test_html_page,
             test_choices,
             test_choice_keys,
+            test_multi_choice,
             test_settings,
             test_help,
             test_tabs,

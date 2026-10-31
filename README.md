@@ -149,7 +149,7 @@ tray is on.
 | `Ctrl+R` | **Redo**: the agent addresses your comments, then opens vjuu again |
 | `Ctrl+Z` | **Discard**: drop the comments, the agent does nothing; in a comment, undo |
 | `Esc` | Cancel the comment being written; close the settings or the help |
-| `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back |
+| `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back. In a block that takes several, tick each on or off |
 | `v` | Toggle unified / side-by-side diff |
 | `d` | A revised plan (or `--previous`): toggle its changes / the full file |
 | `x` | Mark the diff file under the cursor viewed: folds it and ticks it in the sidebar; again to unmark |
@@ -213,6 +213,9 @@ Snapshot (recommended)
 
 An unanswered choice reads `No answer.`
 
+A ```` ```choice multi ```` block takes any number of options: each click or digit ticks one on or off, and the
+review lists the ticked labels in the order they are listed, joined by `, `.
+
 ## Claude Code hooks
 
 The vjuu plugin also hooks into Claude Code, so a few moments open in vjuu by themselves. All five are on by default.
@@ -229,7 +232,7 @@ on; press `d` for the full plan. vjuu keeps the plan and the comments per sessio
 under the message that led to them. Pick an answer to each and **Approve**, and they go to Claude as if picked in the
 terminal. Comment anywhere, or leave a question unanswered, and Claude gets your picks and comments to read instead, so
 you can answer in your own words. Nothing times out. **Discard**, or close the window, and Claude Code's own picker
-asks. Questions that take several answers stay in that picker, as vjuu's buttons pick one.
+asks. A question that takes several answers ticks each one on its own.
 
 **Turn review.** When Claude finishes a turn in which it edited files, the diff of those files opens in vjuu, new files
 included. **Redo** and Claude acts on your comments straight away, and the result opens again. **Approve** and Claude

@@ -188,6 +188,7 @@ article.markdown h1, article.markdown h2, article.markdown h3 { scroll-margin-to
 /* ```choice blocks: each option a button; the picked one in the pick colour. */
 article.markdown .choice { margin: 0 0 1em; display: flex; flex-direction: column; gap: 8px; max-width: 640px; counter-reset: option; }
 article.markdown .choice .question { margin: 0; font-weight: 600; }
+article.markdown .choice .pick-any { margin: 0; color: var(--muted); font-size: 13px; }
 article.markdown .choice button { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px 10px 42px; border-radius: 8px; background: var(--bg); text-align: left; counter-increment: option; }
 /* The digit that picks it; generated content, so it stays out of the button's text. */
 article.markdown .choice button::before { content: counter(option); position: absolute; left: 12px; top: 11px; min-width: 18px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font: 12px/18px var(--mono); text-align: center; }

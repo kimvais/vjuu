@@ -29,7 +29,8 @@ How should vjuu handle artifacts?
 ````
 
 List items (`- `, `1. `, `1:`) are the options; any other line is the question. Text before the first `: ` is the
-label that comes back, the rest is shown as the explanation. One block per question.
+label that comes back, the rest is shown as the explanation. One block per question. When any number of options can
+apply, open the block with ```` ```choice multi ````; the ticked labels come back joined by `, `.
 
 ## Run it
 
