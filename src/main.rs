@@ -25,10 +25,11 @@ use wry::http::Response;
 
 use host::{Host, Tab, TabId};
 use platform::{bring_to_front, pipe_name};
-use review::Review;
+use review::{Review, Verdict};
 
 const HELP: &str = "\
-vjuu: a review window for agent handoffs. Comment on lines, click Submit & continue, and the review comes back on stdout.
+vjuu: a review window for agent handoffs. Comment on lines, then approve (Ctrl+S), ask for a redo (Ctrl+R) or discard
+(Ctrl+Z); the review comes back on stdout, its first line the verdict: approved, redo or discard.
 
 Usage:
   vjuu <file>...                 Review files in one window: markdown, a diff or patch, an HTML page
@@ -123,7 +124,10 @@ enum Msg {
     State {
         review: Review,
     },
-    Done,
+    /// Approve, Redo or Discard: the review is finished with that verdict.
+    Done {
+        verdict: Verdict,
+    },
     Rendered,
     /// The page has drawn its documents. Finishing WebView2's start-up can hand focus back to the previous
     /// window (via Explorer's ForegroundStaging), so the window is brought to the front again here.
@@ -145,11 +149,11 @@ enum Msg {
     Show {
         tab: TabId,
     },
-    /// A tab's close button: its review is sent as it is.
+    /// A tab's close button: its review is discarded.
     Close {
         tab: TabId,
     },
-    /// The window's close button: every tab's review is sent as it is.
+    /// The window's close button: every tab's review is discarded.
     Quit,
 }
 
@@ -288,8 +292,8 @@ fn transcript_title(transcript: &str) -> Option<String> {
     })
 }
 
-/// Claude Code's PreToolUse hook on ExitPlanMode: opens the plan in vjuu, and comments send it back for changes.
-/// Without comments it decides nothing, so Claude Code's own approval prompt follows and picks the next mode.
+/// Claude Code's PreToolUse hook on ExitPlanMode: opens the plan in vjuu. Approved exits plan mode, redo sends the
+/// plan back for changes; discarded decides nothing, so Claude Code's own approval prompt follows.
 fn hook_plan() -> ! {
     if !config::load().hooks.plan {
         process::exit(0)
@@ -333,8 +337,8 @@ fn previous_plan(plan: &Path, dir: &Path) -> Option<PathBuf> {
     Some(previous)
 }
 
-/// Claude Code's Stop hook: shows the diff of the files Claude edited this turn, and comments go back to Claude.
-/// Without edits, or without comments, it lets the turn end.
+/// Claude Code's Stop hook: shows the diff of the files Claude edited this turn; approved and redo go back to Claude.
+/// Without edits, or discarded, it lets the turn end.
 fn hook_turn() -> ! {
     if !config::load().hooks.turn {
         process::exit(0)
@@ -358,7 +362,7 @@ fn hook_turn() -> ! {
 
 /// Claude Code's PreToolUse hook on AskUserQuestion: asks the questions in vjuu, under Claude's last message.
 /// Picks alone answer the tool; comments or unanswered questions go back to Claude as the whole review instead.
-/// Closing the window without answering leaves the questions to Claude Code's own picker.
+/// Discarding (or closing the window) leaves the questions to Claude Code's own picker.
 fn hook_ask() -> ! {
     if !config::load().hooks.ask {
         process::exit(0)
@@ -431,7 +435,7 @@ fn ask_markdown(context: Option<&str>, questions: &[serde_json::Value]) -> Strin
 /// Returns the hook output for a review of AskUserQuestion: the answers when every question was picked and nothing
 /// else said, otherwise the whole review for Claude to read; None when the user answered nothing.
 fn ask_decision(tool_input: &serde_json::Value, review: &str) -> Option<String> {
-    if !has_comments(review) {
+    if matches!(Verdict::of(review), None | Some(Verdict::Discard)) || !has_comments(review) {
         return None;
     }
     let (picks, other_comments) = picks(review);
@@ -490,7 +494,8 @@ fn squash(text: &str) -> String {
 const PERMISSION_QUESTION: &str = "Allow this?";
 
 /// Claude Code's PermissionRequest hook: asks Allow / Deny in vjuu, under what Claude wants to do.
-/// A pick decides; comments without one deny, with the comments as the reason; nothing leaves the terminal prompt.
+/// A pick decides; without one, approved allows once and redo denies with the comments as the reason; discarded
+/// leaves the terminal prompt.
 fn hook_permission() -> ! {
     if !config::load().hooks.permission {
         process::exit(0)
@@ -561,18 +566,20 @@ fn fence(lang: &str, text: &str) -> String {
     format!("{ticks}{lang}\n{}\n{ticks}\n", text.trim_end())
 }
 
-/// Returns the PermissionRequest hook output for a review, or None when the user decided nothing there.
+/// Returns the PermissionRequest hook output for a review: a pick decides, and without one approved allows once and
+/// redo denies; None when discarded, closed, or vjuu failed, so the terminal prompt asks.
 fn permission_decision(event: &serde_json::Value, review: &str) -> Option<String> {
-    if !has_comments(review) {
+    let verdict = Verdict::of(review)?;
+    if verdict == Verdict::Discard {
         return None;
     }
     let (picks, _) = picks(review);
-    let decision = match picks.get(PERMISSION_QUESTION).map(String::as_str) {
-        Some("Allow") => serde_json::json!({ "behavior": "allow" }),
-        Some("Always allow") => {
+    let decision = match (picks.get(PERMISSION_QUESTION).map(String::as_str), verdict) {
+        (Some("Allow"), _) | (None, Verdict::Approved) => serde_json::json!({ "behavior": "allow" }),
+        (Some("Always allow"), _) => {
             serde_json::json!({ "behavior": "allow", "updatedPermissions": event["permission_suggestions"] })
         }
-        // Deny, or comments without a pick.
+        // Deny, or redo without a pick.
         _ => serde_json::json!({
             "behavior": "deny",
             "message": format!("The user denied this in vjuu.\n\n{}", review.trim()),
@@ -709,41 +716,66 @@ fn turn_base(worktree: &Path, since: Option<i64>) -> String {
     base.unwrap_or_else(|| "HEAD".into())
 }
 
-/// Returns the hook output that hands the review of this turn's changes to Claude, or None without comments.
+/// Returns the hook output that hands the review of this turn's changes to Claude; None when discarded, closed, or
+/// vjuu failed, so the turn just ends.
 fn turn_feedback(review: &str) -> Option<String> {
-    if !has_comments(review) {
-        return None;
-    }
-    let context = format!(
-        "The user reviewed this turn's changes in vjuu. Act on each comment that asks for a change and answer each \
-         question. If no comment asks for anything, just stop.\n\n{}",
-        review.trim()
-    );
+    let review = review.trim();
+    let context = match (Verdict::of(review)?, has_comments(review)) {
+        (Verdict::Discard, _) => return None,
+        (Verdict::Approved, false) => "The user approved this turn's changes in vjuu. Proceed to the next step \
+            without asking for approval again, as the vjuu skill says for `approved`."
+            .to_string(),
+        (Verdict::Approved, true) => format!(
+            "The user approved this turn's changes in vjuu, with the comments below. Apply the minor ones and \
+             proceed without asking for approval again, as the vjuu skill says for `approved`. Treat a comment that \
+             changes behaviour as `redo`: act on it and stop, so the changes open in vjuu again.\n\n{review}"
+        ),
+        (Verdict::Redo, true) => format!(
+            "The user asked for a redo of this turn's changes in vjuu. Act on each comment that asks for a change and \
+             answer each question, then stop: the changes open in vjuu again.\n\n{review}"
+        ),
+        (Verdict::Redo, false) => "The user asked for a redo of this turn's changes in vjuu without saying what to \
+            change. Ask what to change."
+            .to_string(),
+    };
     Some(
         serde_json::json!({ "hookSpecificOutput": { "hookEventName": "Stop", "additionalContext": context } })
             .to_string(),
     )
 }
 
-/// Returns the hook output that rejects the plan with the review as the reason, or None when there is nothing to act on.
+/// Returns the hook output for a plan review: approved allows ExitPlanMode, redo sends the plan back with the review;
+/// None when discarded, closed, or vjuu failed, so Claude Code's own approval prompt follows.
 fn plan_decision(review: &str) -> Option<String> {
-    if !has_comments(review) {
-        return None;
-    }
     let review = review.trim();
-    let reason = format!(
-        "The user reviewed the plan in vjuu. Act on each comment that asks for a change, update the plan file, \
-         then call ExitPlanMode again. If no comment asks for a change (\"LGTM\"), call ExitPlanMode again \
-         right away.\n\n{review}"
-    );
-    let output = serde_json::json!({
-        "hookSpecificOutput": {
+    let output = match Verdict::of(review)? {
+        Verdict::Discard => return None,
+        Verdict::Approved => {
+            let mut output = serde_json::json!({
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+                "permissionDecisionReason": "Approved in vjuu.",
+            });
+            if has_comments(review) {
+                output["additionalContext"] = format!(
+                    "The user approved the plan in vjuu, with the comments below. Apply the minor ones as you carry \
+                     out the plan. If one changes behaviour, update the plan file and open it in vjuu again before \
+                     doing that part.\n\n{review}"
+                )
+                .into();
+            }
+            output
+        }
+        Verdict::Redo => serde_json::json!({
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    });
-    Some(output.to_string())
+            "permissionDecisionReason": format!(
+                "The user asked for a redo of the plan in vjuu. Act on each comment, update the plan file, then call \
+                 ExitPlanMode again.\n\n{review}"
+            ),
+        }),
+    };
+    Some(serde_json::json!({ "hookSpecificOutput": output }).to_string())
 }
 
 fn request(docs: Vec<Doc>) -> Request {
@@ -1026,12 +1058,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     listed = None;
                 }
             }
-            Event::UserEvent(AppEvent::Ui(id, Msg::Done)) => finish(&mut host, id, true),
-            Event::UserEvent(AppEvent::Ui(_, Msg::Close { tab })) => finish(&mut host, tab, true),
+            Event::UserEvent(AppEvent::Ui(id, Msg::Done { verdict })) => finish(&mut host, id, Some(verdict)),
+            // Closing is no decision: the agent must not read "looks good" into it.
+            Event::UserEvent(AppEvent::Ui(_, Msg::Close { tab })) => finish(&mut host, tab, Some(Verdict::Discard)),
             Event::UserEvent(AppEvent::Ui(_, Msg::Quit))
             | Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
                 let ids: Vec<TabId> = host.tabs().map(|(id, _)| *id).collect();
-                ids.into_iter().for_each(|id| finish(&mut host, id, true));
+                ids.into_iter().for_each(|id| finish(&mut host, id, Some(Verdict::Discard)));
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Ready)) => {
                 if let Some(s) = host.get(id) {
@@ -1053,7 +1086,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 {
                     eprintln!("rendered in {} ms", s.started.elapsed().as_millis());
                 }
-                finish(&mut host, id, false)
+                finish(&mut host, id, None)
             }
             Event::WindowEvent { event: WindowEvent::Resized(_), .. } => host.fit(),
             // Activation focuses the native window, not the webview inside it; pass keyboard focus on, or keys
@@ -1190,7 +1223,7 @@ fn window_command(window: &Window, msg: Msg) {
             platform::open_url(&theme::dir().to_string_lossy());
         }
         Msg::State { .. }
-        | Msg::Done
+        | Msg::Done { .. }
         | Msg::Rendered
         | Msg::Ready
         | Msg::Settings { .. }
@@ -1206,25 +1239,27 @@ fn is_vjuu(url: &str) -> bool {
     url.starts_with("vjuu://localhost/") || url.starts_with("http://vjuu.localhost/")
 }
 
-/// Saves the review and sends it where it was asked for; `save` is false for autoclose timing runs.
-fn finish(host: &mut Host, id: TabId, save: bool) {
+/// Saves the review and sends it where it was asked for; `verdict` is None for autoclose timing runs.
+fn finish(host: &mut Host, id: TabId, verdict: Option<Verdict>) {
     let Some(s) = host.remove(id) else { return };
     let (name, only_settings, keep) = match s.slot.lock().expect("slot lock").as_ref() {
         Some(r) => (r.name(), r.sample, r.comments.clone()),
         None => (String::new(), false, None),
     };
-    if save && let Some(path) = keep {
+    if verdict.is_some()
+        && let Some(path) = keep
+    {
         let json = serde_json::to_vec(&s.latest.comments).expect("comments serialise");
         if let Err(e) = fs::write(&path, json) {
             eprintln!("Could not keep the comments in {}: {e}", path.display());
         }
     }
-    let md = match (save, only_settings) {
+    let md = match (verdict, only_settings) {
         // Nothing to review: Apply saved the settings, or Esc left them as they were.
         (_, true) if s.applied => "Settings saved.\n".into(),
         (_, true) => "Settings unchanged.\n".into(),
-        (true, false) => save_review(&name, &s.latest),
-        (false, false) => String::new(),
+        (Some(verdict), false) => save_review(&name, &s.latest, verdict),
+        (None, false) => String::new(),
     };
     match s.reply {
         Some(Reply::Stdout) => {
@@ -1319,9 +1354,14 @@ fn reviews_dir() -> PathBuf {
     platform::data_dir().join("reviews")
 }
 
-/// Returns the review as markdown after writing it to the reviews directory.
-fn save_review(name: &str, review: &Review) -> String {
-    let md = review::to_markdown(name, review);
+/// Writes the review to the reviews directory and returns what the agent gets: the review, or for a discarded one
+/// only the verdict, as its comments are dropped. The file keeps them either way, so nothing typed is lost.
+fn save_review(name: &str, review: &Review, verdict: Verdict) -> String {
+    let md = review::to_markdown(name, review, verdict);
+    let sent = match verdict {
+        Verdict::Discard => format!("discard\n# Review: {name}\n"),
+        Verdict::Approved | Verdict::Redo => md.clone(),
+    };
     let dir = reviews_dir();
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let slug: String =
@@ -1330,7 +1370,7 @@ fn save_review(name: &str, review: &Review) -> String {
     if let Err(e) = fs::create_dir_all(&dir).and_then(|_| fs::write(&path, &md)) {
         eprintln!("Could not save review to {}: {e}", path.display());
     }
-    md
+    sent
 }
 
 fn print_last() -> ! {
@@ -1480,17 +1520,25 @@ mod tests {
         let decide = |review: &str| {
             permission_decision(&event, review).map(|d| serde_json::from_str::<serde_json::Value>(&d).unwrap())
         };
-        assert_eq!(decide("# Review: p.md\nNo comments.\n"), None);
-        assert_eq!(decide(""), None);
-        let picked = |answer: &str| format!("# Review: p.md\n\n## Choice: Allow this?\n{answer}\n");
+        // Discarded, closed, vjuu failed, or no verdict: the terminal prompt asks, whatever was picked.
+        for review in [
+            "",
+            "# Review: p.md\nNo comments.\n",
+            "discard\n# Review: p.md\n",
+            "# Review: p.md\n\n## Choice: Allow this?\nAllow\n",
+        ] {
+            assert_eq!(decide(review), None, "{review:?}");
+        }
+        let picked = |answer: &str| format!("approved\n# Review: p.md\n\n## Choice: Allow this?\n{answer}\n");
         let decision = |review: &str| decide(review).unwrap()["hookSpecificOutput"]["decision"].clone();
         assert_eq!(decision(&picked("Allow")), serde_json::json!({ "behavior": "allow" }));
+        assert_eq!(decision("approved\n# Review: p.md\nNo comments.\n"), serde_json::json!({ "behavior": "allow" }));
         assert_eq!(
             decision(&picked("Always allow")),
             serde_json::json!({ "behavior": "allow", "updatedPermissions": event["permission_suggestions"] })
         );
-        let because = "# Review: p.md (1 comment)\n\n## p.md:5\n> npm test\n\nRun only the unit tests.\n";
-        for review in [picked("Deny"), because.to_string()] {
+        let because = "redo\n# Review: p.md (1 comment)\n\n## p.md:5\n> npm test\n\nRun only the unit tests.\n";
+        for review in [picked("Deny"), because.to_string(), "redo\n# Review: p.md\nNo comments.\n".to_string()] {
             let out = decide(&review).unwrap();
             assert_eq!(out["hookSpecificOutput"]["hookEventName"], "PermissionRequest");
             assert_eq!(out["hookSpecificOutput"]["decision"]["behavior"], "deny", "{review}");
@@ -1526,11 +1574,18 @@ mod tests {
         let decide = |review: &str| -> Option<serde_json::Value> {
             ask_decision(&input, review).map(|d| serde_json::from_str::<serde_json::Value>(&d).unwrap())
         };
-        // Closed without a pick: Claude Code's picker asks instead.
-        assert_eq!(decide("# Review: ask.md\nNo comments.\n"), None);
-        assert_eq!(decide(""), None);
+        // Discarded or closed, even with picks, or approved without one: Claude Code's picker asks instead.
+        let picks = "# Review: ask.md\n\n## Choice: Which framework?\nVue\n\n## Choice: Ship now?\nNo\n";
+        for review in [
+            "approved\n# Review: ask.md\nNo comments.\n".to_string(),
+            String::new(),
+            format!("discard\n{picks}"),
+            picks.to_string(),
+        ] {
+            assert_eq!(decide(&review), None, "{review:?}");
+        }
 
-        let picked = "# Review: ask.md\n\n## Choice: Which framework?\nVue\n\n## Choice: Ship now?\nNo\n";
+        let picked = &format!("approved\n{picks}");
         let mut expected = input.clone();
         expected["answers"] = serde_json::json!({ "Which framework?": "Vue", "Ship\n now?": "No" });
         assert_eq!(
@@ -1541,7 +1596,7 @@ mod tests {
 
         let commented = format!("{picked}\n## ask.md:9\n> - Vue\n\nVue 3 only.\n");
         let unanswered =
-            "# Review: ask.md\n\n## Choice: Which framework?\nReact\n\n## Choice: Ship now?\nNo answer.\n";
+            "redo\n# Review: ask.md\n\n## Choice: Which framework?\nReact\n\n## Choice: Ship now?\nNo answer.\n";
         for review in [commented.as_str(), unanswered] {
             let out = decide(review).unwrap();
             assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny", "{review}");
@@ -1590,15 +1645,24 @@ mod tests {
     }
 
     #[test]
-    fn turn_comments_go_back_to_claude() {
-        for review in ["", "# Review: x.diff\nNo comments.\n"] {
+    fn turn_verdicts_go_back_to_claude() {
+        let comments = "# Review: x.diff (1 comment)\n\n## a.rs:3\n> +x\n\nWhy?\n";
+        // Discarded (with its comments dropped), closed, vjuu failed, or no verdict: the turn ends.
+        for review in ["", "discard\n# Review: x.diff\n", "# Review: x.diff\nNo comments.\n", comments] {
             assert_eq!(turn_feedback(review), None, "{review:?}");
         }
-        let review = "# Review: x.diff (1 comment)\n\n## a.rs:3\n> +x\n\nWhy?\n";
-        let feedback: serde_json::Value = serde_json::from_str(&turn_feedback(review).unwrap()).unwrap();
-        assert_eq!(feedback["hookSpecificOutput"]["hookEventName"], "Stop");
-        let context = feedback["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
-        assert!(context.ends_with(review.trim()), "{context}");
+        let context = |review: &str| -> String {
+            let feedback: serde_json::Value = serde_json::from_str(&turn_feedback(review).unwrap()).unwrap();
+            assert_eq!(feedback["hookSpecificOutput"]["hookEventName"], "Stop");
+            feedback["hookSpecificOutput"]["additionalContext"].as_str().unwrap().to_string()
+        };
+        for (verdict, says) in [("approved", "proceed without asking"), ("redo", "open in vjuu again")] {
+            let review = format!("{verdict}\n{comments}");
+            let context = context(&review);
+            assert!(context.contains(says) && context.ends_with(review.trim()), "{context}");
+        }
+        assert!(context("approved\n# Review: x.diff\nNo comments.\n").contains("Proceed"));
+        assert!(context("redo\n# Review: x.diff\nNo comments.\n").contains("Ask what to change"));
     }
 
     #[test]
@@ -1689,17 +1753,28 @@ mod tests {
     }
 
     #[test]
-    fn plan_comments_reject_the_plan() {
-        // Closed without comments, or vjuu failed: leave it to Claude Code's own prompt.
-        for review in ["", "# Review: plan.md\nNo comments.\n"] {
+    fn plan_verdicts_decide() {
+        let comments = "# Review: plan.md (1 comment)\n\n## plan.md:3\n> Step 2\n\nSkip this step.\n";
+        // Discarded, closed, vjuu failed, or no verdict: leave it to Claude Code's own prompt.
+        for review in ["", "discard\n# Review: plan.md\n", "# Review: plan.md\nNo comments.\n", comments] {
             assert_eq!(plan_decision(review), None, "{review:?}");
         }
-        let review = "# Review: plan.md (1 comment)\n\n## plan.md:3\n> Step 2\n\nSkip this step.\n";
-        let decision: serde_json::Value = serde_json::from_str(&plan_decision(review).unwrap()).unwrap();
-        assert_eq!(decision["hookSpecificOutput"]["hookEventName"], "PreToolUse");
-        assert_eq!(decision["hookSpecificOutput"]["permissionDecision"], "deny");
-        let reason = decision["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
-        assert!(reason.ends_with(review.trim()), "{reason}");
+        let decide = |review: &str| -> serde_json::Value {
+            let decision: serde_json::Value = serde_json::from_str(&plan_decision(review).unwrap()).unwrap();
+            decision["hookSpecificOutput"].clone()
+        };
+        let redo = format!("redo\n{comments}");
+        let out = decide(&redo);
+        assert_eq!((&out["hookEventName"], &out["permissionDecision"]), (&"PreToolUse".into(), &"deny".into()));
+        assert!(out["permissionDecisionReason"].as_str().unwrap().ends_with(redo.trim()), "{out}");
+        // Approved exits plan mode, instead of falling through to Claude Code's prompt; comments come along.
+        let out = decide("approved\n# Review: plan.md\nNo comments.\n");
+        assert_eq!(out["permissionDecision"], "allow");
+        assert!(out.get("additionalContext").is_none(), "{out}");
+        let approved = format!("approved\n{comments}");
+        let out = decide(&approved);
+        assert_eq!(out["permissionDecision"], "allow");
+        assert!(out["additionalContext"].as_str().unwrap().ends_with(approved.trim()), "{out}");
     }
 
     #[test]

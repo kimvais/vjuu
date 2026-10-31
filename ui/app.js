@@ -147,11 +147,11 @@ settings.addEventListener('cancel', () => {
   frameDocs().forEach(syncFrameTheme);
 });
 // A window opened for the settings shows only a sample behind them: nothing to review.
-settings.addEventListener('close', () => { if (req?.sample) done(); });
+settings.addEventListener('close', () => { if (req?.sample) done('discard'); });
 $('#settings-apply').onclick = applySettings;
 settings.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || !e.ctrlKey) return;
-  // Not on to the document, where Ctrl+Enter would submit the review once the panel has closed.
+  // Not on to the document, where it would land on whatever has focus once the panel has closed.
   e.preventDefault();
   e.stopPropagation();
   applySettings();
@@ -795,7 +795,7 @@ function commentBox(key, c) {
   ta.value = c.draft ?? c.text;
   ta.rows = 3;
   ta.placeholder = `Comment on ${c.file}:${c.start}${c.end !== c.start ? `-${c.end}` : ''} `;
-  // Text still being typed counts too: Submit & continue or closing the window must not drop it.
+  // Text still being typed counts too: Approve, Redo or closing the window must not drop it.
   ta.oninput = () => {
     c.draft = ta.value;
     post({ type: 'state', review: review() });
@@ -939,10 +939,14 @@ function move(list, delta) {
   return list[Math.min(Math.max(cur + delta, 0), list.length - 1)];
 }
 
-function done() {
+/** Finishes the review with a verdict: 'approved', 'redo' or 'discard'. */
+function done(verdict) {
   post({ type: 'state', review: review() });
-  post({ type: 'done' });
+  post({ type: 'done', verdict });
 }
+
+/** Ctrl+S, Ctrl+R and Ctrl+Z: one key per verdict. */
+const VERDICTS = { s: 'approved', r: 'redo', z: 'discard' };
 
 // Highlight only the innermost line or block: that is what a click comments on.
 let hovered = null;
@@ -1002,6 +1006,9 @@ function jumpFile(delta) {
 }
 
 function onKey(e) {
+  const plainCtrl = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+  // Ctrl+R would reload the page and lose every comment, even with a dialog open.
+  if (plainCtrl && e.key === 'r') e.preventDefault();
   // The dialogs take their own keys: Tab, Space and Esc.
   if (settings.open || help.open) return;
   if (e.key === 'F1') {
@@ -1027,17 +1034,20 @@ function onKey(e) {
     }
     if (e.key === 'w' && !e.shiftKey) {
       e.preventDefault();
-      done();
+      done('discard');
       return;
     }
   }
   const inField = e.target.closest('textarea, input, select');
-  // Ctrl+Enter saves the comment being written (its own handler); anywhere else it finishes the review.
-  if (e.key === 'Enter' && e.ctrlKey && (e.shiftKey || !inField || e.target.id === 'overall')) {
+  // Approve and Redo work while typing too, and send what is typed. Ctrl+Z discards only with no comment open and
+  // outside a field; there it stays the text's undo.
+  const writing = inField || [...comments.values()].some((c) => c.editing);
+  if (plainCtrl && VERDICTS[e.key] && !(e.key === 'z' && writing)) {
     e.preventDefault();
-    done();
+    done(VERDICTS[e.key]);
     return;
   }
+  // Ctrl+Enter only saves the comment being written (its own handler): as a reflex it must never finish the review.
   if (inField || e.ctrlKey || e.altKey || e.metaKey) return;
   // The lines of folded files are hidden; their headers stand in for them.
   const all = deep('[data-key], .folded .d2h-file-header').filter((el) => !el.dataset.key || !el.closest('.folded'));
@@ -1093,7 +1103,7 @@ function toggleChanges() {
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => frameDocs().forEach(syncFrameTheme));
 $('#view').onclick = toggleView;
 $('#changes').onclick = toggleChanges;
-$('#done').onclick = done;
+for (const btn of document.querySelectorAll('#verdicts button')) btn.onclick = () => done(btn.dataset.verdict);
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
 
 // Window chrome. On Windows the window is frameless, so the title bar and edges ask vjuu to move, resize or close it;
@@ -1143,7 +1153,7 @@ window.vjuuTabs = (list) => {
     tab.classList.toggle('unseen', t.unseen);
     tab.title = i < 9 ? `${t.title} (Ctrl+${i + 1})` : t.title;
     const close = span('tab-close', '×');
-    close.title = 'Close: sends this review as it is (Ctrl+W)';
+    close.title = 'Close: discards this review (Ctrl+W)';
     tab.append(span('tab-name', t.name), ...(t.kind ? [span('kind', t.kind)] : []), close);
     tab.onclick = (e) => post(e.target === close ? { type: 'close', tab: t.id } : { type: 'show', tab: t.id });
     return tab;

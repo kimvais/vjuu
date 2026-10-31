@@ -123,8 +123,51 @@ def test_diff(page, url, work):
         ],
         'overall': '',
     }, review
-    page.keyboard.press('Control+Shift+Enter')
-    assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done'}
+    page.keyboard.press('Control+r')
+    assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done', 'verdict': 'redo'}
+
+
+def _ctrl_r_prevented(page):
+    """Whether the page cancels Ctrl+R, which would reload it; dispatched, as headless Edge has no reload key."""
+    return page.evaluate(
+        "() => !document.body.dispatchEvent("
+        "new KeyboardEvent('keydown', {key: 'r', ctrlKey: true, cancelable: true, bubbles: true}))"
+    )
+
+
+def test_verdicts(page, url, work):
+    (work / 'config.json').write_text(json.dumps(_CONFIG))  # the help reads the version from it
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+    done = lambda: [m for m in page.evaluate('window.__msgs || []') if m['type'] == 'done']
+    # Ctrl+Enter saves a comment and nothing else: outside one it finishes nothing.
+    page.get_by_text('First paragraph').click()
+    _comment(page, 'kept')
+    page.keyboard.press('Control+Enter')
+    page.fill('#overall', 'overall')
+    page.keyboard.press('Control+Enter')
+    # Ctrl+Z is the text's undo while a comment is open, and in the Overall box.
+    page.get_by_text('item two').click()
+    page.keyboard.type('typing')
+    page.keyboard.press('Control+z')
+    page.focus('#overall')
+    page.keyboard.press('Control+z')
+    assert done() == []
+    # Outside a field, with no comment open, Ctrl+Z discards.
+    page.locator('.vjuu-c textarea').press('Escape')
+    page.keyboard.press('Control+z')
+    assert done() == [{'type': 'done', 'verdict': 'discard'}], done()
+    # Ctrl+R never reloads: with a dialog open it does nothing, otherwise it is Redo.
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+    page.keyboard.press('F1')
+    page.wait_for_selector('#help[open]')
+    assert _ctrl_r_prevented(page) and done() == [], done()
+    page.keyboard.press('Escape')
+    assert _ctrl_r_prevented(page) and done() == [{'type': 'done', 'verdict': 'redo'}], done()
+    # Each button sends its verdict.
+    for verdict, label in (('approved', 'Approve'), ('redo', 'Redo'), ('discard', 'Discard')):
+        _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _MD})
+        page.locator('#verdicts button', has_text=label).click()
+        assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done', 'verdict': verdict}
 
 
 def test_markdown(page, url, work):
@@ -408,16 +451,17 @@ def test_keyboard_navigation(page, url, work):
     got = sorted((c['file'], c['start'], c['text']) for c in _review(page)['comments'])
     assert got == [('a.md', 3, 'on the paragraph'), ('src/app.py', 2, 'on the diff')], got
     assert page.evaluate('window.__msgs.at(-1).type') == 'state'
-    page.keyboard.press('Control+Enter')  # outside a comment: Submit & continue
-    assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done'}
+    page.keyboard.press('Control+s')
+    assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done', 'verdict': 'approved'}
 
 
 def test_unsaved_comment_is_kept(page, url, work):
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
     page.get_by_text('First paragraph').click()
     page.keyboard.type('half-written')
-    # Submit & continue (or closing the window) while still typing must not drop the text.
-    page.keyboard.press('Control+Shift+Enter')
+    # Approving (or closing the window) while still typing must not drop the text.
+    page.keyboard.press('Control+s')
+    assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done', 'verdict': 'approved'}
     assert [c['text'] for c in _review(page)['comments']] == ['half-written']
     # Editing a saved comment and finishing without saving sends the edited text.
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
@@ -752,7 +796,7 @@ def test_settings(page, url, work):
     page.wait_for_selector('#settings[open]')
     assert checked() == [True, False, True, False, True, False]
     page.click('#settings [name=turn]')
-    page.keyboard.press('Control+Enter')  # Apply, and not on to Submit & continue
+    page.keyboard.press('Control+Enter')  # Apply, and nothing else
     assert msgs('settings')[-1]['config'] == {
         'tray': True,
         'focus': False,
@@ -769,7 +813,7 @@ def test_settings(page, url, work):
     page.click('#settings-apply')
     # A dialog's close event arrives as a task of its own.
     page.wait_for_function("(window.__msgs || []).some((m) => m.type === 'done')", timeout=2000)
-    assert len(msgs('done')) == 1
+    assert msgs('done') == [{'type': 'done', 'verdict': 'discard'}]
 
 
 def test_help(page, url, work):
@@ -829,9 +873,9 @@ def test_tabs(page, url, work):
     strip.nth(2).locator('.tab-name').click()
     strip.nth(1).locator('.tab-close').click()
     assert sent()[-2:] == [{'type': 'show', 'tab': 5}, {'type': 'close', 'tab': 3}], sent()
-    # Ctrl+W closes this tab: its review is sent, as Submit & continue does.
+    # Ctrl+W closes this tab, discarding its review.
     page.keyboard.press('Control+w')
-    assert sent()[-1] == {'type': 'done'}
+    assert sent()[-1] == {'type': 'done', 'verdict': 'discard'}
 
 
 def main():
@@ -847,6 +891,7 @@ def main():
         only = sys.argv[1:]
         for test in (
             test_diff,
+            test_verdicts,
             test_markdown,
             test_revised_file,
             test_highlighting_and_themes,
