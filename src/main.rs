@@ -376,8 +376,7 @@ fn hook_ask() -> ! {
     }
     let event = hook_event();
     let questions = event["tool_input"]["questions"].as_array().cloned().unwrap_or_default();
-    // shortcut: a choice block picks one option, so multi-select questions stay in Claude Code's picker.
-    if questions.is_empty() || questions.iter().any(|q| q["multiSelect"] == true) {
+    if questions.is_empty() {
         process::exit(0)
     }
     let transcript = event["transcript_path"].as_str().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
@@ -414,7 +413,9 @@ fn last_assistant_text(transcript: &str) -> Option<String> {
     None
 }
 
-/// Returns the markdown vjuu shows for AskUserQuestion: the context, then one choice block per question.
+/// Returns the markdown vjuu shows for AskUserQuestion: the context, then one choice block per question, a
+/// ```` ```choice multi ```` block for a question that takes several answers. vjuu sends those back joined by ", ",
+/// as Claude Code's own picker does.
 fn ask_markdown(context: Option<&str>, questions: &[serde_json::Value]) -> String {
     let mut md = String::new();
     if let Some(context) = context {
@@ -425,7 +426,8 @@ fn ask_markdown(context: Option<&str>, questions: &[serde_json::Value]) -> Strin
         if let Some(header) = q["header"].as_str().filter(|h| !h.is_empty()) {
             md += &format!("\n### {header}\n");
         }
-        md += &format!("\n```choice\n{}\n", q["question"].as_str().unwrap_or_default());
+        let multi = if q["multiSelect"] == true { " multi" } else { "" };
+        md += &format!("\n```choice{multi}\n{}\n", q["question"].as_str().unwrap_or_default());
         for option in q["options"].as_array().into_iter().flatten() {
             // shortcut: a label containing ": " is cut short there, as the block reads "label: description".
             let label = option["label"].as_str().unwrap_or_default();
@@ -1602,6 +1604,22 @@ mod tests {
                 { "label": "React", "description": "Component library" }, { "label": "Vue", "description": "" } ] },
             { "question": "Ship\n now?", "header": "", "options": [ { "label": "Yes" }, { "label": "No" } ] },
         ] })
+    }
+
+    #[test]
+    fn several_answers_become_a_multi_choice_block() {
+        let input = serde_json::json!({ "questions": [
+            { "question": "Which checks?", "multiSelect": true, "options": [ { "label": "Lint" }, { "label": "Tests" } ] },
+        ] });
+        let md = ask_markdown(None, input["questions"].as_array().unwrap());
+        assert!(md.ends_with("\n```choice multi\nWhich checks?\n- Lint\n- Tests\n```\n"), "{md}");
+        // vjuu joins the picks; they go to Claude Code as its picker would send them.
+        let decision = ask_decision(&input, "approved\n# Review: ask.md\n\n## Choice: Which checks?\nLint, Tests\n");
+        let out: serde_json::Value = serde_json::from_str(&decision.unwrap()).unwrap();
+        assert_eq!(
+            out["hookSpecificOutput"]["updatedInput"]["answers"],
+            serde_json::json!({ "Which checks?": "Lint, Tests" })
+        );
     }
 
     #[test]

@@ -389,8 +389,10 @@ function renderMarkdown(section, doc, i) {
   };
   const md = window.markdownit({ linkify: true, highlight });
   const fence = md.renderer.rules.fence;
-  md.renderer.rules.fence = (tokens, idx, ...rest) =>
-    tokens[idx].info.trim() === 'choice' ? choiceHtml(tokens[idx]) : fence(tokens, idx, ...rest);
+  md.renderer.rules.fence = (tokens, idx, ...rest) => {
+    const info = tokens[idx].info.trim();
+    return /^choice( multi)?$/.test(info) ? choiceHtml(tokens[idx], info.endsWith('multi')) : fence(tokens, idx, ...rest);
+  };
   const lines = doc.text.split(/\r?\n/);
   const tokens = md.parse(doc.text, {});
   for (const t of tokens) {
@@ -410,7 +412,9 @@ function renderMarkdown(section, doc, i) {
   }
   for (const el of article.querySelectorAll('.choice')) {
     el.dataset.choice = `${i}\n${el.dataset.map}`;
-    const c = choices.get(el.dataset.choice) ?? { question: el.querySelector('.question').textContent, answer: '' };
+    const fresh = { question: el.querySelector('.question').textContent, answer: '' };
+    if (el.classList.contains('multi')) fresh.picked = [];
+    const c = choices.get(el.dataset.choice) ?? fresh;
     choices.set(el.dataset.choice, c);
     showPick(el, c);
   }
@@ -424,8 +428,11 @@ function renderMarkdown(section, doc, i) {
 
 const OPTION = /^(?:[-*]|\d+[.):])\s+(.*)$/;
 
-/** Renders a ```choice block: its list items ("- ", "1. ", "2:") are the options, the other lines the question. */
-function choiceHtml(t) {
+/**
+ * Renders a ```choice block: its list items ("- ", "1. ", "2:") are the options, the other lines the question. A
+ * ```choice multi block takes any number of them.
+ */
+function choiceHtml(t, multi) {
   // Agent output, rendered with html off elsewhere: escape quotes too, as text goes into attributes.
   const esc = (s) => escapeHtml(s).replace(/"/g, '&quot;');
   const lines = t.content.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -436,18 +443,31 @@ function choiceHtml(t) {
     const detail = why.length ? `<span>${esc(why.join(': '))}</span>` : '';
     return `<button data-label="${esc(label)}"><b>${esc(label)}</b>${detail}</button>`;
   });
-  return `<div class="choice" data-map="${t.map.join(',')}"><p class="question">${esc(question)}</p>${buttons.join('')}</div>`;
+  const cls = multi ? 'choice multi' : 'choice';
+  const any = multi ? '<p class="pick-any">Pick any number (1–9 ticks each)</p>' : '';
+  return `<div class="${cls}" data-map="${t.map.join(',')}"><p class="question">${esc(question)}</p>${any}${buttons.join('')}</div>`;
 }
 
 function showPick(el, c) {
-  for (const b of el.querySelectorAll('button')) b.classList.toggle('picked', b.dataset.label === c.answer);
+  const on = c.picked ?? [c.answer];
+  for (const b of el.querySelectorAll('button')) b.classList.toggle('picked', on.includes(b.dataset.label));
 }
 
-/** Picks an option of a choice block; picking it again takes the pick back. */
+/**
+ * Picks an option of a choice block; picking it again takes the pick back. In a multi block each option is ticked on
+ * its own, and the answer is the ticked labels joined by ", " in the order listed, as Claude Code's picker sends them.
+ */
 function pick(button) {
   const el = button.closest('.choice');
   const c = choices.get(el.dataset.choice);
-  c.answer = c.answer === button.dataset.label ? '' : button.dataset.label;
+  const label = button.dataset.label;
+  if (c.picked) {
+    const order = [...el.querySelectorAll('button')].map((b) => b.dataset.label);
+    c.picked = order.filter((l) => (l === label ? !c.picked.includes(l) : c.picked.includes(l)));
+    c.answer = c.picked.join(', ');
+  } else {
+    c.answer = c.answer === label ? '' : label;
+  }
   showPick(el, c);
   post({ type: 'state', review: review() });
 }
