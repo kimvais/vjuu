@@ -1803,9 +1803,14 @@ mod tests {
 
         let since = now as i64 - 60;
         let commands = ["cd .work/fix && sed -i s/one/fixed/ sedded.txt".to_string()];
+        // git names the temp folder its own way (/private/var on macOS, long names for 8.3 ones on Windows).
+        let root = repo.canonicalize().unwrap();
         let mut found: Vec<String> = changed_since(&repo, &commands, since)
             .iter()
-            .map(|f| Path::new(f).strip_prefix(&repo).unwrap().to_string_lossy().replace('\\', "/"))
+            .map(|f| {
+                let f = Path::new(f).canonicalize().unwrap();
+                f.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/")
+            })
             .collect();
         found.sort();
         assert_eq!(found, [".work/fix/sedded.txt", "made.txt", "sedded.txt"]);
