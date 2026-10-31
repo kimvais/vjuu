@@ -795,6 +795,8 @@ function commentBox(key, c) {
   ta.value = c.draft ?? c.text;
   ta.rows = 3;
   ta.placeholder = `Comment on ${c.file}:${c.start}${c.end !== c.start ? `-${c.end}` : ''} `;
+  ta.title = 'Ctrl+V pastes an image too: the agent gets a link to its file';
+  ta.onpaste = (e) => pasteImage(e, c, ta);
   // Text still being typed counts too: Approve, Redo or closing the window must not drop it.
   ta.oninput = () => {
     c.draft = ta.value;
@@ -825,6 +827,34 @@ function commentBox(key, c) {
   box.append(ta, saveBtn, cancelBtn);
   return box;
 }
+
+/** paste number -> {c, at}: images pasted into comments, waiting for vjuu to save them. */
+const pastes = new Map();
+let pasted = 0;
+
+/** Sends an image pasted into comment `c` to vjuu to save; text pastes as usual. */
+function pasteImage(e, c, ta) {
+  const file = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'));
+  if (!file) return;
+  e.preventDefault();
+  const paste = ++pasted;
+  pastes.set(paste, { c, at: ta.selectionStart });
+  const reader = new FileReader();
+  reader.onload = () => post({ type: 'image', paste, mime: file.type, data: reader.result.split(',')[1] });
+  reader.readAsDataURL(file);
+}
+
+/** vjuu calls this once it has saved a pasted image: the comment links its file where it was pasted; null if it failed. */
+window.vjuuImageSaved = (paste, path) => {
+  const p = pastes.get(paste);
+  pastes.delete(paste);
+  if (!p || !path) return;
+  const link = `![image](<${path}>)`;
+  const text = p.c.editing ? p.c.draft ?? p.c.text : p.c.text;
+  const joined = text.slice(0, p.at) + link + text.slice(p.at);
+  if (p.c.editing) p.c.draft = joined; else p.c.text = joined;
+  changed();
+};
 
 /** Returns the review as sent to vjuu: saved comments, plus what is typed in any comment still open. */
 function review() {

@@ -156,6 +156,12 @@ enum Msg {
     },
     /// The window's close button: every tab's review is discarded.
     Quit,
+    /// An image pasted into a comment, base64; vjuu saves it and hands its path back for the comment to link.
+    Image {
+        paste: u32,
+        mime: String,
+        data: String,
+    },
 }
 
 enum AppEvent {
@@ -1065,6 +1071,17 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     listed = None;
                 }
             }
+            Event::UserEvent(AppEvent::Ui(id, Msg::Image { paste, mime, data })) => {
+                let path = save_image(&reviews_dir().join("images"), &mime, &data)
+                    .map_err(|e| eprintln!("Cannot save the pasted image: {e}"))
+                    .ok();
+                if let Some(s) = host.get(id) {
+                    let path = serde_json::to_string(&path).expect("path serialises");
+                    let _ = s
+                        .webview
+                        .evaluate_script(&format!("window.vjuuImageSaved && vjuuImageSaved({paste}, {path})"));
+                }
+            }
             Event::UserEvent(AppEvent::Ui(id, Msg::Done { verdict })) => finish(&mut host, id, Some(verdict)),
             // Closing is no decision: the agent must not read "looks good" into it.
             Event::UserEvent(AppEvent::Ui(_, Msg::Close { tab })) => finish(&mut host, tab, Some(Verdict::Discard)),
@@ -1236,6 +1253,7 @@ fn window_command(window: &Window, msg: Msg) {
         | Msg::Settings { .. }
         | Msg::Show { .. }
         | Msg::Close { .. }
+        | Msg::Image { .. }
         | Msg::Quit => {}
     }
 }
@@ -1359,6 +1377,23 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
 
 fn reviews_dir() -> PathBuf {
     platform::data_dir().join("reviews")
+}
+
+/// Saves an image pasted into a comment in `dir` and returns its path, which the comment links for the agent to read.
+fn save_image(dir: &Path, mime: &str, base64: &str) -> Result<String, String> {
+    use base64::Engine as _;
+    let ext = match mime {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => return Err(format!("Unsupported image type `{mime}`")),
+    };
+    let bytes = base64::engine::general_purpose::STANDARD.decode(base64).map_err(|e| format!("Not base64: {e}"))?;
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let path = dir.join(format!("{nanos}.{ext}"));
+    fs::create_dir_all(dir).and_then(|()| fs::write(&path, bytes)).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Writes the review to the reviews directory and returns what the agent gets: the review, or for a discarded one
@@ -1536,6 +1571,20 @@ mod tests {
             "permission_suggestions": [{ "type": "addRules", "behavior": "allow", "destination": "localSettings",
                 "rules": [{ "toolName": "Bash", "ruleContent": "npm test:*" }] }],
         })
+    }
+
+    #[test]
+    fn pasted_images_are_saved_by_type() {
+        let dir = std::env::temp_dir().join(format!("vjuu-images-{}", std::process::id()));
+        // Not an image, or not base64: nothing is written.
+        assert!(super::save_image(&dir, "text/html", "PGgxPg==").is_err());
+        assert!(super::save_image(&dir, "image/png", "not base64!").is_err());
+        assert!(!dir.exists());
+        let path = super::save_image(&dir, "image/png", "iVBORw0KGgo=").unwrap();
+        assert!(path.ends_with(".png"), "{path}");
+        assert_eq!(fs::read(&path).unwrap(), b"\x89PNG\r\n\x1a\n");
+        assert!(super::save_image(&dir, "image/jpeg", "/9j/").unwrap().ends_with(".jpg"));
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

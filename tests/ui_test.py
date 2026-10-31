@@ -455,6 +455,48 @@ def test_keyboard_navigation(page, url, work):
     assert page.evaluate('window.__msgs.at(-1)') == {'type': 'done', 'verdict': 'approved'}
 
 
+def _paste(page, files):
+    """Pastes into the focused comment, as Ctrl+V would: files as (name, type, text), or text when there are none."""
+    page.evaluate(
+        """(files) => {
+        const dt = new DataTransfer();
+        for (const [name, type, text] of files) dt.items.add(new File([text], name, { type }));
+        if (!files.length) dt.setData('text/plain', 'typed');
+        document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }""",
+        files,
+    )
+
+
+def test_paste_image(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    page.get_by_text('First paragraph').click()
+    page.keyboard.type('see  here')
+    page.keyboard.press('ArrowLeft')
+    for _ in range(4):
+        page.keyboard.press('ArrowLeft')
+    images = lambda: [m for m in page.evaluate('window.__msgs') if m['type'] == 'image']
+    # Text and other files paste as usual: nothing goes to vjuu.
+    _paste(page, [])
+    _paste(page, [('a.txt', 'text/plain', 'x')])
+    page.wait_for_timeout(100)
+    assert images() == []
+    _paste(page, [('shot.png', 'image/png', 'PNG')])
+    page.wait_for_function("window.__msgs.some((m) => m.type === 'image')")
+    assert images() == [{'type': 'image', 'paste': 1, 'mime': 'image/png', 'data': 'UE5H'}]
+    # Saving failed: the comment stays as it was, and a late answer for the same paste changes nothing.
+    page.evaluate('vjuuImageSaved(1, null)')
+    page.evaluate('vjuuImageSaved(1, "C:/data/reviews/images/1.png")')
+    assert [c['text'] for c in _review(page)['comments']] == ['see  here']
+    # Saved: the link goes where the image was pasted.
+    page.locator('.comment textarea').focus()
+    page.evaluate("document.activeElement.setSelectionRange(4, 4)")
+    _paste(page, [('shot.png', 'image/png', 'PNG')])
+    page.wait_for_function("window.__msgs.filter((m) => m.type === 'image').length === 2")
+    page.evaluate(f'vjuuImageSaved({images()[1]["paste"]}, "C:/data/reviews/images/1.png")')
+    assert [c['text'] for c in _review(page)['comments']] == ['see ![image](<C:/data/reviews/images/1.png>) here']
+
+
 def test_unsaved_comment_is_kept(page, url, work):
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
     page.get_by_text('First paragraph').click()
@@ -903,6 +945,7 @@ def main():
             test_clicks_that_do_not_comment,
             test_keyboard_navigation,
             test_unsaved_comment_is_kept,
+            test_paste_image,
             test_same_file_twice_in_one_diff,
             test_directory_tree,
             test_folded_files,
