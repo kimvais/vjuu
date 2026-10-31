@@ -99,9 +99,17 @@ With comments, apply the minor ones, then proceed. A comment that changes behavi
 
 **`discard`**: stop. No push, no follow-up question. Closing the window is a discard too.
 
-In a `.wt/` worktree, finished committed work ships without asking, even when vjuu was not involved. Ending a message
-with "say ship", "say go" or "Want me to…?" for something that needs no decision is a bug: ask only for a real choice
-between alternatives (as a `choice` block), something destructive, or something that costs money.
+In a `.wt/` worktree, finished committed work ships without asking, even when vjuu was not involved.
+
+## Where real decisions go
+
+- **Destructive steps, anything that costs money, and posting as the user** go through a vjuu review whose options
+  spell out what each one does: "Delete `.wt/a`, `.wt/b`, `.wt/c`", "Post this comment on MR !412 as Kimmo", never
+  "Proceed?".
+- **A choice between real alternatives** goes through vjuu too, as a `choice` block. The terminal's multiple-choice
+  question is allowed only when the question and its options fit in under 10 lines. When in doubt, use vjuu.
+- **Never end a turn with a prose question** ("say ship", "say go", "Want me to…?", "Shall I…?"). If the step needs
+  no decision, take it. `vjuu gate install` adds a Stop hook that sends such a turn back once.
 
 If the session restarted or the output was lost, `vjuu last` prints the most recent review again.
 

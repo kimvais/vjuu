@@ -85,6 +85,7 @@ an upgrade. The skill is also a Claude Code plugin (`claude plugin install vjuu@
 | `vjuu stop` | stop the resident instance (before upgrading the exe) |
 | `vjuu setup` | install the skill for Claude Code and Codex |
 | `vjuu config` | settings: which Claude Code hooks open vjuu (see below) |
+| `vjuu gate install`, `vjuu gate uninstall` | add or remove the Stop hook that sends back closing prose questions (see below) |
 | `vjuu --help`, `vjuu --version` | all of the above, briefly; the version |
 
 `vjuu` blocks until you give a verdict or close the window:
@@ -236,6 +237,16 @@ reach Claude. **Discard**, or close the window, and Claude Code's own prompt ask
 windows.
 
 Each hook gives up after an hour, and Claude Code carries on as if vjuu were not there.
+
+### The question gate
+
+Once a review ends with a verdict, a turn that closes with "say ship", "Want me to…?" or any other question in prose
+only costs you a turn: the OK already came through vjuu, or no decision was needed. `vjuu gate install` adds a Stop
+hook (`vjuu hook gate`) to `~/.claude/settings.json` that sends such a turn back once, telling Claude to take the step
+or to put a real decision in a vjuu review. It does not judge whether a question was real. If Claude asks again
+anyway, the turn ends and the closing line goes to `gate.log` in vjuu's data folder. `vjuu gate uninstall` takes the
+hook out again. Both leave your other hooks alone, and running either twice does nothing more. The gate is not part of
+the plugin or the settings panel, because it changes how Claude ends every turn, with or without vjuu open.
 
 ### Settings
 

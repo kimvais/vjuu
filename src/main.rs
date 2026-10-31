@@ -1,4 +1,5 @@
 mod config;
+mod gate;
 mod host;
 mod platform;
 mod review;
@@ -48,7 +49,9 @@ Usage:
   vjuu setup                     Install the skill for Claude Code and Codex
   vjuu start                     Start the resident instance in the tray (also: double-click vjuu.exe)
   vjuu stop                      Stop the resident instance (before upgrading)
-  vjuu hook <name>               Claude Code hooks: plan, ask, turn or permission
+  vjuu gate install              Register the Stop hook that sends back turns ending in a prose question
+  vjuu gate uninstall            Remove it again; both edit Claude Code's settings.json
+  vjuu hook <name>               Claude Code hooks: plan, ask, turn, permission or gate
 
   vjuu -h, --help                Show this
   vjuu -v, --version             Show the version
@@ -210,6 +213,9 @@ fn main() {
         ["hook", "turn"] => hook_turn(),
         ["hook", "ask"] => hook_ask(),
         ["hook", "permission"] => hook_permission(),
+        ["hook", "gate"] => gate::hook(),
+        ["gate", "install"] => set_gate(gate::install, "Installed the Stop-hook gate in"),
+        ["gate", "uninstall"] => set_gate(gate::uninstall, "Removed the Stop-hook gate from"),
         ["--serve"] => run(None, started),
         ["--git", ref rest @ ..] => git_diff(rest),
         ["-"] => {
@@ -228,7 +234,7 @@ fn main() {
         ["--previous", previous, path] => request(vec![revised_doc(previous, path)]),
         // A command with the wrong arguments is not a file to open.
         ref paths @ [first, ..]
-            if first != "config" && first != "hook" && paths.iter().all(|p| !p.starts_with('-')) =>
+            if !["config", "hook", "gate"].contains(&first) && paths.iter().all(|p| !p.starts_with('-')) =>
         {
             request(paths.iter().map(|p| file_doc(p)).collect())
         }
@@ -269,11 +275,27 @@ fn claude_session_title() -> Option<String> {
     session_title(&env::var("CLAUDE_CODE_SESSION_ID").ok()?)
 }
 
+/// Returns Claude Code's config folder: `CLAUDE_CONFIG_DIR`, or `~/.claude`.
+fn claude_dir() -> Option<PathBuf> {
+    env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
+        env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude"))
+    })
+}
+
+/// Installs or uninstalls the Stop-hook gate in Claude Code's settings.json, and says what happened.
+fn set_gate(change: fn(&Path) -> Result<bool, String>, done: &str) -> ! {
+    let settings = claude_dir().unwrap_or_else(|| fail("Cannot find the home directory.")).join("settings.json");
+    match change(&settings) {
+        Ok(true) => println!("{done} {}", settings.display()),
+        Ok(false) => println!("Nothing to change in {}", settings.display()),
+        Err(e) => fail(&e),
+    }
+    process::exit(0)
+}
+
 /// Returns the `/rename` name of the Claude Code session with this id.
 fn session_title(id: &str) -> Option<String> {
-    let root = env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).or_else(|| {
-        env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")).map(|home| PathBuf::from(home).join(".claude"))
-    })?;
+    let root = claude_dir()?;
     // The project folder is the session's start directory, mangled; finding the id is simpler than mangling.
     let file = fs::read_dir(root.join("projects"))
         .ok()?
