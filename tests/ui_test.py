@@ -504,6 +504,64 @@ def test_directory_tree(page, url, work):
     ], got
 
 
+_REINDENTED = """diff --git a/q.py b/q.py
+--- a/q.py
++++ b/q.py
+@@ -1,5 +1,4 @@
+ def f():
+-  return 1
+-old = 2
+--- a removed SQL comment, not a header
++    return 1
++new = 2
+ x = 3
+diff --git a/r.py b/r.py
+--- a/r.py
++++ b/r.py
+@@ -1 +1 @@
+-a  =  1
++a = 1
+"""
+
+
+def test_ignore_whitespace(page, url, work):
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _REINDENTED})
+    changed = lambda: page.evaluate(
+        "[...document.querySelectorAll('.d2h-code-linenumber.d2h-ins, .d2h-code-linenumber.d2h-del')]"
+        ".map((td) => td.parentElement.querySelector('.d2h-code-line-ctn').textContent.trim())"
+    )
+    everything = changed()
+    assert len(everything) == 7, everything
+    page.keyboard.press('w')
+    # Unequal runs stay as they are: q.py's three removed lines against two added. Only r.py's reindent is hidden.
+    assert changed() == everything[:5], changed()
+    assert page.locator('#space').inner_text() == 'Show whitespace'
+    assert page.locator('tr', has_text='a = 1').locator('.d2h-cntx').count() > 0
+    page.keyboard.press('w')
+    assert changed() == everything
+
+
+_PAIRED = """diff --git a/p.py b/p.py
+--- a/p.py
++++ b/p.py
+@@ -1,3 +1,3 @@
+ def f():
+-  return 1
++    return 1
+ x = 3
+"""
+
+
+def test_ignore_whitespace_pairs(page, url, work):
+    _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _PAIRED})
+    page.keyboard.press('w')
+    assert page.locator('.d2h-ins, .d2h-del').count() == 0
+    # A comment on the reindented line is on the new file's line 2 either way.
+    page.locator('tr', has_text='return 1').locator('.d2h-code-linenumber').click()
+    _comment(page, 'ok')
+    assert [(c['start'], c['old']) for c in _review(page)['comments']] == [(2, False)]
+
+
 def test_folded_files(page, url, work):
     # Outside a diff there is no file to mark or fold.
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
@@ -905,6 +963,8 @@ def main():
             test_unsaved_comment_is_kept,
             test_same_file_twice_in_one_diff,
             test_directory_tree,
+            test_ignore_whitespace,
+            test_ignore_whitespace_pairs,
             test_folded_files,
             test_comment_box_wraps_within_view,
             test_markdown_file_in_a_diff_uses_code_size,
