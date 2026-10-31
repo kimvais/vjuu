@@ -101,6 +101,9 @@ struct Request {
     /// What a Claude Code hook asks (plan, question, permission, turn), for the tray's list; None for documents.
     #[serde(default)]
     kind: Option<String>,
+    /// What an earlier window on the same documents had but never sent (it or vjuu died), as the page reported it.
+    #[serde(default)]
+    draft: Option<serde_json::Value>,
 }
 
 impl Request {
@@ -123,8 +126,9 @@ impl Request {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 enum Msg {
+    /// The review so far. Kept as the page sent it, which also has what the page needs to restore it as a draft.
     State {
-        review: Review,
+        review: serde_json::Value,
     },
     /// Approve, Redo or Discard: the review is finished with that verdict.
     Done {
@@ -873,6 +877,7 @@ fn request(docs: Vec<Doc>) -> Request {
         comments: None,
         earlier: Vec::new(),
         kind: env::var(KIND_VAR).ok(),
+        draft: None,
     }
 }
 
@@ -1102,6 +1107,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
         Some(request) => {
             let cwd = request.cwd.clone();
             // No resident instance: this window is the review's own, with no tray to wait in.
+            let request = offer_draft(request);
             let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus.with_tray(false));
             look_up_context(&proxy, id, cwd);
         }
@@ -1148,7 +1154,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                 let id = host.open(
                     &proxy,
                     &mut context,
-                    request,
+                    offer_draft(request),
                     conn.map(Reply::Client),
                     Instant::now(),
                     focus.with_tray(tray.is_some()),
@@ -1158,7 +1164,13 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::State { review })) => {
                 if let Some(s) = host.get_mut(id) {
-                    s.latest = review;
+                    match serde_json::from_value::<Review>(review.clone()) {
+                        Ok(parsed) => {
+                            keep_draft(s.slot.lock().expect("slot lock").as_ref(), &parsed, &review);
+                            s.latest = parsed;
+                        }
+                        Err(e) => eprintln!("Bad review from UI: {e}"),
+                    }
                 }
             }
             Event::UserEvent(AppEvent::Ui(id, Msg::Settings { config })) => {
@@ -1404,10 +1416,16 @@ fn is_vjuu(url: &str) -> bool {
 /// Saves the review and sends it where it was asked for; `verdict` is None for autoclose timing runs.
 fn finish(host: &mut Host, id: TabId, verdict: Option<Verdict>) {
     let Some(s) = host.remove(id) else { return };
-    let (name, only_settings, keep) = match s.slot.lock().expect("slot lock").as_ref() {
-        Some(r) => (r.name(), r.sample, r.comments.clone()),
-        None => (String::new(), false, None),
+    let (name, only_settings, keep, draft) = match s.slot.lock().expect("slot lock").as_ref() {
+        Some(r) => (r.name(), r.sample, r.comments.clone(), draft_path(r)),
+        None => (String::new(), false, None, None),
     };
+    // Sent now, so nothing to offer back. A discard keeps it: closing the window is one too, often by accident.
+    if matches!(verdict, Some(Verdict::Approved | Verdict::Redo))
+        && let Some(draft) = draft
+    {
+        let _ = fs::remove_file(draft);
+    }
     if verdict.is_some()
         && let Some(path) = keep
     {
@@ -1511,6 +1529,38 @@ fn serve(path: &str, slot: &Slot) -> Response<Cow<'static, [u8]>> {
         response = response.header("Cache-Control", "no-store");
     }
     response.body(body).expect("static response")
+}
+
+/// Returns where a window's unsent review is kept until it is sent: one file per set of documents in one directory.
+/// None for windows with nothing to review.
+/// shortcut: two windows open on the same documents at once share the file; the last change wins.
+fn draft_path(request: &Request) -> Option<PathBuf> {
+    if request.sample || request.autoclose {
+        return None;
+    }
+    let key = format!("{}\n{}", request.cwd.as_deref().unwrap_or(Path::new("")).display(), request.name());
+    // FNV-1a: stable across Rust versions, unlike DefaultHasher, so a draft survives an upgrade.
+    let hash = key.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3));
+    Some(platform::data_dir().join("drafts").join(format!("{hash:016x}.json")))
+}
+
+/// Hands the request what an earlier window on the same documents had but never sent.
+fn offer_draft(request: Request) -> Request {
+    let draft = draft_path(&request).and_then(|p| fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok());
+    Request { draft, ..request }
+}
+
+/// Keeps the review so far, so it survives the window or vjuu dying; a review that says nothing removes it.
+fn keep_draft(request: Option<&Request>, review: &Review, raw: &serde_json::Value) {
+    let Some(path) = request.and_then(draft_path) else { return };
+    if review.is_empty() {
+        let _ = fs::remove_file(&path);
+        return;
+    }
+    let written = path.parent().map_or(Ok(()), fs::create_dir_all).and_then(|()| fs::write(&path, raw.to_string()));
+    if let Err(e) = written {
+        eprintln!("Could not keep the draft in {}: {e}", path.display());
+    }
 }
 
 fn reviews_dir() -> PathBuf {
@@ -1652,6 +1702,7 @@ fn fail(msg: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
+    use super::{Doc, Request, draft_path};
     use super::{
         Installed, SHIPPED, SKILL, SKILLS, ask_decision, ask_markdown, edited_this_turn, file_doc, install_skill,
         is_diff, is_vjuu, kind_of, last_assistant_text, plan_decision, previous_plan, revised_doc, session_dir,
@@ -2140,6 +2191,25 @@ mod tests {
         assert!(changes.ends_with("-Step one\n+Step two\n"), "{changes}");
         assert_eq!(revised_doc(name, name).changes, None, "no changes");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn drafts_are_kept_per_set_of_documents() {
+        let doc =
+            |name: &str| Doc { name: name.into(), kind: "md".into(), text: String::new(), base: None, changes: None };
+        let at = |cwd: &str, names: &[&str]| Request {
+            cwd: Some(cwd.into()),
+            ..super::request(names.iter().map(|n| doc(n)).collect())
+        };
+        let plan = draft_path(&at("/repo", &["plan.md"])).unwrap();
+        // Another window on the same documents finds the draft, whatever their text is now.
+        assert_eq!(draft_path(&at("/repo", &["plan.md"])), Some(plan.clone()));
+        for other in [at("/other", &["plan.md"]), at("/repo", &["plan.md", "b.md"]), at("/repo", &["b.md"])] {
+            assert_ne!(draft_path(&other), Some(plan.clone()), "{}", other.name());
+        }
+        // Nothing to review, nothing to keep.
+        assert_eq!(draft_path(&Request { sample: true, ..at("/repo", &["plan.md"]) }), None);
+        assert_eq!(draft_path(&Request { autoclose: true, ..at("/repo", &["plan.md"]) }), None);
     }
 
     #[test]

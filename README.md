@@ -108,6 +108,10 @@ not both.
 Every review is also saved to `%LOCALAPPDATA%\vjuu\reviews\`, a discarded one with its comments, so a later session
 can pick it up with `vjuu last`.
 
+Until a review is sent, vjuu keeps it as you write it in `drafts\` next to the reviews. If the window, vjuu or the
+agent's session dies first, the next window on the same files (from the same directory) offers the comments back:
+`r` restores them, `Esc` leaves them, and your next change there replaces them.
+
 ## Why it opens fast
 
 The first `vjuu` opens its window itself (~400 ms, mostly WebView2 starting) and starts a hidden
@@ -160,7 +164,8 @@ switch` switches you to its desktop instead.
 | `Ctrl+S` | **Approve**: the agent proceeds without asking again |
 | `Ctrl+R` | **Redo**: the agent addresses your comments, then opens vjuu again |
 | `Ctrl+Z` | **Discard**: drop the comments, the agent does nothing; in a comment, undo |
-| `Esc` | Cancel the comment being written; close the settings or the help |
+| `Esc` | Cancel the comment being written; close the settings or the help; leave the unsent comments offered back |
+| `r` | Restore the unsent comments of a window that closed without sending them |
 | `1`–`9` | Pick that option of the choice block under the cursor (or of the only one); again to take it back. In a block that takes several, tick each on or off |
 | `v` | Toggle unified / side-by-side diff |
 | `w` | Ignore whitespace changes in a diff: a reindented line shows as unchanged; again to show them |
