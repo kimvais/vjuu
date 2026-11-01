@@ -353,7 +353,14 @@ fn hook_turn() -> ! {
     let event = hook_event();
     let Some(cwd) = event["cwd"].as_str() else { process::exit(0) };
     let transcript = event["transcript_path"].as_str().and_then(|p| fs::read_to_string(p).ok()).unwrap_or_default();
-    let diff = turn_diff(Path::new(cwd), &edited_this_turn(&transcript), turn_started(&transcript));
+    let since = turn_started(&transcript);
+    let mut files = edited_this_turn(&transcript);
+    // Shell commands name no files: what they edited is what changed on disk since the turn started.
+    let commands = shell_commands(&transcript);
+    if let Some(since) = since.filter(|_| !commands.is_empty()) {
+        files.extend(changed_since(Path::new(cwd), &commands, since));
+    }
+    let diff = turn_diff(Path::new(cwd), &files, since);
     // One file per session, so parallel sessions do not overwrite each other's diff.
     let path = env::temp_dir().join(format!("vjuu-turn-{}.diff", event["session_id"].as_str().unwrap_or("none")));
     // Hook feedback starts no new turn, so a reply to it that edits nothing would show the same diff again.
@@ -623,28 +630,78 @@ fn has_comments(review: &str) -> bool {
     !review.is_empty() && !review.ends_with("\nNo comments.")
 }
 
-/// Returns the files Claude's edit tools touched since the user's last prompt.
+/// Returns the tool calls Claude made since the user's last prompt, latest first.
 /// shortcut: Claude Code's transcript format is undocumented; lines it does not recognise are skipped.
-fn edited_this_turn(transcript: &str) -> Vec<String> {
-    let mut files = Vec::new();
+fn tool_calls_this_turn(transcript: &str) -> Vec<serde_json::Value> {
+    let mut calls = Vec::new();
     for line in transcript.lines().rev() {
-        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+        let Ok(mut entry) = serde_json::from_str::<serde_json::Value>(line) else { continue };
         // Tool results and hook feedback are user entries too; only what the user typed starts a turn.
         if entry["type"] == "user" && entry["origin"]["kind"] == "human" {
             break;
         }
-        for block in entry["message"]["content"].as_array().into_iter().flatten() {
-            let input = &block["input"];
-            let file = match block["name"].as_str() {
-                Some("Edit" | "MultiEdit" | "Write") if block["type"] == "tool_use" => input["file_path"].as_str(),
-                Some("NotebookEdit") if block["type"] == "tool_use" => input["notebook_path"].as_str(),
-                _ => None,
-            };
-            files.extend(file.map(String::from));
+        if let Some(blocks) = entry["message"]["content"].as_array_mut() {
+            calls.extend(blocks.drain(..).filter(|b| b["type"] == "tool_use"));
         }
     }
+    calls
+}
+
+/// Returns the files Claude's edit tools touched since the user's last prompt.
+fn edited_this_turn(transcript: &str) -> Vec<String> {
+    let mut files: Vec<String> = tool_calls_this_turn(transcript)
+        .iter()
+        .filter_map(|call| match call["name"].as_str() {
+            Some("Edit" | "MultiEdit" | "Write") => call["input"]["file_path"].as_str().map(String::from),
+            Some("NotebookEdit") => call["input"]["notebook_path"].as_str().map(String::from),
+            _ => None,
+        })
+        .collect();
     files.sort();
     files.dedup();
+    files
+}
+
+/// Returns the shell commands (Bash, PowerShell) Claude ran since the user's last prompt.
+fn shell_commands(transcript: &str) -> Vec<String> {
+    tool_calls_this_turn(transcript)
+        .iter()
+        .filter(|call| matches!(call["name"].as_str(), Some("Bash" | "PowerShell")))
+        .filter_map(|call| call["input"]["command"].as_str().map(String::from))
+        .collect()
+}
+
+/// Returns the files that changed on disk at or after `since` (Unix seconds), committed during the turn or not, in
+/// the repository at `cwd` and in each of its worktrees that one of the shell `commands` names (`cd .wt/fix`).
+/// Checking every worktree would take seconds in a repository with dozens of them, at the end of every turn.
+/// shortcut: a deleted file has no time to compare, so a deletion shows only when an edit tool named the file; a
+/// file the user saved in an editor during the turn shows too.
+fn changed_since(cwd: &Path, commands: &[String], since: i64) -> Vec<String> {
+    let Ok(top) = Path::new(git_in(cwd, &["rev-parse", "--show-toplevel"]).trim()).canonicalize() else {
+        return Vec::new();
+    };
+    let named = |worktree: &Path| {
+        worktree.file_name().is_some_and(|name| commands.iter().any(|c| c.contains(&*name.to_string_lossy())))
+    };
+    let mut files = Vec::new();
+    for listed in git_in(cwd, &["worktree", "list", "--porcelain"]).lines().filter_map(|l| l.strip_prefix("worktree "))
+    {
+        let worktree = Path::new(listed);
+        let Ok(dir) = worktree.canonicalize() else { continue };
+        if dir != top && !(dir.starts_with(&top) && named(worktree)) {
+            continue;
+        }
+        let base = turn_base(worktree, Some(since));
+        let names = git_in(worktree, &["diff", "--name-only", &base])
+            + &git_in(worktree, &["ls-files", "--others", "--exclude-standard"]);
+        for path in names.lines().map(|name| worktree.join(name)) {
+            let changed = fs::metadata(&path).ok().filter(fs::Metadata::is_file).and_then(|m| m.modified().ok());
+            let secs = changed.and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64);
+            if secs.is_some_and(|s| s >= since) {
+                files.push(path.to_string_lossy().into_owned());
+            }
+        }
+    }
     files
 }
 
@@ -1485,6 +1542,9 @@ mod tests {
         transcript_title, turn_diff, turn_feedback, turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
+    use super::{changed_since, shell_commands};
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// Answers like git, gh and glab would for a checkout; `None` where a command would fail.
     fn fake<'a>(answers: &'a [(&'a str, &'a str)]) -> impl Fn(&str, &[&str]) -> Option<String> + 'a {
@@ -1678,8 +1738,11 @@ mod tests {
         let transcript = [
             prompt("first"),
             tool("Edit", "file_path", "old.rs"),
+            tool("Bash", "command", "sed -i s/a/b/ old.rs"),
             prompt("second"),
             tool("Read", "file_path", "read.rs"),
+            tool("Bash", "command", "sed -i s/a/b/ c.rs"),
+            tool("PowerShell", "command", "cargo fmt"),
             tool("Edit", "file_path", "b.rs"),
             result.into(),
             tool("Write", "file_path", "a.md"),
@@ -1690,6 +1753,70 @@ mod tests {
         .join("\n");
         assert_eq!(edited_this_turn(&transcript), ["a.md", "b.rs", "n.ipynb"]);
         assert!(edited_this_turn(&prompt("only")).is_empty());
+        // Latest first; the earlier turn's command is not this turn's.
+        assert_eq!(shell_commands(&transcript), ["cargo fmt", "sed -i s/a/b/ c.rs"]);
+        assert!(shell_commands(&[prompt("first"), tool("Edit", "file_path", "a.rs")].join("\n")).is_empty());
+    }
+
+    #[test]
+    fn shell_edits_are_what_changed_since_the_turn_started() {
+        let repo = std::env::temp_dir().join(format!("vjuu-turn-shell-{}", std::process::id()));
+        fs::create_dir_all(&repo).unwrap();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        // The setup is authored an hour before the turn, the turn's commit during it.
+        let git_at = |when: u64, dir: &Path, args: &[&str]| {
+            let status = Command::new("git")
+                .current_dir(dir)
+                .env("GIT_AUTHOR_DATE", format!("@{when} +0000"))
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?}");
+        };
+        let git = |dir: &Path, args: &[&str]| git_at(now - 3600, dir, args);
+        let write = |path: PathBuf, text: &str| fs::write(path, text).unwrap();
+        git(&repo, &["init", "-q"]);
+        write(repo.join(".gitignore"), ".work/\ntarget/\n");
+        for name in ["sedded.txt", "earlier.txt"] {
+            write(repo.join(name), "one\n");
+        }
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-qm", "init"]);
+        for name in ["fix", "other"] {
+            git(&repo, &["worktree", "add", "-q", "-b", name, repo.join(".work").join(name).to_str().unwrap()]);
+        }
+        // Before the turn: changed, but an hour ago.
+        write(repo.join("earlier.txt"), "two\n");
+        let hour_ago = SystemTime::now() - std::time::Duration::from_secs(3600);
+        fs::File::options().write(true).open(repo.join("earlier.txt")).unwrap().set_modified(hour_ago).unwrap();
+        // This turn: a rewrite, a new file, build output, and a commit in the worktree the command went to.
+        write(repo.join("sedded.txt"), "two\n");
+        write(repo.join("made.txt"), "new\n");
+        fs::create_dir_all(repo.join("target")).unwrap();
+        write(repo.join("target").join("out.bin"), "built\n");
+        let fix = repo.join(".work").join("fix");
+        write(fix.join("sedded.txt"), "fixed\n");
+        git_at(now, &fix, &["commit", "-qam", "fix"]);
+        // A worktree no command named is not looked at, though it changed too.
+        write(repo.join(".work").join("other").join("sedded.txt"), "other\n");
+
+        let since = now as i64 - 60;
+        let commands = ["cd .work/fix && sed -i s/one/fixed/ sedded.txt".to_string()];
+        // git names the temp folder its own way (/private/var on macOS, long names for 8.3 ones on Windows).
+        let root = repo.canonicalize().unwrap();
+        let mut found: Vec<String> = changed_since(&repo, &commands, since)
+            .iter()
+            .map(|f| {
+                let f = Path::new(f).canonicalize().unwrap();
+                f.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/")
+            })
+            .collect();
+        found.sort();
+        assert_eq!(found, [".work/fix/sedded.txt", "made.txt", "sedded.txt"]);
+        // Nothing changed since: nothing found.
+        assert!(changed_since(&repo, &commands, now as i64 + 3600).is_empty());
+        fs::remove_dir_all(&repo).unwrap();
     }
 
     #[test]

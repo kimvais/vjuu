@@ -232,10 +232,13 @@ you can answer in your own words. Nothing times out. **Discard**, or close the w
 asks. Questions that take several answers stay in that picker, as vjuu's buttons pick one.
 
 **Turn review.** When Claude finishes a turn in which it edited files, the diff of those files opens in vjuu, new files
-included. **Redo** and Claude acts on your comments straight away, and the result opens again. **Approve** and Claude
+included. Files changed by a Bash or PowerShell command (`sed`, a formatter, a code generator) show too: those are
+the files that changed on disk since the turn started, in the session's checkout and in any of its worktrees a command
+names. **Redo** and Claude acts on your comments straight away, and the result opens again. **Approve** and Claude
 goes on to the next step (commit, ship) without asking. **Discard** and the turn ends. Turns without edits, edits
 outside the git repository, and a diff you already reviewed open nothing. The diff is the files'
-uncommitted changes, so changes an earlier turn made to the same files show too.
+uncommitted changes, so changes an earlier turn made to the same files show too. A file deleted by a command, rather
+than an edit tool, does not show.
 
 **Permission prompts.** When Claude Code would ask whether Claude may run a command, edit a file or use another tool,
 the request opens in vjuu: the command in full, the edit as a diff. Pick **Allow**, **Always allow** (Claude Code's
