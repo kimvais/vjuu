@@ -8,6 +8,8 @@ const scroller = $('#scroll');
 /** {docs: [{name, kind, text}], autoclose, session} */
 let req;
 let sideBySide = false;
+/** Diffs show lines whose only change is whitespace as unchanged, as `git diff -w` does. */
+let ignoreSpace = false;
 /** A document with changes since an earlier version shows them, not the whole document, until toggled. */
 let showChanges = true;
 let focused = null;
@@ -69,6 +71,7 @@ async function load() {
   $('#session').textContent = req.session ?? '';
   $('#name').textContent = req.docs.map((x) => x.name).join(', ');
   $('#view').hidden = !hasDiff();
+  $('#space').hidden = !hasDiff();
   $('#changes').hidden = !hasChanges();
   const renderers = new Set(req.docs
     .flatMap((x) => [({ diff: RENDERERS[2], md: RENDERERS[1] })[x.kind], x.changes && RENDERERS[2]])
@@ -495,8 +498,52 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+/**
+ * Returns a unified diff with the changes that only touch whitespace shown as unchanged lines: a run of removed lines
+ * followed by as many added ones, each pair equal once whitespace is dropped. Hunk headers keep their counts, as each
+ * pair becomes one line on both sides. The counts also tell a removed `-- comment` from the next file's `--- a/` header.
+ */
+function withoutWhitespaceChanges(text) {
+  const lines = text.split('\n');
+  const out = [];
+  const bare = (l) => l.slice(1).replace(/\s+/g, '');
+  let oldLeft = 0;
+  let newLeft = 0;
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    const hunk = line.match(/^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/);
+    if (hunk) {
+      oldLeft = Number(hunk[1] ?? 1);
+      newLeft = Number(hunk[2] ?? 1);
+    }
+    if (hunk || !(oldLeft || newLeft) || (line[0] !== '-' && line[0] !== '+')) {
+      // An unchanged line counts on both sides; "\ No newline at end of file" on neither.
+      if (!hunk && (oldLeft || newLeft) && line[0] !== '\\') {
+        oldLeft--;
+        newLeft--;
+      }
+      out.push(line);
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < lines.length && lines[j][0] === '-' && j - i < oldLeft) j++;
+    let k = j;
+    while (k < lines.length && lines[k][0] === '+' && k - j < newLeft) k++;
+    const removed = lines.slice(i, j);
+    const added = lines.slice(j, k);
+    const same = removed.length === added.length && removed.every((l, n) => bare(l) === bare(added[n]));
+    out.push(...(same ? added.map((l) => ` ${l.slice(1)}`) : [...removed, ...added]));
+    oldLeft -= removed.length;
+    newLeft -= added.length;
+    i = k;
+  }
+  return out.join('\n');
+}
+
 function renderDiff(section, doc, i) {
-  const ui = new Diff2HtmlUI(section, doc.text, {
+  const text = ignoreSpace ? withoutWhitespaceChanges(doc.text) : doc.text;
+  const ui = new Diff2HtmlUI(section, text, {
     outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
     drawFileList: false,
     matching: 'lines',
@@ -1075,6 +1122,8 @@ function onKey(e) {
     if (e.key === 'x') toggleViewed(currentFile()); else toggleFold(currentFile());
   } else if (e.key === 'v' && hasDiff()) {
     toggleView();
+  } else if (e.key === 'w' && hasDiff()) {
+    toggleSpace();
   } else if (e.key === 'd' && hasChanges()) {
     toggleChanges();
   } else if (e.key === 'f') {
@@ -1093,6 +1142,12 @@ function toggleView() {
   render();
 }
 
+function toggleSpace() {
+  ignoreSpace = !ignoreSpace;
+  $('#space').textContent = ignoreSpace ? 'Show whitespace' : 'Ignore whitespace';
+  render();
+}
+
 function toggleChanges() {
   showChanges = !showChanges;
   $('#changes').textContent = showChanges ? 'Full file' : 'Changes';
@@ -1102,6 +1157,7 @@ function toggleChanges() {
 // The compiled theme follows the OS by itself; framed pages copy its colours, so they need telling.
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => frameDocs().forEach(syncFrameTheme));
 $('#view').onclick = toggleView;
+$('#space').onclick = toggleSpace;
 $('#changes').onclick = toggleChanges;
 for (const btn of document.querySelectorAll('#verdicts button')) btn.onclick = () => done(btn.dataset.verdict);
 overall.addEventListener('input', () => post({ type: 'state', review: review() }));
