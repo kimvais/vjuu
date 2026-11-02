@@ -20,6 +20,8 @@ assets = [
 ]
 
 [dependencies]
+# Already in the tree through wry; decodes images pasted into comments.
+base64 = "0.22.1"
 interprocess = "2.4.6"
 notify-rust = "4.18.2"
 serde = { version = "1.0.229", features = ["derive"] }
