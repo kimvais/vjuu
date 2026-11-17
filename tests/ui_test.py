@@ -670,6 +670,72 @@ def test_ignore_whitespace_pairs(page, url, work):
     assert [(c['start'], c['old']) for c in _review(page)['comments']] == [(2, False)]
 
 
+_CURSOR = "document.querySelector('.focused')?.dataset.key.split('\\n').slice(2).join(' ')"
+
+
+def test_search(page, url, work):
+    _open(
+        page,
+        url,
+        work,
+        {'name': 'a.md', 'kind': 'md', 'text': _MD},
+        {'name': 'git diff', 'kind': 'diff', 'text': _DIFF},
+    )
+    cursor = lambda: page.evaluate(_CURSOR)
+    count = lambda: page.locator('#search-n').inner_text()
+    page.keyboard.press('/')
+    page.keyboard.type('item')
+    assert (cursor(), count()) == ('a.md 6-6', '1 / 2'), (cursor(), count())
+    page.keyboard.press('Enter')
+    assert (cursor(), count()) == ('a.md 7-7', '2 / 2')
+    page.keyboard.press('Enter')  # wraps
+    assert cursor() == 'a.md 6-6'
+    page.keyboard.press('Shift+Enter')
+    assert cursor() == 'a.md 7-7'
+    assert page.locator('.match').count() == 2
+    # Smart case: a capital letter makes it exact.
+    page.fill('#search-q', 'Item')
+    assert count() == 'No matches'
+    page.fill('#search-q', 'old()')
+    assert cursor() == 'src/app.py 2-2o', cursor()  # the deleted line
+    # Esc closes the bar and clears the marks; the cursor stays, so c comments on the hit.
+    page.keyboard.press('Escape')
+    assert page.locator('#search').is_hidden() and page.locator('.match').count() == 0
+    page.keyboard.press('c')
+    _comment(page, 'why?')
+    assert [(c['file'], c['start']) for c in _review(page)['comments']] == [('src/app.py', 2)]
+    # Ctrl+F opens it too; a match in a folded file unfolds it.
+    _open(
+        page,
+        url,
+        work,
+        {'name': 'git diff', 'kind': 'diff', 'text': _DIFF + _DIFF.replace('src/app.py', 'Cargo.lock')},
+    )
+    assert page.locator('.d2h-file-wrapper.folded').count() == 1
+    page.keyboard.press('Control+f')
+    page.keyboard.type('return')
+    page.keyboard.press('Enter')
+    assert cursor() == 'Cargo.lock 3-3', cursor()
+    assert page.locator('.d2h-file-wrapper.folded').count() == 0
+
+
+def test_next_comment(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    cursor = lambda: page.evaluate(_CURSOR)
+    for block in ('item two', 'First paragraph'):
+        page.get_by_text(block).click()
+        _comment(page, 'x')
+    page.keyboard.press('ArrowUp')
+    page.keyboard.press('ArrowUp')
+    page.keyboard.press('ArrowUp')
+    assert cursor() == 'a.md 1-1', cursor()
+    keys = []
+    for key in (']', ']', ']', '['):
+        page.keyboard.press(key)
+        keys.append(cursor())
+    assert keys == ['a.md 3-4', 'a.md 7-7', 'a.md 3-4', 'a.md 7-7'], keys
+
+
 def test_folded_files(page, url, work):
     # Outside a diff there is no file to mark or fold.
     _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
@@ -1140,6 +1206,8 @@ def main():
             test_keyboard_navigation,
             test_unsaved_comment_is_kept,
             test_question_comments,
+            test_search,
+            test_next_comment,
             test_paste_image,
             test_draft_is_offered_back,
             test_same_file_twice_in_one_diff,

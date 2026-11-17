@@ -40,6 +40,11 @@
     <button id="draft-restore" title="Restore them (r)">Restore <kbd>r</kbd></button>
     <button id="draft-dismiss" title="Leave them; the next change here replaces them (Esc)">Dismiss <kbd>Esc</kbd></button>
   </div>
+  <div id="search" hidden>
+    <input id="search-q" type="search" placeholder="Search" autocomplete="off" spellcheck="false"
+      title="Search (/ or Ctrl+F). Enter: next match, Shift+Enter: previous, Esc: close. A capital letter makes it match case">
+    <span id="search-n"></span>
+  </div>
   <main id="content"></main>
   <section id="overall-box">
     <label for="overall">Overall</label>
@@ -113,6 +118,8 @@
     <tr><td><kbd>x</kbd></td><td>Mark the diff file viewed: fold it and tick it in the sidebar; again to unmark</td></tr>
     <tr><td><kbd>o</kbd></td><td>Fold / open the diff file; lock, minified and generated files start folded</td></tr>
     <tr><td><kbd>f</kbd></td><td>Hide / show the sidebar</td></tr>
+    <tr><td><kbd>/</kbd> or <kbd>Ctrl</kbd> <kbd>F</kbd></td><td>Search; in the box <kbd>Enter</kbd> / <kbd>Shift</kbd> <kbd>Enter</kbd> next / previous match, <kbd>Esc</kbd> closes it. A capital letter matches case</td></tr>
+    <tr><td><kbd>]</kbd> <kbd>[</kbd></td><td>Next / previous comment</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Tab</kbd> / <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Tab</kbd></td><td>Next / previous tab</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>1</kbd>&ndash;<kbd>9</kbd></td><td>That tab</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>W</kbd></td><td>Close the tab: discards its review</td></tr>
