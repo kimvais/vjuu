@@ -87,7 +87,7 @@ pub struct Host {
 
 impl Host {
     /// Opens the window, hidden until it has a tab.
-    pub fn new(target: &EventLoopWindowTarget<AppEvent>) -> Host {
+    pub fn new(target: &EventLoopWindowTarget<AppEvent>, desktop: Desktop) -> Host {
         let builder = WindowBuilder::new()
             .with_title("vjuu")
             .with_visible(false)
@@ -97,7 +97,6 @@ impl Host {
             platform::frame(builder).build(target).unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
         platform::style_frame(&window);
         platform::fit_height(&window);
-        let desktop = crate::config::load().desktop;
         Host { tabs: Vec::new(), spare: None, active: None, next: 0, sessions: Vec::new(), desktop, window }
     }
 

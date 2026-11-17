@@ -1037,7 +1037,9 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let proxy = event_loop.create_proxy();
     // Keep the webview profile out of the exe's directory (`~/.cargo/bin` after `cargo install`).
     let mut context = WebContext::new(Some(platform::data_dir().join("webview")));
-    let mut host = Host::new(&event_loop);
+    // Read once; Apply in the panel updates focus and desktop, `vjuu config` takes effect in the next resident instance.
+    let config = config::load();
+    let mut host = Host::new(&event_loop, config.desktop);
     let mut spare_due = None;
     // Only the resident instance has a tray: it outlives the reviews and holds every session's.
     let resident = initial.is_none();
@@ -1051,8 +1053,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             let _ = proxy.lock().expect("proxy lock").send_event(AppEvent::Tray(action));
         })
     };
-    // Read once, like the tray setting; Apply in the panel updates it, `vjuu config` from the next resident instance.
-    let mut focus = config::load().focus;
+    let mut focus = config.focus;
     match initial {
         Some(request) => {
             let cwd = request.cwd.clone();
@@ -1069,7 +1070,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             // macOS wants the tray made once the loop runs; the other platforms do not mind.
-            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(target),
+            Event::NewEvents(StartCause::Init) if resident && config.tray => tray = new_tray(target),
             #[cfg(windows)]
             Event::UserEvent(AppEvent::Tray(tray::Action::Menu)) => {
                 if let Some(tray) = &tray {
