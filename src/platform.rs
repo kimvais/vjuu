@@ -264,6 +264,46 @@ pub fn style_frame(window: &Window) {
     let _ = window;
 }
 
+/// The AppUserModelID vjuu's notifications are shown under.
+#[cfg(windows)]
+pub const APP_ID: &str = "vjuu";
+
+/// Registers `APP_ID` with Windows, so a notification names vjuu with its icon and can be shown at all: an
+/// unregistered app id is silently dropped. Failing that, notifications still work, credited to PowerShell.
+pub fn register_app_id() {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW};
+        use windows::core::HSTRING;
+        let icon = data_dir().join("vjuu.png");
+        if !icon.exists()
+            && let Err(e) = std::fs::create_dir_all(data_dir())
+                .and_then(|()| std::fs::write(&icon, include_bytes!("../assets/icons/vjuu-512.png")))
+        {
+            eprintln!("Cannot write {}: {e}", icon.display());
+        }
+        let key = HSTRING::from(format!(r"Software\Classes\AppUserModelId\{APP_ID}"));
+        for (name, value) in [("DisplayName", "vjuu".to_string()), ("IconUri", icon.display().to_string())] {
+            let data: Vec<u16> = value.encode_utf16().chain([0]).collect();
+            let size = (data.len() * 2) as u32;
+            let status = unsafe {
+                RegSetKeyValueW(
+                    HKEY_CURRENT_USER,
+                    &key,
+                    &HSTRING::from(name),
+                    REG_SZ.0,
+                    Some(data.as_ptr().cast()),
+                    size,
+                )
+            };
+            if status.is_err() {
+                eprintln!("Cannot register vjuu's notifications: {status:?}");
+                return;
+            }
+        }
+    }
+}
+
 /// Moves the window to the virtual desktop in use, if it is on another one. Without this, bringing it to the front
 /// makes Windows switch to its desktop instead (the `desktop = "switch"` behaviour).
 ///

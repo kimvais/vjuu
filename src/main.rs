@@ -1060,6 +1060,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             look_up_context(&proxy, id, cwd);
         }
         None => {
+            platform::register_app_id();
             listen(proxy.clone());
             spare_due = Some(Instant::now());
         }
@@ -1161,7 +1162,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     }
                     // Opened behind on purpose, or the OS kept it there (focus-stealing prevention): say so.
                     if tray.is_some() && !(active && host.window.is_focused()) {
-                        notify(s.title());
+                        notify(&proxy, id, s.title());
                     }
                 }
             }
@@ -1271,11 +1272,30 @@ fn change_request(run: impl Fn(&str, &[&str]) -> Option<String>) -> Option<Strin
     }
 }
 
-/// Shows a system notification that a review window is waiting, without holding up the event loop.
-/// shortcut: on Windows the toast is credited to PowerShell, as vjuu registers no app id of its own.
-fn notify(title: String) {
+/// Shows a system notification that review `id` is waiting, without holding up the event loop. On Windows, clicking
+/// it opens the review as the tray menu does; a review closed meanwhile is simply not found.
+fn notify(proxy: &EventLoopProxy<AppEvent>, id: TabId, title: String) {
+    #[cfg(windows)]
+    let proxy = proxy.clone();
+    #[cfg(not(windows))]
+    let _ = (proxy, id);
     thread::spawn(move || {
         let body = title.strip_prefix("vjuu: ").unwrap_or(&title);
+        #[cfg(windows)]
+        {
+            let shown = tauri_winrt_notification::Toast::new(platform::APP_ID)
+                .title("vjuu is waiting for you")
+                .text1(body)
+                .on_activated(move |_| {
+                    let _ = proxy.send_event(AppEvent::Tray(tray::Action::Open(id)));
+                    Ok(())
+                })
+                .show();
+            if let Err(e) = shown {
+                eprintln!("Cannot show a notification: {e:?}");
+            }
+        }
+        #[cfg(not(windows))]
         let _ = notify_rust::Notification::new().summary("vjuu is waiting for you").body(body).show();
     });
 }
