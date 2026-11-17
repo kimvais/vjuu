@@ -268,14 +268,20 @@ pub fn style_frame(window: &Window) {
 #[cfg(windows)]
 pub const APP_ID: &str = "vjuu";
 
+/// Returns where `register_app_id` keeps vjuu's logo for notifications.
+#[cfg(windows)]
+pub fn logo() -> PathBuf {
+    data_dir().join("vjuu.png")
+}
+
 /// Registers `APP_ID` with Windows, so a notification names vjuu with its icon and can be shown at all: an
-/// unregistered app id is silently dropped. Failing that, notifications still work, credited to PowerShell.
+/// unregistered app id is silently dropped.
 pub fn register_app_id() {
     #[cfg(windows)]
     {
         use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW};
         use windows::core::HSTRING;
-        let icon = data_dir().join("vjuu.png");
+        let icon = logo();
         if !icon.exists()
             && let Err(e) = std::fs::create_dir_all(data_dir())
                 .and_then(|()| std::fs::write(&icon, include_bytes!("../assets/icons/vjuu-512.png")))

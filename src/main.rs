@@ -1294,6 +1294,9 @@ fn notify(proxy: &EventLoopProxy<AppEvent>, id: TabId, title: String) {
             let shown = tauri_winrt_notification::Toast::new(platform::APP_ID)
                 .title("vjuu is waiting for you")
                 .text1(body)
+                // In the body too: Windows keeps the header's icon from the app id's first notification, so a
+                // stale or failed one shows its placeholder there.
+                .icon(&platform::logo(), tauri_winrt_notification::IconCrop::Square, "vjuu")
                 .on_activated(move |_| {
                     let _ = proxy.send_event(AppEvent::Tray(tray::Action::Open(id)));
                     Ok(())
