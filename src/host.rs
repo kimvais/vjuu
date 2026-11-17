@@ -187,7 +187,11 @@ impl Host {
             if *t == id {
                 tab.seen = true;
                 self.window.set_title(&tab.title());
-                let _ = tab.webview.focus();
+                // WebView2 focuses with SetFocus, which activates the window too: a review opened behind came to the
+                // front. An inactive window gets its webview focused once activated (`WindowEvent::Focused`).
+                if self.window.is_focused() {
+                    let _ = tab.webview.focus();
+                }
             }
         }
         self.show_strip();
