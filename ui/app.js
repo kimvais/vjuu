@@ -876,6 +876,12 @@ function commentBox(key, c) {
   const box = document.createElement('div');
   box.className = 'comment';
   if (!c.editing) {
+    if (c.question) {
+      const mark = document.createElement('span');
+      mark.className = 'question-mark';
+      mark.textContent = 'Question';
+      box.append(mark);
+    }
     const text = document.createElement('div');
     text.className = 'text';
     text.textContent = c.text;
@@ -899,8 +905,20 @@ function commentBox(key, c) {
     c.draft = ta.value;
     post({ type: 'state', review: review() });
   };
+  const ask = document.createElement('button');
+  ask.className = 'question';
+  ask.textContent = 'Question';
+  ask.title = 'Mark as a question: the agent answers it rather than edits for it (Ctrl+Q, or start the comment with ??)';
+  const showAsk = () => ask.setAttribute('aria-pressed', String(Boolean(c.question)));
+  const toggleAsk = () => {
+    c.question = !c.question;
+    showAsk();
+    post({ type: 'state', review: review() });
+  };
+  ask.onclick = () => { toggleAsk(); ta.focus(); };
+  showAsk();
   const save = () => {
-    c.text = ta.value.trim();
+    Object.assign(c, asked(ta.value, c.question));
     c.editing = false;
     delete c.draft;
     if (!c.text) comments.delete(key);
@@ -914,6 +932,7 @@ function commentBox(key, c) {
   ta.onkeydown = (e) => {
     if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) { e.preventDefault(); save(); }
     if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    if (e.key === 'q' && e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); toggleAsk(); }
   };
   const saveBtn = document.createElement('button');
   saveBtn.innerHTML = 'Save <kbd>Ctrl</kbd><kbd>Enter</kbd>';
@@ -921,8 +940,14 @@ function commentBox(key, c) {
   const cancelBtn = document.createElement('button');
   cancelBtn.innerHTML = 'Cancel <kbd>Esc</kbd>';
   cancelBtn.onclick = cancel;
-  box.append(ta, saveBtn, cancelBtn);
+  box.append(ta, saveBtn, cancelBtn, ask);
   return box;
+}
+
+/** Returns {text, question} for a comment's text: a leading `??` marks it a question too, and goes. */
+function asked(text, question) {
+  const t = text.trim();
+  return t.startsWith('??') ? { text: t.slice(2).trim(), question: true } : { text: t, question: Boolean(question) };
 }
 
 /** paste number -> {c, at}: images pasted into comments, waiting for vjuu to save them. */
@@ -955,7 +980,11 @@ window.vjuuImageSaved = (paste, path) => {
 
 /** Returns the review as sent to vjuu: saved comments, plus what is typed in any comment still open. */
 function review() {
-  const sent = [...comments.values()].map(({ draft, ...c }) => ({ ...c, text: (c.editing ? draft ?? c.text : c.text).trim() }));
+  const sent = [...comments.values()].map(({ draft, question, ...c }) => {
+    const a = asked(c.editing ? draft ?? c.text : c.text, question);
+    // Only a question says so: every other comment reads as it always has.
+    return a.question ? { ...c, ...a } : { ...c, text: a.text };
+  });
   const r = { comments: sent.filter((c) => c.text), overall: overall.value };
   if (choices.size) r.choices = [...choices.values()];
   return r;
