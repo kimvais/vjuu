@@ -23,7 +23,6 @@ assets = [
 # Already in the tree through wry; decodes images pasted into comments.
 base64 = "0.22.1"
 interprocess = "2.4.6"
-notify-rust = "4.18.2"
 serde = { version = "1.0.229", features = ["derive"] }
 # preserve_order: `vjuu gate` rewrites ~/.claude/settings.json and must leave its keys where the user put them.
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
@@ -35,7 +34,14 @@ tray-icon = { version = "0.26.1", default-features = false, features = ["ksni"] 
 url = "2.5.8"
 wry = "0.57.0"
 
+[target.'cfg(not(windows))'.dependencies]
+notify-rust = "4.18.2"
+
 [target.'cfg(windows)'.dependencies]
+# What notify-rust uses on Windows, used directly: its toasts report a click.
+tauri-winrt-notification = "0.8.1"
+# Already in the tree through tao; IVirtualDesktopManager and the toast's app id.
+windows = { version = "0.62.2", features = ["Win32_System_Com", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Console", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(windows)'.build-dependencies]

@@ -70,10 +70,20 @@
     <span>Allow or deny what Claude wants to run here, with the command or diff in full.</span></label>
   <label><input type="checkbox" name="gate"><b>Question gate</b>
     <span>Send back a turn that ends in "say ship" or "Want me to…?": Claude takes the step, or asks here.</span></label>
-  <label><input type="checkbox" name="focus"><b>Bring new windows to the front</b>
-    <span>Off: a new review opens behind the window you are in, with a notification.</span></label>
   <label><input type="checkbox" name="tray"><b>Tray icon and notifications</b>
     <span>Show what is waiting in the tray, and notify when a window opens behind others.</span></label>
+  <label class="theme" title="Tab to it, then ↑ ↓ to pick; Ctrl+Enter applies"><b>A new review</b>
+    <select name="focus">
+      <option value="front">Comes to the front</option>
+      <option value="behind">Opens behind, with a notification</option>
+      <option value="hidden">Waits in the tray, with a notification</option>
+    </select></label>
+  <label class="theme" title="Tab to it, then ↑ ↓ to pick; Ctrl+Enter applies. Windows only"><b>On another desktop, vjuu</b>
+    <select name="desktop">
+      <option value="follow">Moves to the desktop you are on</option>
+      <option value="switch">Switches you to its desktop</option>
+    </select></label>
+  <p class="cli">Clicking a notification opens its review (Windows). Without the tray, "waits in the tray" opens behind.</p>
   <p class="cli">Also <code>vjuu config</code> in a terminal.</p>
   <button id="settings-apply" title="Esc cancels">Apply <kbd>Ctrl</kbd><kbd>Enter</kbd></button>
 </dialog>

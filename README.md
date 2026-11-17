@@ -81,6 +81,7 @@ not both.
 |---|---|
 | `vjuu docs/design.md` | markdown |
 | `vjuu a.md b.md change.diff` | several files in one window, stacked |
+| `vjuu notes\*.md` | every file the pattern matches, the same way; `*` and `?` work in the file name, also in shells that do not expand them (PowerShell, cmd) |
 | `vjuu change.diff` | diff or patch file |
 | `vjuu site/index.html` | HTML page or claude.ai artifact, rendered as it looks once loaded; `file://` URLs work too |
 | `vjuu src/main.rs` | any other file: line-numbered, syntax-highlighted source |
@@ -127,9 +128,18 @@ says so. Switch the icon and notifications off with `vjuu config tray off`. On L
 shows StatusNotifier icons (KDE, or GNOME with the AppIndicator extension).
 
 A new review comes to the front and takes the keyboard, unless you are in the vjuu window already: then it opens as a
-tab behind the one you are in, marked with a dot. If coming to the front interrupts you, `vjuu config focus off` (or
-"Bring new windows to the front" in the settings) opens every new review behind, each with a notification when the
-tray is on.
+tab behind the one you are in, marked with a dot. If coming to the front interrupts you, pick another `focus` (or "A
+new review" in the settings):
+
+| `focus` | A new review |
+|---|---|
+| `front` (default) | comes to the front |
+| `behind` | opens behind the window you are in, with a notification |
+| `hidden` | opens no window: a notification and the tray dot say it is waiting; with the tray off it acts as `behind` |
+
+On Windows, clicking the notification opens its review. When vjuu comes forward (from the notification, the tray or
+`front`) while its window is on another virtual desktop, it moves to the desktop you are on; `vjuu config desktop
+switch` switches you to its desktop instead.
 
 | Case | First paint |
 |------|-------------|
@@ -268,7 +278,9 @@ Click the gear in the title bar and **Apply** (Esc cancels), or use the terminal
 ```
 vjuu config                  # open the settings panel
 vjuu config list             # print the settings and where the file is
-vjuu config turn off         # switch one: plan, ask, turn, permission, gate, tray or focus; on or off
+vjuu config turn off         # switch one: plan, ask, turn, permission, gate or tray; on or off
+vjuu config focus hidden     # a new review: front, behind or hidden
+vjuu config desktop switch   # vjuu on another desktop: follow (move it here) or switch (go there)
 vjuu config worktrees .wt    # where your git worktrees live (default .claude/worktrees)
 vjuu config theme graphite   # a theme, or auto; theme.light and theme.dark set Auto's two picks
 ```

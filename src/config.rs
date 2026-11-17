@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::{fs, io};
 
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{platform, theme};
 
@@ -15,8 +16,12 @@ pub struct Config {
     /// The tray icon, and a notification when a review opens behind other windows. First: TOML puts plain keys
     /// before tables.
     pub tray: bool,
-    /// Bring each new window to the front; off, it opens behind the window in use, with a notification.
-    pub focus: bool,
+    /// Where a new review opens.
+    #[serde(deserialize_with = "or_default")]
+    pub focus: Focus,
+    /// What happens to vjuu's window on another virtual desktop when it comes to the front.
+    #[serde(deserialize_with = "or_default")]
+    pub desktop: Desktop,
     /// Where the agent's git worktrees live, relative to the repository root; the gate and the skills name it.
     pub worktrees: String,
     pub hooks: Hooks,
@@ -27,13 +32,89 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             tray: true,
-            focus: true,
+            focus: Focus::default(),
+            desktop: Desktop::default(),
             // Where Claude Code's own `--worktree` puts them.
             worktrees: ".claude/worktrees".into(),
             hooks: Hooks::default(),
             theme: Theme::default(),
         }
     }
+}
+
+/// Reads a setting, or its default when the value is unknown: a typo in one setting must not reset the others.
+fn or_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned + Default,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(T::deserialize(value.clone()).unwrap_or_else(|_| {
+        eprintln!("Ignoring the unknown value {value} in {}: using the default.", path().display());
+        T::default()
+    }))
+}
+
+/// Where a new review opens.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", from = "CompatFocus")]
+pub enum Focus {
+    /// In front, with keyboard focus.
+    #[default]
+    Front,
+    /// Behind the window in use, with a notification.
+    Behind,
+    /// No window: only the notification and the tray dot.
+    Hidden,
+}
+
+impl Focus {
+    /// Returns where a new review opens in a vjuu that has a tray icon or not: `hidden` without one would leave
+    /// nothing pointing at the review, so it opens `behind`.
+    pub fn with_tray(self, tray: bool) -> Focus {
+        match self {
+            Focus::Hidden if !tray => Focus::Behind,
+            focus => focus,
+        }
+    }
+}
+
+/// Reads `focus` as it was before it had three values: `true` / `false`. Scheduled for deletion.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CompatFocus {
+    Bool(bool),
+    Mode(#[serde(with = "FocusMode")] Focus),
+}
+
+/// `Focus` by name, for `CompatFocus`, which cannot use `Focus`'s own `Deserialize` without recursing.
+#[derive(Deserialize)]
+#[serde(remote = "Focus", rename_all = "lowercase")]
+enum FocusMode {
+    Front,
+    Behind,
+    Hidden,
+}
+
+impl From<CompatFocus> for Focus {
+    fn from(value: CompatFocus) -> Self {
+        match value {
+            CompatFocus::Bool(true) => Focus::Front,
+            CompatFocus::Bool(false) => Focus::Behind,
+            CompatFocus::Mode(focus) => focus,
+        }
+    }
+}
+
+/// What happens to vjuu's window on another virtual desktop when it comes to the front.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Desktop {
+    /// Move the window to the desktop in use.
+    #[default]
+    Follow,
+    /// Switch to the window's desktop, as Windows does by itself.
+    Switch,
 }
 
 /// Which themes (files in the themes folder, without `.css`) colour the windows.
@@ -107,13 +188,27 @@ impl Config {
                 self.worktrees = folder.to_string();
             }
             "tray" => self.tray = on()?,
-            "focus" => self.focus = on()?,
+            "focus" => {
+                self.focus = match value {
+                    "front" => Focus::Front,
+                    "behind" => Focus::Behind,
+                    "hidden" => Focus::Hidden,
+                    _ => return Err(format!("Unknown value `{value}`: use front, behind or hidden.")),
+                }
+            }
+            "desktop" => {
+                self.desktop = match value {
+                    "follow" => Desktop::Follow,
+                    "switch" => Desktop::Switch,
+                    _ => return Err(format!("Unknown value `{value}`: use follow or switch.")),
+                }
+            }
             "theme" => self.theme.name = theme(true)?,
             "theme.light" => self.theme.light = theme(false)?,
             "theme.dark" => self.theme.dark = theme(false)?,
             _ => {
                 return Err(format!(
-                    "Unknown setting `{key}`: use plan, ask, turn, permission, gate, tray, focus, worktrees, theme, theme.light or theme.dark."
+                    "Unknown setting `{key}`: use plan, ask, turn, permission, gate, tray, focus, desktop, worktrees, theme, theme.light or theme.dark."
                 ));
             }
         }
@@ -155,7 +250,8 @@ mod tests {
             config,
             Config {
                 tray: true,
-                focus: true,
+                focus: Focus::Front,
+                desktop: Desktop::Follow,
                 worktrees: ".claude/worktrees".into(),
                 hooks: Hooks { plan: true, ask: true, turn: false, permission: true, gate: true },
                 theme: Theme::default()
@@ -171,15 +267,39 @@ mod tests {
         config.set("tray", "off").unwrap();
         config.set("gate", "off").unwrap();
         config.set("worktrees", ".wt/").unwrap();
+        config.set("focus", "hidden").unwrap();
+        config.set("desktop", "switch").unwrap();
         let text = config.to_toml();
         assert_eq!(
             text,
             format!(
-                "{HEADER}tray = false\nfocus = true\nworktrees = \".wt\"\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\ngate = false\n\n\
+                "{HEADER}tray = false\nfocus = \"hidden\"\ndesktop = \"switch\"\nworktrees = \".wt\"\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\ngate = false\n\n\
                  [theme]\nname = \"auto\"\nlight = \"light\"\ndark = \"graphite\"\n"
             )
         );
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
+    }
+
+    #[test]
+    fn reads_old_focus_bools() {
+        assert_eq!(toml::from_str::<Config>("focus = true\n").unwrap().focus, Focus::Front);
+        assert_eq!(toml::from_str::<Config>("focus = false\n").unwrap().focus, Focus::Behind);
+    }
+
+    #[test]
+    fn a_typo_keeps_the_other_settings() {
+        let config: Config = toml::from_str("tray = false\nfocus = \"fron\"\ndesktop = \"here\"\n").unwrap();
+        assert_eq!(config, Config { tray: false, ..Config::default() });
+    }
+
+    #[test]
+    fn hidden_needs_a_tray() {
+        // A vjuu with no tray (a one-off window with no resident instance, a desktop without tray icons, the tray
+        // off) would leave a hidden review with nothing pointing at it.
+        assert_eq!(Focus::Hidden.with_tray(true), Focus::Hidden);
+        assert_eq!(Focus::Hidden.with_tray(false), Focus::Behind);
+        assert_eq!(Focus::Front.with_tray(false), Focus::Front);
+        assert_eq!(Focus::Behind.with_tray(false), Focus::Behind);
     }
 
     #[test]
@@ -192,6 +312,9 @@ mod tests {
             ("theme.light", "../x"),
             ("plan", "yes"),
             ("gate", "1"),
+            ("focus", "on"),
+            ("focus", "yes"),
+            ("desktop", "here"),
             ("worktrees", ""),
             ("worktrees", "../elsewhere"),
             ("worktrees", "/abs"),

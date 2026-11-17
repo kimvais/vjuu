@@ -44,7 +44,8 @@ Usage:
 
   vjuu config                    Open the settings
   vjuu config list               Print the settings and where they are saved
-  vjuu config <setting> <value>  Change one: plan, ask, turn, permission, tray or focus (on / off),
+  vjuu config <setting> <value>  Change one: plan, ask, turn, permission, gate or tray (on / off),
+                                 focus (front / behind / hidden), desktop (follow / switch),
                                  theme (a theme or auto), theme.light or theme.dark (a theme)
   vjuu setup                     Install the vjuu, ship and sync skills for Claude Code and Codex
   vjuu start                     Start the resident instance in the tray (also: double-click vjuu.exe)
@@ -238,7 +239,17 @@ fn main() {
         ref paths @ [first, ..]
             if first != "config" && first != "hook" && paths.iter().all(|p| !p.starts_with('-')) =>
         {
-            request(paths.iter().map(|p| file_doc(p)).collect())
+            let files: Vec<String> = paths
+                .iter()
+                .flat_map(|p| {
+                    let files = expand(p);
+                    if files.is_empty() {
+                        fail(&format!("No files match `{p}`."));
+                    }
+                    files
+                })
+                .collect();
+            request(files.iter().map(|p| file_doc(p)).collect())
         }
         ref other => {
             // The first option vjuu does not know, or the command's first wrong argument.
@@ -896,6 +907,40 @@ fn set_config(key: &str, value: &str) -> ! {
     process::exit(0)
 }
 
+/// Returns the files a `*` or `?` in the file name matches, sorted; the argument itself when it has none or names a
+/// file. Windows shells pass wildcards on unexpanded. Folder wildcards are not expanded.
+fn expand(arg: &str) -> Vec<String> {
+    let path = Path::new(arg);
+    let Some(pattern) = path.file_name().and_then(|n| n.to_str()) else { return vec![arg.into()] };
+    if !pattern.contains(['*', '?']) || path.exists() {
+        return vec![arg.into()];
+    }
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let fold = |s: &str| if cfg!(windows) { s.to_lowercase() } else { s.to_string() };
+    let pattern: Vec<char> = fold(pattern).chars().collect();
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| wildcard(&pattern, &fold(name).chars().collect::<Vec<_>>()))
+        .collect();
+    names.sort();
+    names.into_iter().map(|name| path.with_file_name(name).to_string_lossy().into_owned()).collect()
+}
+
+/// Returns whether `name` matches `pattern`, where `*` stands for any run of characters and `?` for one.
+fn wildcard(pattern: &[char], name: &[char]) -> bool {
+    match (pattern.first(), name.first()) {
+        (None, _) => name.is_empty(),
+        (Some('*'), _) => wildcard(&pattern[1..], name) || (!name.is_empty() && wildcard(pattern, &name[1..])),
+        (Some('?'), Some(_)) => wildcard(&pattern[1..], &name[1..]),
+        (Some(p), Some(n)) => p == n && wildcard(&pattern[1..], &name[1..]),
+        (Some(_), None) => false,
+    }
+}
+
 fn file_doc(arg: &str) -> Doc {
     // A `file://` URL, as copied from a browser's address bar. A Windows path parses as a URL too, scheme `c`.
     let local = url::Url::parse(arg).ok().filter(|u| u.scheme() == "file").map(|u| {
@@ -1036,7 +1081,9 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     let proxy = event_loop.create_proxy();
     // Keep the webview profile out of the exe's directory (`~/.cargo/bin` after `cargo install`).
     let mut context = WebContext::new(Some(platform::data_dir().join("webview")));
-    let mut host = Host::new(&event_loop);
+    // Read once; Apply in the panel updates focus and desktop, `vjuu config` takes effect in the next resident instance.
+    let config = config::load();
+    let mut host = Host::new(&event_loop, config.desktop);
     let mut spare_due = None;
     // Only the resident instance has a tray: it outlives the reviews and holds every session's.
     let resident = initial.is_none();
@@ -1050,15 +1097,16 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             let _ = proxy.lock().expect("proxy lock").send_event(AppEvent::Tray(action));
         })
     };
-    // Read once, like the tray setting; Apply in the panel updates it, `vjuu config` from the next resident instance.
-    let mut focus = config::load().focus;
+    let mut focus = config.focus;
     match initial {
         Some(request) => {
             let cwd = request.cwd.clone();
-            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus);
+            // No resident instance: this window is the review's own, with no tray to wait in.
+            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus.with_tray(false));
             look_up_context(&proxy, id, cwd);
         }
         None => {
+            platform::register_app_id();
             listen(proxy.clone());
             spare_due = Some(Instant::now());
         }
@@ -1066,7 +1114,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     event_loop.run(move |event, target, control_flow| {
         match event {
             // macOS wants the tray made once the loop runs; the other platforms do not mind.
-            Event::NewEvents(StartCause::Init) if resident && config::load().tray => tray = new_tray(target),
+            Event::NewEvents(StartCause::Init) if resident && config.tray => tray = new_tray(target),
             #[cfg(windows)]
             Event::UserEvent(AppEvent::Tray(tray::Action::Menu)) => {
                 if let Some(tray) = &tray {
@@ -1097,7 +1145,14 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let cwd = request.cwd.clone();
-                let id = host.open(&proxy, &mut context, request, conn.map(Reply::Client), Instant::now(), focus);
+                let id = host.open(
+                    &proxy,
+                    &mut context,
+                    request,
+                    conn.map(Reply::Client),
+                    Instant::now(),
+                    focus.with_tray(tray.is_some()),
+                );
                 look_up_context(&proxy, id, cwd);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }
@@ -1123,6 +1178,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     Err(e) => eprintln!("Cannot compile the theme: {e}"),
                 }
                 focus = config.focus;
+                host.desktop = config.desktop;
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
@@ -1159,7 +1215,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     }
                     // Opened behind on purpose, or the OS kept it there (focus-stealing prevention): say so.
                     if tray.is_some() && !(active && host.window.is_focused()) {
-                        notify(s.title());
+                        notify(&proxy, id, s.title());
                     }
                 }
             }
@@ -1269,11 +1325,33 @@ fn change_request(run: impl Fn(&str, &[&str]) -> Option<String>) -> Option<Strin
     }
 }
 
-/// Shows a system notification that a review window is waiting, without holding up the event loop.
-/// shortcut: on Windows the toast is credited to PowerShell, as vjuu registers no app id of its own.
-fn notify(title: String) {
+/// Shows a system notification that review `id` is waiting, without holding up the event loop. On Windows, clicking
+/// it opens the review as the tray menu does; a review closed meanwhile is simply not found.
+fn notify(proxy: &EventLoopProxy<AppEvent>, id: TabId, title: String) {
+    #[cfg(windows)]
+    let proxy = proxy.clone();
+    #[cfg(not(windows))]
+    let _ = (proxy, id);
     thread::spawn(move || {
         let body = title.strip_prefix("vjuu: ").unwrap_or(&title);
+        #[cfg(windows)]
+        {
+            let shown = tauri_winrt_notification::Toast::new(platform::APP_ID)
+                .title("vjuu is waiting for you")
+                .text1(body)
+                // In the body too: Windows keeps the header's icon from the app id's first notification, so a
+                // stale or failed one shows its placeholder there.
+                .icon(&platform::logo(), tauri_winrt_notification::IconCrop::Square, "vjuu")
+                .on_activated(move |_| {
+                    let _ = proxy.send_event(AppEvent::Tray(tray::Action::Open(id)));
+                    Ok(())
+                })
+                .show();
+            if let Err(e) = shown {
+                eprintln!("Cannot show a notification: {e:?}");
+            }
+        }
+        #[cfg(not(windows))]
         let _ = notify_rust::Notification::new().summary("vjuu is waiting for you").body(body).show();
     });
 }
@@ -1579,7 +1657,28 @@ mod tests {
         transcript_title, turn_diff, turn_feedback, turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
-    use super::{changed_since, shell_commands};
+    use super::{changed_since, expand, shell_commands};
+
+    #[test]
+    fn expands_wildcards_in_file_names() {
+        let dir = std::env::temp_dir().join(format!("vjuu-expand-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub.md")).unwrap();
+        for name in ["b.md", "a.md", "notes.txt", "ab.MD"] {
+            std::fs::write(dir.join(name), "x").unwrap();
+        }
+        let at = |name: &str| dir.join(name).to_string_lossy().into_owned();
+        let mut md = vec![at("a.md"), at("b.md")];
+        // Windows file names ignore case; folders are not files to review.
+        if cfg!(windows) {
+            md.insert(1, at("ab.MD"));
+        }
+        assert_eq!(expand(&at("*.md")), md);
+        assert_eq!(expand(&at("?.md")), vec![at("a.md"), at("b.md")]);
+        assert_eq!(expand(&at("none*.md")), Vec::<String>::new());
+        // No wildcard, or a file that exists: as given, read or failed later.
+        assert_eq!(expand(&at("missing.md")), vec![at("missing.md")]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 

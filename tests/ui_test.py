@@ -18,7 +18,8 @@ _UI = Path(__file__).resolve().parent.parent / 'ui'
 _THEMES = _UI.parent / 'themes'
 _CONFIG = {
     'tray': True,
-    'focus': False,
+    'focus': 'behind',
+    'desktop': 'follow',
     'hooks': {'plan': True, 'ask': False, 'turn': True, 'permission': False, 'gate': True},
     'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
     'themes': [{'name': 'graphite', 'scheme': 'dark'}, {'name': 'light', 'scheme': 'light'}],
@@ -91,6 +92,13 @@ def _set_theme(work, page, name):
 def _comment(page, text):
     page.keyboard.type(text)
     page.keyboard.press('Control+Enter')
+
+
+def test_ready_without_frames(page, url, work):
+    # A hidden window (focus = hidden) paints no frames; its notification waits for `ready` all the same.
+    page.add_init_script('window.requestAnimationFrame = () => 0;')
+    _open(page, url, work, {'name': 'notes.md', 'kind': 'md', 'text': _MD})
+    page.wait_for_function("(window.__msgs || []).some((m) => m.type === 'ready')", polling=100, timeout=3000)
 
 
 def test_diff(page, url, work):
@@ -916,10 +924,11 @@ def test_settings(page, url, work):
     page.goto(url)
     page.wait_for_selector('#settings[open]')
     checked = lambda: [
-        page.is_checked(f'#settings [name={h}]')
-        for h in ('plan', 'ask', 'turn', 'permission', 'gate', 'tray', 'focus')
+        page.is_checked(f'#settings [name={h}]') for h in ('plan', 'ask', 'turn', 'permission', 'gate', 'tray')
     ]
-    assert checked() == [True, False, True, False, True, True, False]
+    picked = lambda: [page.input_value(f'#settings [name={s}]') for s in ('focus', 'desktop')]
+    assert checked() == [True, False, True, False, True, True]
+    assert picked() == ['behind', 'follow']
     # Review keys do nothing while it is open.
     page.keyboard.press('j')
     assert page.locator('.focused').count() == 0
@@ -931,16 +940,24 @@ def test_settings(page, url, work):
     # The gear opens it again with the saved settings; Apply saves and leaves the review open.
     page.click('#settings-open')
     page.wait_for_selector('#settings[open]')
-    assert checked() == [True, False, True, False, True, True, False]
+    assert checked() == [True, False, True, False, True, True]
     page.click('#settings [name=turn]')
     page.keyboard.press('Control+Enter')  # Apply, and nothing else
-    assert msgs('settings')[-1]['config'] == {
-        'tray': True,
-        'focus': False,
-        'hooks': {'plan': True, 'ask': False, 'turn': False, 'permission': False, 'gate': True},
-        'theme': {'name': 'auto', 'light': 'light', 'dark': 'graphite'},
-    }
+    # Untouched picks go back as they were.
+    saved = {k: _CONFIG[k] for k in ('tray', 'focus', 'desktop', 'hooks', 'theme')}
+    assert msgs('settings')[-1]['config'] == {**saved, 'hooks': {**saved['hooks'], 'turn': False}}
     assert not page.is_visible('#settings') and msgs('done') == []
+    # The picks change with the keyboard alone.
+    page.click('#settings-open')
+    page.wait_for_selector('#settings[open]')
+    page.focus('#settings [name=focus]')
+    page.keyboard.press('ArrowDown')
+    page.focus('#settings [name=desktop]')
+    page.keyboard.press('ArrowDown')
+    assert picked() == ['hidden', 'switch']
+    page.keyboard.press('Control+Enter')
+    # The page was not reloaded, so `turn` is still as saved in config.json: on.
+    assert msgs('settings')[-1]['config'] == {**saved, 'focus': 'hidden', 'desktop': 'switch'}
     # `vjuu config`: the panel over a sample to preview themes on; the window finishes when the panel closes.
     sample = [{'name': 'README.md', 'kind': 'md', 'text': _MD}, {'name': 'sample.diff', 'kind': 'diff', 'text': _DIFF}]
     (work / 'doc.json').write_text(json.dumps({'docs': sample, 'settings': True, 'sample': True}))
@@ -1056,6 +1073,7 @@ def main():
             test_settings,
             test_help,
             test_tabs,
+            test_ready_without_frames,
         ):
             if only and test.__name__ not in only:
                 continue

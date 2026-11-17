@@ -264,11 +264,150 @@ pub fn style_frame(window: &Window) {
     let _ = window;
 }
 
+/// The AppUserModelID vjuu's notifications are shown under.
+#[cfg(windows)]
+pub const APP_ID: &str = "vjuu";
+
+/// Returns where `register_app_id` keeps vjuu's logo for notifications.
+#[cfg(windows)]
+pub fn logo() -> PathBuf {
+    data_dir().join("vjuu.png")
+}
+
+/// Registers `APP_ID` with Windows, so a notification names vjuu with its icon and can be shown at all: an
+/// unregistered app id is silently dropped.
+pub fn register_app_id() {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW};
+        use windows::core::HSTRING;
+        let icon = logo();
+        if !icon.exists()
+            && let Err(e) = std::fs::create_dir_all(data_dir())
+                .and_then(|()| std::fs::write(&icon, include_bytes!("../assets/icons/vjuu-512.png")))
+        {
+            eprintln!("Cannot write {}: {e}", icon.display());
+        }
+        let key = HSTRING::from(format!(r"Software\Classes\AppUserModelId\{APP_ID}"));
+        for (name, value) in [("DisplayName", "vjuu".to_string()), ("IconUri", icon.display().to_string())] {
+            let data: Vec<u16> = value.encode_utf16().chain([0]).collect();
+            let size = (data.len() * 2) as u32;
+            let status = unsafe {
+                RegSetKeyValueW(
+                    HKEY_CURRENT_USER,
+                    &key,
+                    &HSTRING::from(name),
+                    REG_SZ.0,
+                    Some(data.as_ptr().cast()),
+                    size,
+                )
+            };
+            if status.is_err() {
+                eprintln!("Cannot register vjuu's notifications: {status:?}");
+                return;
+            }
+        }
+    }
+}
+
+/// Moves the window to the virtual desktop in use, if it is on another one. Without this, bringing it to the front
+/// makes Windows switch to its desktop instead (the `desktop = "switch"` behaviour).
+///
+/// The desktop in use is read off the topmost visible window of another process on it: on a toast or tray click the
+/// foreground window is the shell's or vjuu's own, which belong to no desktop. With none found, or any failure, the
+/// window stays where it is.
+pub fn move_to_current_desktop(window: &Window) {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance};
+        use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GW_HWNDNEXT, GetTopWindow, GetWindow, GetWindowThreadProcessId, IsWindowVisible,
+        };
+        use windows::core::GUID;
+        let hwnd = HWND(window.hwnd() as _);
+        let ours = std::process::id();
+        // The event loop's thread has COM initialised already: WebView2 needs it.
+        let moved = unsafe {
+            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL).and_then(
+                |manager| {
+                    if manager.IsWindowOnCurrentVirtualDesktop(hwnd)?.as_bool() {
+                        return Ok(());
+                    }
+                    let mut next = GetTopWindow(None).ok();
+                    while let Some(other) = next {
+                        next = GetWindow(other, GW_HWNDNEXT).ok();
+                        let mut pid = 0;
+                        GetWindowThreadProcessId(other, Some(&mut pid));
+                        if pid == ours
+                            || !IsWindowVisible(other).as_bool()
+                            || !manager.IsWindowOnCurrentVirtualDesktop(other).is_ok_and(|on| on.as_bool())
+                        {
+                            continue;
+                        }
+                        // Shell windows and windows shown on every desktop have no desktop of their own.
+                        match manager.GetWindowDesktopId(other) {
+                            Ok(here) if here != GUID::zeroed() => return manager.MoveWindowToDesktop(hwnd, &here),
+                            _ => continue,
+                        }
+                    }
+                    Ok(())
+                },
+            )
+        };
+        if let Err(e) = moved {
+            eprintln!("Cannot move vjuu to this desktop: {e}");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
 /// Brings the window to the front with keyboard focus in the page.
 ///
 /// Windows' foreground lock stops a process that has not had recent user input (the resident instance, or a
 /// client started by an agent) from taking focus: `set_focus` alone just flashes the taskbar button. Sharing the
 /// input queue of the window that has focus for a moment is the accepted workaround.
+/// Shows the hidden window just behind the one in use, which keeps the keyboard.
+///
+/// tao shows a window with `ShowWindow(SW_SHOW)`, which activates it even while it is unfocusable (`focus = behind`
+/// came to the front), so the window in use gets the foreground back right after.
+pub fn show_behind(window: &Window) {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GWL_EXSTYLE, GetForegroundWindow, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+            SetForegroundWindow, SetWindowPos, WS_EX_TOPMOST,
+        };
+        let hwnd = window.hwnd() as _;
+        let in_use = unsafe { GetForegroundWindow() };
+        window.set_focusable(false);
+        window.set_visible(true);
+        window.set_focusable(true);
+        if in_use.is_null() || in_use == hwnd {
+            return;
+        }
+        unsafe {
+            if GetForegroundWindow() == hwnd {
+                SetForegroundWindow(in_use);
+            }
+            // Behind it in z-order too; not behind a topmost window, which would make vjuu topmost.
+            if GetWindowLongW(in_use, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST == 0 {
+                SetWindowPos(hwnd, in_use, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        window.set_focusable(false);
+        window.set_visible(true);
+        window.set_focusable(true);
+    }
+}
+
 pub fn bring_to_front(window: &Window, webview: &WebView) {
     #[cfg(windows)]
     {
