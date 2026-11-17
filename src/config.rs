@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::{fs, io};
 
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{platform, theme};
 
@@ -16,8 +17,10 @@ pub struct Config {
     /// before tables.
     pub tray: bool,
     /// Where a new review opens.
+    #[serde(deserialize_with = "or_default")]
     pub focus: Focus,
     /// What happens to vjuu's window on another virtual desktop when it comes to the front.
+    #[serde(deserialize_with = "or_default")]
     pub desktop: Desktop,
     /// Where the agent's git worktrees live, relative to the repository root; the gate and the skills name it.
     pub worktrees: String,
@@ -29,8 +32,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             tray: true,
-            focus: Focus::Front,
-            desktop: Desktop::Follow,
+            focus: Focus::default(),
+            desktop: Desktop::default(),
             // Where Claude Code's own `--worktree` puts them.
             worktrees: ".claude/worktrees".into(),
             hooks: Hooks::default(),
@@ -39,11 +42,25 @@ impl Default for Config {
     }
 }
 
+/// Reads a setting, or its default when the value is unknown: a typo in one setting must not reset the others.
+fn or_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned + Default,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(T::deserialize(value.clone()).unwrap_or_else(|_| {
+        eprintln!("Ignoring the unknown value {value} in {}: using the default.", path().display());
+        T::default()
+    }))
+}
+
 /// Where a new review opens.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", from = "CompatFocus")]
 pub enum Focus {
     /// In front, with keyboard focus.
+    #[default]
     Front,
     /// Behind the window in use, with a notification.
     Behind,
@@ -90,10 +107,11 @@ impl From<CompatFocus> for Focus {
 }
 
 /// What happens to vjuu's window on another virtual desktop when it comes to the front.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Desktop {
     /// Move the window to the desktop in use.
+    #[default]
     Follow,
     /// Switch to the window's desktop, as Windows does by itself.
     Switch,
@@ -266,6 +284,12 @@ mod tests {
     fn reads_old_focus_bools() {
         assert_eq!(toml::from_str::<Config>("focus = true\n").unwrap().focus, Focus::Front);
         assert_eq!(toml::from_str::<Config>("focus = false\n").unwrap().focus, Focus::Behind);
+    }
+
+    #[test]
+    fn a_typo_keeps_the_other_settings() {
+        let config: Config = toml::from_str("tray = false\nfocus = \"fron\"\ndesktop = \"here\"\n").unwrap();
+        assert_eq!(config, Config { tray: false, ..Config::default() });
     }
 
     #[test]
