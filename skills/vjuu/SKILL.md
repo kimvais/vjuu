@@ -75,7 +75,8 @@ general comment
 - The first line is the verdict: `approved`, `redo` or `discard`. Act on it as below; never ask what it meant.
 - `## Choice: <question>` is followed by the label the user picked, or `No answer.`: ask again rather than pick
   for them.
-- Each `## file:line` section is one comment; `(old)` means a deleted line, numbered in the old file.
+- Each `## file:line` section is one comment; `(old)` means a deleted line, numbered in the old file. A heading
+  that ends in `(question)` is a question the user marked: answer it, and change nothing for it.
 - A rendered HTML page has no line numbers: `## site/index.html (#install)` or `(under "Install")` names the nearest
   id or heading. Find the quoted text in the source near it.
 - Treat comments as the user's instructions for that spot: act on each one, then say per comment what

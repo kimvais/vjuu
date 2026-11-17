@@ -523,6 +523,26 @@ def test_unsaved_comment_is_kept(page, url, work):
     assert [c['text'] for c in _review(page)['comments']] == ['second']
 
 
+def test_question_comments(page, url, work):
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': _MD})
+    # Ctrl+Q in the box marks it; again unmarks; the chip shows which.
+    page.get_by_text('First paragraph').click()
+    page.keyboard.type('why?')
+    page.keyboard.press('Control+q')
+    assert page.locator('.comment .question[aria-pressed="true"]').count() == 1
+    page.keyboard.press('Control+q')
+    page.keyboard.press('Control+q')
+    page.keyboard.press('Control+Enter')
+    assert page.locator('.comment .question-mark').count() == 1
+    # A ?? prefix marks it too, and goes.
+    page.get_by_text('item one').click()
+    _comment(page, '?? and this?')
+    page.get_by_text('item two').click()
+    _comment(page, 'rename')
+    sent = [(c['text'], c.get('question', False)) for c in _review(page)['comments']]
+    assert sent == [('why?', True), ('and this?', True), ('rename', False)], sent
+
+
 def test_same_file_twice_in_one_diff(page, url, work):
     # `git log -p` shows the same file once per commit.
     twice = _DIFF + _DIFF.replace('def new', 'def newer')
@@ -1081,6 +1101,7 @@ def main():
             test_clicks_that_do_not_comment,
             test_keyboard_navigation,
             test_unsaved_comment_is_kept,
+            test_question_comments,
             test_paste_image,
             test_same_file_twice_in_one_diff,
             test_directory_tree,

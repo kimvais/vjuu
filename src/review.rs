@@ -15,6 +15,9 @@ pub struct Comment {
     /// Where on a rendered HTML page (`#id` or `under "Heading"`); its start and end are 0, as a page has no lines.
     #[serde(default)]
     pub at: String,
+    /// Asks something (Ctrl+Q or a `??` prefix): the agent answers it rather than edits for it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub question: bool,
 }
 
 /// A ```choice block in a markdown document; `answer` is the label of the option picked, empty if none.
@@ -95,7 +98,8 @@ fn body(name: &str, review: &Review) -> String {
         };
         let side = if c.old { " (old)" } else { "" };
         let at = if c.at.is_empty() { String::new() } else { format!(" ({})", c.at) };
-        out += &format!("\n## {}{range}{side}{at}\n", c.file);
+        let question = if c.question { " (question)" } else { "" };
+        out += &format!("\n## {}{range}{side}{at}{question}\n", c.file);
         let lines: Vec<&str> = c.quote.lines().collect();
         for line in lines.iter().take(MAX_QUOTE_LINES) {
             out += &format!("> {line}\n");
@@ -116,7 +120,16 @@ mod tests {
     use super::*;
 
     fn comment(file: &str, start: u32, end: u32, old: bool, quote: &str, text: &str) -> Comment {
-        Comment { file: file.into(), start, end, old, quote: quote.into(), text: text.into(), at: String::new() }
+        Comment {
+            file: file.into(),
+            start,
+            end,
+            old,
+            quote: quote.into(),
+            text: text.into(),
+            at: String::new(),
+            question: false,
+        }
     }
 
     #[test]
@@ -166,6 +179,20 @@ mod tests {
         for unknown in ["", "\n", "# Review: a.md\nNo comments.\n", "approve\n", "Approved\n"] {
             assert_eq!(Verdict::of(unknown), None, "{unknown:?}");
         }
+    }
+
+    #[test]
+    fn questions_are_marked() {
+        let mut asked = comment("a.md", 2, 2, false, "x", "why this way?");
+        asked.question = true;
+        let plain = comment("a.md", 1, 1, false, "y", "rename it");
+        let review = Review { comments: vec![asked, plain], ..Review::default() };
+        assert_eq!(
+            body("a.md", &review),
+            "# Review: a.md (2 comments)\n\
+             \n## a.md:1\n> y\n\nrename it\n\
+             \n## a.md:2 (question)\n> x\n\nwhy this way?\n"
+        );
     }
 
     #[test]
