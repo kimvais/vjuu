@@ -207,6 +207,13 @@ a { color: var(--accent); }
 .d2h-code-line, .d2h-code-side-line, .d2h-code-linenumber, .d2h-code-side-linenumber, .d2h-file-name { font-family: var(--mono); }
 
 .focused { background: var(--focus) !important; outline: 1px solid var(--accent); }
+/* Search: the bar sticks to the top of the document; matching lines carry a mark at their left edge. */
+#search { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 6px 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+#search[hidden] { display: none; }
+#search-q { width: 280px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 4px 8px; }
+#search-n { color: var(--muted); font-size: 12px; min-width: 70px; }
+.match { box-shadow: inset 3px 0 var(--accent); }
+::highlight(search) { background: var(--accent); color: var(--bg); }
 /* Whatever is hovered gets the comment on click. */
 .hovered { cursor: pointer; }
 .hovered:not(tr) { background: var(--focus); border-radius: 4px; }

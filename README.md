@@ -173,6 +173,8 @@ switch` switches you to its desktop instead.
 | `x` | Mark the diff file under the cursor viewed: folds it and ticks it in the sidebar; again to unmark |
 | `o` | Fold / open the diff file under the cursor; lock files, minified and generated files start folded |
 | `f` | Hide / show the sidebar (file list, or table of contents for markdown) |
+| `/` or `Ctrl+F` | Search every file. In the search box: `Enter` / `Shift+Enter` next / previous match, `Esc` closes it and leaves the cursor on the match. Case-insensitive unless the query has a capital letter |
+| `]` / `[` | Next / previous comment |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | `Ctrl+1`–`Ctrl+9` | That tab |
 | `Ctrl+W` | Close the tab: discards its review |

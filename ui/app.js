@@ -211,6 +211,8 @@ function render() {
     }
   });
   renderComments();
+  // A new view has new lines: mark the open search's matches in them.
+  if (!searchBar.hidden) search();
 }
 
 function anchor(el, a) {
@@ -229,6 +231,8 @@ const HTML_BLOCKS = 'h1, h2, h3, h4, h5, h6, p, li, pre, blockquote, figcaption,
 const FRAME_CSS = `
 [data-key].hovered { cursor: pointer; background: var(--focus); border-radius: 4px; }
 [data-key].focused { background: var(--focus) !important; outline: 1px solid var(--accent); }
+[data-key].match { box-shadow: inset 3px 0 var(--accent); }
+::highlight(search) { background: var(--accent); color: var(--bg); }
 .vjuu-c.comment { box-sizing: border-box; margin: 6px 0; padding: 8px 10px; display: flex; gap: 8px; align-items: flex-start;
   flex-wrap: wrap; background: var(--comment-bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px;
   font: 14px/1.5 var(--sans); white-space: normal; text-align: left; }
@@ -1195,6 +1199,116 @@ function jumpFile(delta) {
   if (first) setFocus(first);
 }
 
+/**
+ * Returns the element of `list` after the cursor (delta 1) or before it (-1), wrapping around; delta 0 also takes
+ * the cursor's own. `list` is in document order.
+ */
+function nextOf(list, delta) {
+  const order = deep('[data-key]');
+  const at = order.indexOf(focused);
+  const pos = (el) => order.indexOf(el);
+  if (delta < 0) return list.findLast((el) => pos(el) < at) ?? list.at(-1);
+  return list.find((el) => (delta ? pos(el) > at : pos(el) >= at)) ?? list[0];
+}
+
+/** Puts the cursor on `el`, unfolding its file first if it is folded. */
+function reveal(el) {
+  const box = el.ownerDocument.defaultView.frameElement ?? el;
+  const t = box.closest('.folded') && targets.find((t) => t.el.contains(box));
+  if (t) toggleFold(t);
+  setFocus(el);
+}
+
+/** `]` / `[`: the next / previous line or block with a comment. */
+function jumpComment(delta) {
+  const keys = new Set([...comments].map(([key, c]) => (anchors.has(key) ? key : c.anchorKey)));
+  const list = deep('[data-key]').filter((el) => keys.has(el.dataset.key));
+  const el = list.length && nextOf(list, delta);
+  if (el) reveal(el);
+}
+
+// Search: every line or block whose text has the query. Lines are matched on their source text (the comment's
+// quote), so line numbers and rendering never match; the words themselves are highlighted where the engine can.
+const searchBar = $('#search');
+const searchInput = $('#search-q');
+let hits = [];
+
+function openSearch() {
+  searchBar.hidden = false;
+  searchInput.focus();
+  searchInput.select();
+  if (searchInput.value) search();
+}
+
+function closeSearch() {
+  // Back to the review keys, so c comments on the match.
+  searchInput.blur();
+  searchBar.hidden = true;
+  markHits('', []);
+  hits = [];
+}
+
+/** Finds the query's matches and puts the cursor on the first at or after it. */
+function search() {
+  const q = searchInput.value;
+  // Smart case, as in vim and ripgrep: a capital letter makes it exact.
+  const fold = q === q.toLowerCase() ? (s) => s.toLowerCase() : (s) => s;
+  const all = q ? deep('[data-key]').filter((el) => fold(anchors.get(el.dataset.key)?.a.quote ?? '').includes(fold(q))) : [];
+  // A list matches with its item: keep the innermost block, as a click comments on.
+  hits = all.filter((el) => !all.some((o) => o !== el && el.contains(o)));
+  markHits(q && fold(q), hits, fold);
+  if (hits.length) reveal(nextOf(hits, 0));
+  showCount();
+}
+
+function stepSearch(delta) {
+  if (!hits.length) return;
+  reveal(nextOf(hits, delta));
+  showCount();
+}
+
+function showCount() {
+  const at = hits.indexOf(focused);
+  $('#search-n').textContent = !searchInput.value ? '' : hits.length ? `${at + 1} / ${hits.length}` : 'No matches';
+}
+
+/** Marks the lines in `els` and highlights the query's text in them. */
+function markHits(q, els, fold) {
+  deep('.match').forEach((el) => el.classList.remove('match'));
+  const docs = new Map([[document, []], ...frameDocs().map((d) => [d, []])]);
+  for (const el of els) {
+    el.classList.add('match');
+    const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.parentElement.closest('.vjuu-c, .d2h-code-linenumber, .d2h-code-side-linenumber, .code-ln')) continue;
+      const text = fold(node.data);
+      for (let i = text.indexOf(q); i >= 0; i = text.indexOf(q, i + q.length)) {
+        const r = el.ownerDocument.createRange();
+        r.setStart(node, i);
+        r.setEnd(node, i + q.length);
+        docs.get(el.ownerDocument)?.push(r);
+      }
+    }
+  }
+  for (const [d, ranges] of docs) {
+    const w = d.defaultView;
+    // WebKitGTK before 2.46 has no Highlight: the marked lines still show where the matches are.
+    if (!w?.Highlight) continue;
+    if (ranges.length) w.CSS.highlights.set('search', new w.Highlight(...ranges)); else w.CSS.highlights.delete('search');
+  }
+}
+
+searchInput.addEventListener('input', () => search());
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    stepSearch(e.shiftKey ? -1 : 1);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeSearch();
+  }
+});
+
 function onKey(e) {
   const plainCtrl = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
   // Ctrl+R would reload the page and lose every comment, even with a dialog open.
@@ -1210,6 +1324,12 @@ function onKey(e) {
   if (e.key === ',' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
     e.preventDefault();
     openSettings();
+    return;
+  }
+  // Search, also from a comment being written, as in a browser.
+  if (e.key === 'f' && plainCtrl) {
+    e.preventDefault();
+    openSearch();
     return;
   }
   // Tab keys work while typing too, as in a browser.
@@ -1276,6 +1396,10 @@ function onKey(e) {
     restoreDraft();
   } else if (e.key === 'Escape' && !draftBox.hidden) {
     draftBox.hidden = true;
+  } else if (e.key === '/') {
+    openSearch();
+  } else if (e.key === ']' || e.key === '[') {
+    jumpComment(e.key === ']' ? 1 : -1);
   } else {
     return;
   }
