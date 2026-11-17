@@ -370,6 +370,44 @@ pub fn move_to_current_desktop(window: &Window) {
 /// Windows' foreground lock stops a process that has not had recent user input (the resident instance, or a
 /// client started by an agent) from taking focus: `set_focus` alone just flashes the taskbar button. Sharing the
 /// input queue of the window that has focus for a moment is the accepted workaround.
+/// Shows the hidden window just behind the one in use, which keeps the keyboard.
+///
+/// tao shows a window with `ShowWindow(SW_SHOW)`, which activates it even while it is unfocusable (`focus = behind`
+/// came to the front), so the window in use gets the foreground back right after.
+pub fn show_behind(window: &Window) {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GWL_EXSTYLE, GetForegroundWindow, GetWindowLongW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+            SetForegroundWindow, SetWindowPos, WS_EX_TOPMOST,
+        };
+        let hwnd = window.hwnd() as _;
+        let in_use = unsafe { GetForegroundWindow() };
+        window.set_focusable(false);
+        window.set_visible(true);
+        window.set_focusable(true);
+        if in_use.is_null() || in_use == hwnd {
+            return;
+        }
+        unsafe {
+            if GetForegroundWindow() == hwnd {
+                SetForegroundWindow(in_use);
+            }
+            // Behind it in z-order too; not behind a topmost window, which would make vjuu topmost.
+            if GetWindowLongW(in_use, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST == 0 {
+                SetWindowPos(hwnd, in_use, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        window.set_focusable(false);
+        window.set_visible(true);
+        window.set_focusable(true);
+    }
+}
+
 pub fn bring_to_front(window: &Window, webview: &WebView) {
     #[cfg(windows)]
     {

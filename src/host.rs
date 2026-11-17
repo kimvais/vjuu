@@ -141,10 +141,7 @@ impl Host {
             if place.take_focus {
                 self.window.set_visible(true);
             } else {
-                // Unfocusable while it appears, so Windows does not activate it; clickable again right after.
-                self.window.set_focusable(false);
-                self.window.set_visible(true);
-                self.window.set_focusable(true);
+                platform::show_behind(&self.window);
             }
         }
         if place.take_focus {
