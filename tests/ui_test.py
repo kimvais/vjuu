@@ -94,6 +94,13 @@ def _comment(page, text):
     page.keyboard.press('Control+Enter')
 
 
+def test_ready_without_frames(page, url, work):
+    # A hidden window (focus = hidden) paints no frames; its notification waits for `ready` all the same.
+    page.add_init_script('window.requestAnimationFrame = () => 0;')
+    _open(page, url, work, {'name': 'notes.md', 'kind': 'md', 'text': _MD})
+    page.wait_for_function("(window.__msgs || []).some((m) => m.type === 'ready')", polling=100, timeout=3000)
+
+
 def test_diff(page, url, work):
     _open(page, url, work, {'name': 'git diff', 'kind': 'diff', 'text': _DIFF})
     page.locator('tr', has=page.locator('.d2h-ins')).first.locator('.d2h-code-linenumber').click()
@@ -1066,6 +1073,7 @@ def main():
             test_settings,
             test_help,
             test_tabs,
+            test_ready_without_frames,
         ):
             if only and test.__name__ not in only:
                 continue

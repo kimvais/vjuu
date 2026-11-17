@@ -79,7 +79,15 @@ async function load() {
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
   if (req.settings) openSettings();
-  requestAnimationFrame(() => post({ type: req.autoclose ? 'rendered' : 'ready' }));
+  // After the first paint, so a window brought forward is never blank. A hidden window (focus = hidden) paints
+  // nothing, and its notification would wait on the frame for seconds: the timer stands in.
+  let sent = false;
+  const ready = () => {
+    if (!sent) post({ type: req.autoclose ? 'rendered' : 'ready' });
+    sent = true;
+  };
+  requestAnimationFrame(ready);
+  setTimeout(ready, 100);
 }
 
 const settings = $('#settings');
