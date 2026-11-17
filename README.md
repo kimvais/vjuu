@@ -81,6 +81,7 @@ not both.
 |---|---|
 | `vjuu docs/design.md` | markdown |
 | `vjuu a.md b.md change.diff` | several files in one window, stacked |
+| `vjuu notes\*.md` | every file the pattern matches, the same way; `*` and `?` work in the file name, also in shells that do not expand them (PowerShell, cmd) |
 | `vjuu change.diff` | diff or patch file |
 | `vjuu site/index.html` | HTML page or claude.ai artifact, rendered as it looks once loaded; `file://` URLs work too |
 | `vjuu src/main.rs` | any other file: line-numbered, syntax-highlighted source |

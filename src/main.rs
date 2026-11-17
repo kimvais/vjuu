@@ -239,7 +239,17 @@ fn main() {
         ref paths @ [first, ..]
             if first != "config" && first != "hook" && paths.iter().all(|p| !p.starts_with('-')) =>
         {
-            request(paths.iter().map(|p| file_doc(p)).collect())
+            let files: Vec<String> = paths
+                .iter()
+                .flat_map(|p| {
+                    let files = expand(p);
+                    if files.is_empty() {
+                        fail(&format!("No files match `{p}`."));
+                    }
+                    files
+                })
+                .collect();
+            request(files.iter().map(|p| file_doc(p)).collect())
         }
         ref other => {
             // The first option vjuu does not know, or the command's first wrong argument.
@@ -895,6 +905,40 @@ fn set_config(key: &str, value: &str) -> ! {
     config::save(&config).unwrap_or_else(|e| fail(&format!("Cannot save {}: {e}", config::path().display())));
     theme::write_compiled(&config.theme).unwrap_or_else(|e| fail(&format!("Cannot compile the theme: {e}")));
     process::exit(0)
+}
+
+/// Returns the files a `*` or `?` in the file name matches, sorted; the argument itself when it has none or names a
+/// file. Windows shells pass wildcards on unexpanded. Folder wildcards are not expanded.
+fn expand(arg: &str) -> Vec<String> {
+    let path = Path::new(arg);
+    let Some(pattern) = path.file_name().and_then(|n| n.to_str()) else { return vec![arg.into()] };
+    if !pattern.contains(['*', '?']) || path.exists() {
+        return vec![arg.into()];
+    }
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let fold = |s: &str| if cfg!(windows) { s.to_lowercase() } else { s.to_string() };
+    let pattern: Vec<char> = fold(pattern).chars().collect();
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| wildcard(&pattern, &fold(name).chars().collect::<Vec<_>>()))
+        .collect();
+    names.sort();
+    names.into_iter().map(|name| path.with_file_name(name).to_string_lossy().into_owned()).collect()
+}
+
+/// Returns whether `name` matches `pattern`, where `*` stands for any run of characters and `?` for one.
+fn wildcard(pattern: &[char], name: &[char]) -> bool {
+    match (pattern.first(), name.first()) {
+        (None, _) => name.is_empty(),
+        (Some('*'), _) => wildcard(&pattern[1..], name) || (!name.is_empty() && wildcard(pattern, &name[1..])),
+        (Some('?'), Some(_)) => wildcard(&pattern[1..], &name[1..]),
+        (Some(p), Some(n)) => p == n && wildcard(&pattern[1..], &name[1..]),
+        (Some(_), None) => false,
+    }
 }
 
 fn file_doc(arg: &str) -> Doc {
@@ -1613,7 +1657,28 @@ mod tests {
         transcript_title, turn_diff, turn_feedback, turn_started, unix_seconds,
     };
     use super::{change_request, checkout_context, fence, permission_decision, permission_markdown};
-    use super::{changed_since, shell_commands};
+    use super::{changed_since, expand, shell_commands};
+
+    #[test]
+    fn expands_wildcards_in_file_names() {
+        let dir = std::env::temp_dir().join(format!("vjuu-expand-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub.md")).unwrap();
+        for name in ["b.md", "a.md", "notes.txt", "ab.MD"] {
+            std::fs::write(dir.join(name), "x").unwrap();
+        }
+        let at = |name: &str| dir.join(name).to_string_lossy().into_owned();
+        let mut md = vec![at("a.md"), at("b.md")];
+        // Windows file names ignore case; folders are not files to review.
+        if cfg!(windows) {
+            md.insert(1, at("ab.MD"));
+        }
+        assert_eq!(expand(&at("*.md")), md);
+        assert_eq!(expand(&at("?.md")), vec![at("a.md"), at("b.md")]);
+        assert_eq!(expand(&at("none*.md")), Vec::<String>::new());
+        // No wildcard, or a file that exists: as given, read or failed later.
+        assert_eq!(expand(&at("missing.md")), vec![at("missing.md")]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
