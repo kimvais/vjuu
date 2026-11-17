@@ -24,7 +24,6 @@ use tao::window::{ResizeDirection, Window};
 use wry::WebContext;
 use wry::http::Response;
 
-use config::Focus;
 use host::{Host, Tab, TabId};
 use platform::{bring_to_front, pipe_name};
 use review::{Review, Verdict};
@@ -1057,7 +1056,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
     match initial {
         Some(request) => {
             let cwd = request.cwd.clone();
-            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus == Focus::Front);
+            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus);
             look_up_context(&proxy, id, cwd);
         }
         None => {
@@ -1099,14 +1098,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let cwd = request.cwd.clone();
-                let id = host.open(
-                    &proxy,
-                    &mut context,
-                    request,
-                    conn.map(Reply::Client),
-                    Instant::now(),
-                    focus == Focus::Front,
-                );
+                let id = host.open(&proxy, &mut context, request, conn.map(Reply::Client), Instant::now(), focus);
                 look_up_context(&proxy, id, cwd);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }

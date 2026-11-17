@@ -8,6 +8,7 @@ use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowBuilder};
 use wry::{WebContext, WebView, WebViewBuilder};
 
+use crate::config::Focus;
 use crate::platform::{self, bring_to_front};
 use crate::{AppEvent, Msg, Reply, Request, Review, Slot, fail, is_vjuu, serve, tray};
 
@@ -26,7 +27,7 @@ pub struct Tab {
     pub context: Option<String>,
     /// The settings panel's Apply saved, so a settings-only tab can say so when it closes.
     pub applied: bool,
-    /// Opened behind (the `focus` setting off, or while another tab was in use), so it never comes to the front by
+    /// Opened behind or hidden (the `focus` setting, or while another tab was in use), so it never comes to the front by
     /// itself.
     pub background: bool,
     /// Shown at least once; until then the tab strip marks it.
@@ -104,8 +105,7 @@ impl Host {
         }
     }
 
-    /// Shows `request` in a tab of its own: in front when the window was empty, or when the user is elsewhere and
-    /// `focus` is on; otherwise behind the tab in use. Returns the tab.
+    /// Shows `request` in a tab of its own, placed as `placement` says for `focus`. Returns the tab.
     pub fn open(
         &mut self,
         proxy: &EventLoopProxy<AppEvent>,
@@ -113,7 +113,7 @@ impl Host {
         request: Request,
         reply: Option<Reply>,
         started: Instant,
-        focus: bool,
+        focus: Focus,
     ) -> TabId {
         let rank = self.rank(request.session.as_deref());
         let (id, mut tab) = match self.spare.take() {
@@ -122,20 +122,20 @@ impl Host {
                 let _ = tab.webview.evaluate_script("window.vjuuLoad && vjuuLoad()");
                 (id, tab)
             }
-            None => self.new_tab(proxy, context, Some(request), focus),
+            None => self.new_tab(proxy, context, Some(request), focus == Focus::Front),
         };
         tab.reply = reply;
         tab.started = started;
         let here = self.window.is_visible() && self.window.is_focused();
-        let front = self.active.is_none() || (focus && !here);
-        tab.background = !(front && focus);
+        let place = placement(focus, self.active.is_none(), here);
+        tab.background = !place.take_focus;
         let ranks: Vec<usize> = self.tabs.iter().map(|(_, t)| self.rank_of(t)).collect();
         self.tabs.insert(position(&ranks, rank), (id, tab));
-        if front {
+        if place.front {
             self.show(id);
         }
-        if !self.window.is_visible() {
-            if focus {
+        if place.show_window && !self.window.is_visible() {
+            if place.take_focus {
                 self.window.set_visible(true);
             } else {
                 // Unfocusable while it appears, so Windows does not activate it; clickable again right after.
@@ -144,7 +144,7 @@ impl Host {
                 self.window.set_focusable(true);
             }
         }
-        if front && focus {
+        if place.take_focus {
             self.raise(id);
         }
         self.show_strip();
@@ -194,6 +194,8 @@ impl Host {
     pub fn raise(&mut self, id: TabId) {
         self.show(id);
         if let Some(tab) = self.get(id) {
+            // Opened hidden (`focus = "hidden"`), it has not been shown yet.
+            self.window.set_visible(true);
             self.window.set_minimized(false);
             bring_to_front(&self.window, &tab.webview);
         }
@@ -336,6 +338,30 @@ impl Host {
     }
 }
 
+/// How a new review is shown.
+#[derive(Debug, PartialEq)]
+pub struct Placement {
+    /// It becomes the tab shown in the window.
+    pub front: bool,
+    /// A hidden window is made visible now.
+    pub show_window: bool,
+    /// The window comes to the front with it.
+    pub take_focus: bool,
+}
+
+/// Returns how a new review is shown, given whether the window has no tab (`empty`) and whether the user is in it
+/// (`here`).
+pub fn placement(focus: Focus, empty: bool, here: bool) -> Placement {
+    match focus {
+        Focus::Front => {
+            let front = empty || !here;
+            Placement { front, show_window: true, take_focus: front }
+        }
+        Focus::Behind => Placement { front: empty, show_window: true, take_focus: false },
+        Focus::Hidden => Placement { front: empty, show_window: false, take_focus: false },
+    }
+}
+
 /// Returns where a tab of `rank` goes among tabs of `ranks` (sorted): after its own session's and earlier ones'.
 fn position(ranks: &[usize], rank: usize) -> usize {
     ranks.iter().take_while(|&&r| r <= rank).count()
@@ -352,5 +378,27 @@ mod tests {
         assert_eq!(position(&[0, 2], 1), 1, "between the sessions that came before and after");
         assert_eq!(position(&[0, usize::MAX], usize::MAX), 2, "no session: last");
         assert_eq!(position(&[1, usize::MAX], 0), 0, "an earlier session goes first");
+    }
+
+    #[test]
+    fn placement_rules() {
+        let p = |front, show_window, take_focus| Placement { front, show_window, take_focus };
+        // (focus, empty, here) -> placement
+        let cases = [
+            (Focus::Front, true, false, p(true, true, true)),
+            (Focus::Front, false, false, p(true, true, true)),
+            (Focus::Front, false, true, p(false, true, false)),
+            (Focus::Behind, true, false, p(true, true, false)),
+            (Focus::Behind, false, false, p(false, true, false)),
+            (Focus::Behind, false, true, p(false, true, false)),
+            // Nothing open yet: the tab is the window's, but the window stays hidden.
+            (Focus::Hidden, true, false, p(true, false, false)),
+            // Already in use: a background tab, the window left where it is.
+            (Focus::Hidden, false, true, p(false, false, false)),
+            (Focus::Hidden, false, false, p(false, false, false)),
+        ];
+        for (focus, empty, here, want) in cases {
+            assert_eq!(placement(focus, empty, here), want, "{focus:?} empty={empty} here={here}");
+        }
     }
 }
