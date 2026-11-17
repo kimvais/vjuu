@@ -898,12 +898,12 @@ def test_multi_choice(page, url, work):
     assert answer() == 'Lint, Tests'
     # The hint is not part of the question that goes back.
     assert _review(page)['choices'][0]['question'] == 'Which checks?'
-    # A plain block still picks one, and an unknown info string is a code block, not a choice.
-    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': '```choice multiple\n- A\n```\n\n' + _CHOICE})
-    assert page.locator('.choice').count() == 1
+    # A modifier this vjuu does not know still gives buttons, picking one, so a newer skill degrades gracefully.
+    _open(page, url, work, {'name': 'a.md', 'kind': 'md', 'text': '```choice ranked\n- A\n- B\n```\n'})
+    assert page.locator('.choice:not(.multi)').count() == 1
     page.keyboard.press('1')
     page.keyboard.press('2')
-    assert _review(page)['choices'][0]['answer'] == 'Live page'
+    assert _review(page)['choices'][0]['answer'] == 'B'
 
 
 def test_settings(page, url, work):

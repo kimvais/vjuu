@@ -393,8 +393,10 @@ function renderMarkdown(section, doc, i) {
   const md = window.markdownit({ linkify: true, highlight });
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, ...rest) => {
-    const info = tokens[idx].info.trim();
-    return /^choice( multi)?$/.test(info) ? choiceHtml(tokens[idx], info.endsWith('multi')) : fence(tokens, idx, ...rest);
+    // Any word after `choice` still gives buttons: the skill can document a modifier before the installed vjuu
+    // knows it, and an unknown one should fall back to a plain choice, not a code block.
+    const words = tokens[idx].info.trim().split(/\s+/);
+    return words[0] === 'choice' ? choiceHtml(tokens[idx], words.includes('multi')) : fence(tokens, idx, ...rest);
   };
   const lines = doc.text.split(/\r?\n/);
   const tokens = md.parse(doc.text, {});
