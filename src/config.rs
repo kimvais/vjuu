@@ -51,6 +51,17 @@ pub enum Focus {
     Hidden,
 }
 
+impl Focus {
+    /// Returns where a new review opens in a vjuu that has a tray icon or not: `hidden` without one would leave
+    /// nothing pointing at the review, so it opens `behind`.
+    pub fn with_tray(self, tray: bool) -> Focus {
+        match self {
+            Focus::Hidden if !tray => Focus::Behind,
+            focus => focus,
+        }
+    }
+}
+
 /// Reads `focus` as it was before it had three values: `true` / `false`. Scheduled for deletion.
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -186,14 +197,6 @@ impl Config {
         Ok(())
     }
 
-    /// Returns where a new review opens: `hidden` with the tray off would leave nothing pointing at it, so `behind`.
-    pub fn placement_focus(&self) -> Focus {
-        match self.focus {
-            Focus::Hidden if !self.tray => Focus::Behind,
-            focus => focus,
-        }
-    }
-
     pub fn to_toml(&self) -> String {
         HEADER.to_string() + &toml::to_string(self).expect("Config serialises")
     }
@@ -266,11 +269,13 @@ mod tests {
     }
 
     #[test]
-    fn hidden_needs_the_tray() {
-        let mut config = Config { focus: Focus::Hidden, ..Config::default() };
-        assert_eq!(config.placement_focus(), Focus::Hidden);
-        config.tray = false;
-        assert_eq!(config.placement_focus(), Focus::Behind);
+    fn hidden_needs_a_tray() {
+        // A vjuu with no tray (a one-off window with no resident instance, a desktop without tray icons, the tray
+        // off) would leave a hidden review with nothing pointing at it.
+        assert_eq!(Focus::Hidden.with_tray(true), Focus::Hidden);
+        assert_eq!(Focus::Hidden.with_tray(false), Focus::Behind);
+        assert_eq!(Focus::Front.with_tray(false), Focus::Front);
+        assert_eq!(Focus::Behind.with_tray(false), Focus::Behind);
     }
 
     #[test]

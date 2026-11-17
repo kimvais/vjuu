@@ -1052,11 +1052,12 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
         })
     };
     // Read once, like the tray setting; Apply in the panel updates it, `vjuu config` from the next resident instance.
-    let mut focus = config::load().placement_focus();
+    let mut focus = config::load().focus;
     match initial {
         Some(request) => {
             let cwd = request.cwd.clone();
-            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus);
+            // No resident instance: this window is the review's own, with no tray to wait in.
+            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus.with_tray(false));
             look_up_context(&proxy, id, cwd);
         }
         None => {
@@ -1099,7 +1100,14 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let cwd = request.cwd.clone();
-                let id = host.open(&proxy, &mut context, request, conn.map(Reply::Client), Instant::now(), focus);
+                let id = host.open(
+                    &proxy,
+                    &mut context,
+                    request,
+                    conn.map(Reply::Client),
+                    Instant::now(),
+                    focus.with_tray(tray.is_some()),
+                );
                 look_up_context(&proxy, id, cwd);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }
@@ -1124,7 +1132,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     }),
                     Err(e) => eprintln!("Cannot compile the theme: {e}"),
                 }
-                focus = config.placement_focus();
+                focus = config.focus;
                 host.desktop = config.desktop;
                 if !config.tray {
                     tray = None;
