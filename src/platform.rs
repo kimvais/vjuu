@@ -264,6 +264,40 @@ pub fn style_frame(window: &Window) {
     let _ = window;
 }
 
+/// Moves the window to the virtual desktop in use, if it is on another one. Without this, bringing it to the front
+/// makes Windows switch to its desktop instead (the `desktop = "switch"` behaviour).
+///
+/// Any failure (no desktop manager, a foreground window such as the taskbar that is on no desktop) leaves the window
+/// where it is.
+pub fn move_to_current_desktop(window: &Window) {
+    #[cfg(windows)]
+    {
+        use tao::platform::windows::WindowExtWindows;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance};
+        use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        let hwnd = HWND(window.hwnd() as _);
+        // The event loop's thread has COM initialised already: WebView2 needs it.
+        let moved = unsafe {
+            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL).and_then(
+                |manager| {
+                    if manager.IsWindowOnCurrentVirtualDesktop(hwnd)?.as_bool() {
+                        return Ok(());
+                    }
+                    let here = manager.GetWindowDesktopId(GetForegroundWindow())?;
+                    manager.MoveWindowToDesktop(hwnd, &here)
+                },
+            )
+        };
+        if let Err(e) = moved {
+            eprintln!("Cannot move vjuu to this desktop: {e}");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
 /// Brings the window to the front with keyboard focus in the page.
 ///
 /// Windows' foreground lock stops a process that has not had recent user input (the resident instance, or a

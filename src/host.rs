@@ -8,7 +8,7 @@ use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowBuilder};
 use wry::{WebContext, WebView, WebViewBuilder};
 
-use crate::config::Focus;
+use crate::config::{Desktop, Focus};
 use crate::platform::{self, bring_to_front};
 use crate::{AppEvent, Msg, Reply, Request, Review, Slot, fail, is_vjuu, serve, tray};
 
@@ -80,6 +80,8 @@ pub struct Host {
     next: TabId,
     /// Sessions in the order they first opened a tab: a session's next review comes back to where its last one was.
     sessions: Vec<String>,
+    /// The `desktop` setting: whether `raise` brings the window to the desktop in use.
+    pub desktop: Desktop,
     pub window: Window,
 }
 
@@ -95,7 +97,8 @@ impl Host {
             platform::frame(builder).build(target).unwrap_or_else(|e| fail(&format!("Cannot open window: {e}")));
         platform::style_frame(&window);
         platform::fit_height(&window);
-        Host { tabs: Vec::new(), spare: None, active: None, next: 0, sessions: Vec::new(), window }
+        let desktop = crate::config::load().desktop;
+        Host { tabs: Vec::new(), spare: None, active: None, next: 0, sessions: Vec::new(), desktop, window }
     }
 
     /// Loads the page into a hidden webview for the next review, unless one is waiting already.
@@ -197,6 +200,9 @@ impl Host {
             // Opened hidden (`focus = "hidden"`), it has not been shown yet.
             self.window.set_visible(true);
             self.window.set_minimized(false);
+            if self.desktop == Desktop::Follow {
+                platform::move_to_current_desktop(&self.window);
+            }
             bring_to_front(&self.window, &tab.webview);
         }
     }

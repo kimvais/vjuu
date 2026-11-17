@@ -1124,6 +1124,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     Err(e) => eprintln!("Cannot compile the theme: {e}"),
                 }
                 focus = config.placement_focus();
+                host.desktop = config.desktop;
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
