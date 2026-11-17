@@ -15,8 +15,10 @@ pub struct Config {
     /// The tray icon, and a notification when a review opens behind other windows. First: TOML puts plain keys
     /// before tables.
     pub tray: bool,
-    /// Bring each new window to the front; off, it opens behind the window in use, with a notification.
-    pub focus: bool,
+    /// Where a new review opens.
+    pub focus: Focus,
+    /// What happens to vjuu's window on another virtual desktop when it comes to the front.
+    pub desktop: Desktop,
     /// Where the agent's git worktrees live, relative to the repository root; the gate and the skills name it.
     pub worktrees: String,
     pub hooks: Hooks,
@@ -27,13 +29,63 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             tray: true,
-            focus: true,
+            focus: Focus::Front,
+            desktop: Desktop::Follow,
             // Where Claude Code's own `--worktree` puts them.
             worktrees: ".claude/worktrees".into(),
             hooks: Hooks::default(),
             theme: Theme::default(),
         }
     }
+}
+
+/// Where a new review opens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", from = "CompatFocus")]
+pub enum Focus {
+    /// In front, with keyboard focus.
+    Front,
+    /// Behind the window in use, with a notification.
+    Behind,
+    /// No window: only the notification and the tray dot.
+    Hidden,
+}
+
+/// Reads `focus` as it was before it had three values: `true` / `false`. Scheduled for deletion.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CompatFocus {
+    Bool(bool),
+    Mode(#[serde(with = "FocusMode")] Focus),
+}
+
+/// `Focus` by name, for `CompatFocus`, which cannot use `Focus`'s own `Deserialize` without recursing.
+#[derive(Deserialize)]
+#[serde(remote = "Focus", rename_all = "lowercase")]
+enum FocusMode {
+    Front,
+    Behind,
+    Hidden,
+}
+
+impl From<CompatFocus> for Focus {
+    fn from(value: CompatFocus) -> Self {
+        match value {
+            CompatFocus::Bool(true) => Focus::Front,
+            CompatFocus::Bool(false) => Focus::Behind,
+            CompatFocus::Mode(focus) => focus,
+        }
+    }
+}
+
+/// What happens to vjuu's window on another virtual desktop when it comes to the front.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Desktop {
+    /// Move the window to the desktop in use.
+    Follow,
+    /// Switch to the window's desktop, as Windows does by itself.
+    Switch,
 }
 
 /// Which themes (files in the themes folder, without `.css`) colour the windows.
@@ -107,17 +159,39 @@ impl Config {
                 self.worktrees = folder.to_string();
             }
             "tray" => self.tray = on()?,
-            "focus" => self.focus = on()?,
+            "focus" => {
+                self.focus = match value {
+                    "front" => Focus::Front,
+                    "behind" => Focus::Behind,
+                    "hidden" => Focus::Hidden,
+                    _ => return Err(format!("Unknown value `{value}`: use front, behind or hidden.")),
+                }
+            }
+            "desktop" => {
+                self.desktop = match value {
+                    "follow" => Desktop::Follow,
+                    "switch" => Desktop::Switch,
+                    _ => return Err(format!("Unknown value `{value}`: use follow or switch.")),
+                }
+            }
             "theme" => self.theme.name = theme(true)?,
             "theme.light" => self.theme.light = theme(false)?,
             "theme.dark" => self.theme.dark = theme(false)?,
             _ => {
                 return Err(format!(
-                    "Unknown setting `{key}`: use plan, ask, turn, permission, gate, tray, focus, worktrees, theme, theme.light or theme.dark."
+                    "Unknown setting `{key}`: use plan, ask, turn, permission, gate, tray, focus, desktop, worktrees, theme, theme.light or theme.dark."
                 ));
             }
         }
         Ok(())
+    }
+
+    /// Returns where a new review opens: `hidden` with the tray off would leave nothing pointing at it, so `behind`.
+    pub fn placement_focus(&self) -> Focus {
+        match self.focus {
+            Focus::Hidden if !self.tray => Focus::Behind,
+            focus => focus,
+        }
     }
 
     pub fn to_toml(&self) -> String {
@@ -155,7 +229,8 @@ mod tests {
             config,
             Config {
                 tray: true,
-                focus: true,
+                focus: Focus::Front,
+                desktop: Desktop::Follow,
                 worktrees: ".claude/worktrees".into(),
                 hooks: Hooks { plan: true, ask: true, turn: false, permission: true, gate: true },
                 theme: Theme::default()
@@ -171,15 +246,31 @@ mod tests {
         config.set("tray", "off").unwrap();
         config.set("gate", "off").unwrap();
         config.set("worktrees", ".wt/").unwrap();
+        config.set("focus", "hidden").unwrap();
+        config.set("desktop", "switch").unwrap();
         let text = config.to_toml();
         assert_eq!(
             text,
             format!(
-                "{HEADER}tray = false\nfocus = true\nworktrees = \".wt\"\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\ngate = false\n\n\
+                "{HEADER}tray = false\nfocus = \"hidden\"\ndesktop = \"switch\"\nworktrees = \".wt\"\n\n[hooks]\nplan = true\nask = false\nturn = true\npermission = true\ngate = false\n\n\
                  [theme]\nname = \"auto\"\nlight = \"light\"\ndark = \"graphite\"\n"
             )
         );
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
+    }
+
+    #[test]
+    fn reads_old_focus_bools() {
+        assert_eq!(toml::from_str::<Config>("focus = true\n").unwrap().focus, Focus::Front);
+        assert_eq!(toml::from_str::<Config>("focus = false\n").unwrap().focus, Focus::Behind);
+    }
+
+    #[test]
+    fn hidden_needs_the_tray() {
+        let mut config = Config { focus: Focus::Hidden, ..Config::default() };
+        assert_eq!(config.placement_focus(), Focus::Hidden);
+        config.tray = false;
+        assert_eq!(config.placement_focus(), Focus::Behind);
     }
 
     #[test]
@@ -192,6 +283,9 @@ mod tests {
             ("theme.light", "../x"),
             ("plan", "yes"),
             ("gate", "1"),
+            ("focus", "on"),
+            ("focus", "yes"),
+            ("desktop", "here"),
             ("worktrees", ""),
             ("worktrees", "../elsewhere"),
             ("worktrees", "/abs"),

@@ -24,6 +24,7 @@ use tao::window::{ResizeDirection, Window};
 use wry::WebContext;
 use wry::http::Response;
 
+use config::Focus;
 use host::{Host, Tab, TabId};
 use platform::{bring_to_front, pipe_name};
 use review::{Review, Verdict};
@@ -44,7 +45,8 @@ Usage:
 
   vjuu config                    Open the settings
   vjuu config list               Print the settings and where they are saved
-  vjuu config <setting> <value>  Change one: plan, ask, turn, permission, tray or focus (on / off),
+  vjuu config <setting> <value>  Change one: plan, ask, turn, permission, gate or tray (on / off),
+                                 focus (front / behind / hidden), desktop (follow / switch),
                                  theme (a theme or auto), theme.light or theme.dark (a theme)
   vjuu setup                     Install the vjuu, ship and sync skills for Claude Code and Codex
   vjuu start                     Start the resident instance in the tray (also: double-click vjuu.exe)
@@ -1051,11 +1053,11 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
         })
     };
     // Read once, like the tray setting; Apply in the panel updates it, `vjuu config` from the next resident instance.
-    let mut focus = config::load().focus;
+    let mut focus = config::load().placement_focus();
     match initial {
         Some(request) => {
             let cwd = request.cwd.clone();
-            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus);
+            let id = host.open(&proxy, &mut context, request, Some(Reply::Stdout), started, focus == Focus::Front);
             look_up_context(&proxy, id, cwd);
         }
         None => {
@@ -1097,7 +1099,14 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
             }
             Event::UserEvent(AppEvent::Open(request, conn)) => {
                 let cwd = request.cwd.clone();
-                let id = host.open(&proxy, &mut context, request, conn.map(Reply::Client), Instant::now(), focus);
+                let id = host.open(
+                    &proxy,
+                    &mut context,
+                    request,
+                    conn.map(Reply::Client),
+                    Instant::now(),
+                    focus == Focus::Front,
+                );
                 look_up_context(&proxy, id, cwd);
                 spare_due = Some(Instant::now() + SPARE_DELAY);
             }
@@ -1122,7 +1131,7 @@ fn run(initial: Option<Request>, started: Instant) -> ! {
                     }),
                     Err(e) => eprintln!("Cannot compile the theme: {e}"),
                 }
-                focus = config.focus;
+                focus = config.placement_focus();
                 if !config.tray {
                     tray = None;
                 } else if resident && tray.is_none() {
