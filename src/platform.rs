@@ -307,8 +307,9 @@ pub fn register_app_id() {
 /// Moves the window to the virtual desktop in use, if it is on another one. Without this, bringing it to the front
 /// makes Windows switch to its desktop instead (the `desktop = "switch"` behaviour).
 ///
-/// Any failure (no desktop manager, a foreground window such as the taskbar that is on no desktop) leaves the window
-/// where it is.
+/// The desktop in use is read off the topmost visible window of another process on it: on a toast or tray click the
+/// foreground window is the shell's or vjuu's own, which belong to no desktop. With none found, or any failure, the
+/// window stays where it is.
 pub fn move_to_current_desktop(window: &Window) {
     #[cfg(windows)]
     {
@@ -316,8 +317,12 @@ pub fn move_to_current_desktop(window: &Window) {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::System::Com::{CLSCTX_ALL, CoCreateInstance};
         use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
-        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GW_HWNDNEXT, GetTopWindow, GetWindow, GetWindowThreadProcessId, IsWindowVisible,
+        };
+        use windows::core::GUID;
         let hwnd = HWND(window.hwnd() as _);
+        let ours = std::process::id();
         // The event loop's thread has COM initialised already: WebView2 needs it.
         let moved = unsafe {
             CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL).and_then(
@@ -325,8 +330,24 @@ pub fn move_to_current_desktop(window: &Window) {
                     if manager.IsWindowOnCurrentVirtualDesktop(hwnd)?.as_bool() {
                         return Ok(());
                     }
-                    let here = manager.GetWindowDesktopId(GetForegroundWindow())?;
-                    manager.MoveWindowToDesktop(hwnd, &here)
+                    let mut next = GetTopWindow(None).ok();
+                    while let Some(other) = next {
+                        next = GetWindow(other, GW_HWNDNEXT).ok();
+                        let mut pid = 0;
+                        GetWindowThreadProcessId(other, Some(&mut pid));
+                        if pid == ours
+                            || !IsWindowVisible(other).as_bool()
+                            || !manager.IsWindowOnCurrentVirtualDesktop(other).is_ok_and(|on| on.as_bool())
+                        {
+                            continue;
+                        }
+                        // Shell windows and windows shown on every desktop have no desktop of their own.
+                        match manager.GetWindowDesktopId(other) {
+                            Ok(here) if here != GUID::zeroed() => return manager.MoveWindowToDesktop(hwnd, &here),
+                            _ => continue,
+                        }
+                    }
+                    Ok(())
                 },
             )
         };
