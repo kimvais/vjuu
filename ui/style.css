@@ -244,6 +244,10 @@ tr.vjuu-c .comment { position: sticky; left: 8px; box-sizing: border-box; width:
 .comment.earlier .text { cursor: default; }
 .comment.earlier blockquote { flex-basis: 100%; margin: 0; padding-left: 8px; border-left: 3px solid var(--border); white-space: pre-wrap; }
 #earlier { margin-bottom: 24px; }
+#draft { margin: 16px 16px 0 40px; max-width: 900px; padding: 8px 10px; display: flex; gap: 8px; align-items: center;
+  flex-wrap: wrap; border: 1px dashed var(--accent); border-radius: 6px; }
+#draft[hidden] { display: none; }
+#draft-what { flex: 1; }
 
 .doc + .doc { margin-top: 32px; }
 .doc-header { font: 600 14px/1.4 var(--mono); padding: 8px 12px; margin-bottom: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; max-width: 900px; }

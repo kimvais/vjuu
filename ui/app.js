@@ -78,6 +78,7 @@ async function load() {
     .filter(Boolean));
   await Promise.all([loadHighlight(), ...[...renderers].map(loadScript)]);
   render();
+  offerDraft();
   if (req.settings) openSettings();
   // After the first paint, so a window brought forward is never blank. A hidden window (focus = hidden) paints
   // nothing, and its notification would wait on the frame for seconds: the timer stands in.
@@ -990,6 +991,39 @@ function review() {
   return r;
 }
 
+const draftBox = $('#draft');
+
+/** Offers back what an earlier window on these documents had but never sent: it, or vjuu, died first. */
+function offerDraft() {
+  const d = req.draft;
+  if (!d) return;
+  const n = d.comments.length;
+  const what = [n && `${n} comment${n > 1 ? 's' : ''}`, d.overall?.trim() && 'an overall comment',
+    d.choices?.some((c) => c.answer) && 'picks'].filter(Boolean).join(', ');
+  $('#draft-what').textContent = `Unsent from a window that closed before sending: ${what}.`;
+  draftBox.hidden = false;
+}
+
+/** Adds the draft to the review; what is already written here wins. */
+function restoreDraft() {
+  const d = req.draft;
+  for (const c of d.comments) {
+    if (!comments.has(keyOf(c))) comments.set(keyOf(c), { ...c, editing: false });
+  }
+  if (!overall.value.trim()) overall.value = d.overall ?? '';
+  // Choices are matched by question: their keys are positions in the document, which may have changed since.
+  for (const old of d.choices ?? []) {
+    const c = [...choices.values()].find((x) => x.question === old.question && !x.answer);
+    if (c && old.answer) c.answer = old.answer;
+  }
+  draftBox.hidden = true;
+  render();
+  post({ type: 'state', review: review() });
+}
+
+$('#draft-restore').onclick = restoreDraft;
+$('#draft-dismiss').onclick = () => { draftBox.hidden = true; };
+
 function changed() {
   renderComments();
   post({ type: 'state', review: review() });
@@ -1238,6 +1272,10 @@ function onKey(e) {
   } else if (e.key === 'f') {
     filesHidden = !filesHidden;
     renderFileList();
+  } else if (e.key === 'r' && !draftBox.hidden) {
+    restoreDraft();
+  } else if (e.key === 'Escape' && !draftBox.hidden) {
+    draftBox.hidden = true;
   } else {
     return;
   }

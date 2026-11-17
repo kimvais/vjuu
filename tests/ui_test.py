@@ -543,6 +543,44 @@ def test_question_comments(page, url, work):
     assert sent == [('why?', True), ('and this?', True), ('rename', False)], sent
 
 
+def test_draft_is_offered_back(page, url, work):
+    # Nothing kept: nothing offered, and r does nothing.
+    _open(page, url, work, {'name': 'plan.md', 'kind': 'md', 'text': _CHOICE})
+    assert page.locator('#draft').is_hidden()
+    page.keyboard.press('r')
+    assert page.locator('.vjuu-c').count() == 0
+    # What the page of a window that died had reported, comments still being typed included.
+    page.locator('.choice button').nth(1).click()
+    page.get_by_text('Done.').click()
+    page.keyboard.type('typing when it died')
+    page.fill('#overall', 'overall')
+    draft = page.evaluate('window.__msgs.at(-1).review')
+    doc = {'name': 'plan.md', 'kind': 'md', 'text': _CHOICE}
+    (work / 'doc.json').write_text(json.dumps({'docs': [doc], 'draft': draft}))
+    page.goto(url)
+    page.wait_for_selector('[data-key]')
+    assert (
+        page.inner_text('#draft-what')
+        == 'Unsent from a window that closed before sending: 1 comment, an overall comment, picks.'
+    )
+    # Esc leaves it.
+    page.keyboard.press('Escape')
+    assert page.locator('#draft').is_hidden() and page.locator('.vjuu-c').count() == 0
+    page.keyboard.press('r')
+    assert page.locator('.vjuu-c').count() == 0
+    # r restores it, into whatever is written here already.
+    page.goto(url)
+    page.wait_for_selector('[data-key]')
+    page.fill('#overall', 'mine')
+    page.evaluate('document.activeElement.blur()')  # in a field, r is typed
+    page.keyboard.press('r')
+    assert page.locator('#draft').is_hidden()
+    review = _review(page)
+    assert [c['text'] for c in review['comments']] == ['typing when it died'], review
+    assert review['overall'] == 'mine' and review['choices'][0]['answer'] == 'Live page', review
+    assert page.locator('.vjuu-c .text', has_text='typing when it died').count() == 1
+
+
 def test_same_file_twice_in_one_diff(page, url, work):
     # `git log -p` shows the same file once per commit.
     twice = _DIFF + _DIFF.replace('def new', 'def newer')
@@ -1103,6 +1141,7 @@ def main():
             test_unsaved_comment_is_kept,
             test_question_comments,
             test_paste_image,
+            test_draft_is_offered_back,
             test_same_file_twice_in_one_diff,
             test_directory_tree,
             test_ignore_whitespace,

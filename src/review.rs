@@ -73,12 +73,21 @@ pub fn to_markdown(name: &str, review: &Review, verdict: Verdict) -> String {
     format!("{}\n{}", verdict.as_str(), body(name, review))
 }
 
+impl Review {
+    /// Returns whether the review says nothing: no comment, overall comment or pick.
+    pub fn is_empty(&self) -> bool {
+        self.comments.iter().all(|c| c.text.trim().is_empty())
+            && self.overall.trim().is_empty()
+            && self.choices.iter().all(|c| c.answer.is_empty())
+    }
+}
+
 fn body(name: &str, review: &Review) -> String {
-    let overall = review.overall.trim();
-    let mut comments: Vec<&Comment> = review.comments.iter().filter(|c| !c.text.trim().is_empty()).collect();
-    if comments.is_empty() && overall.is_empty() && review.choices.iter().all(|c| c.answer.is_empty()) {
+    if review.is_empty() {
         return format!("# Review: {name}\nNo comments.\n");
     }
+    let overall = review.overall.trim();
+    let mut comments: Vec<&Comment> = review.comments.iter().filter(|c| !c.text.trim().is_empty()).collect();
     comments.sort_by(|a, b| (&a.file, a.start, a.old).cmp(&(&b.file, b.start, b.old)));
     let mut out = match comments.len() {
         0 => format!("# Review: {name}\n"),
