@@ -788,12 +788,20 @@ fn turn_diff(cwd: &Path, files: &[String], since: Option<i64>) -> String {
 
 /// Returns the commit the worktree was at when the turn started: the parent of the oldest of the latest commits
 /// authored since `since` (author dates survive a rebase), or HEAD when the turn committed nothing.
+/// shortcut: commits the turn pushed to origin's default branch count as others', and a merge of the default branch
+/// still brings its changes into the diff.
 fn turn_base(worktree: &Path, since: Option<i64>) -> String {
     // git's empty tree: the base when the turn made the repository's first commit.
     const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    const DEFAULT_BRANCH: &str = "refs/remotes/origin/HEAD";
     let Some(since) = since else { return "HEAD".into() };
+    let mut log = vec!["log", "-n", "200", "--format=%at %P", "HEAD"];
+    // Others merged the default branch's commits during the turn too, so a rebase onto it would pull them in.
+    if !git_in(worktree, &["rev-parse", "--verify", "-q", DEFAULT_BRANCH]).trim().is_empty() {
+        log.extend(["--not", DEFAULT_BRANCH]);
+    }
     let mut base = None;
-    for line in git_in(worktree, &["log", "-n", "200", "--format=%at %P"]).lines() {
+    for line in git_in(worktree, &log).lines() {
         let mut fields = line.split_whitespace();
         if fields.next().and_then(|t| t.parse::<i64>().ok()).is_none_or(|authored| authored < since) {
             break;
@@ -2127,6 +2135,45 @@ mod tests {
         assert!(!diff.contains("-one") && !diff.contains("three\n"), "{diff}");
         // Without a turn start: uncommitted changes only, as before.
         assert!(turn_diff(&repo, &files, None).contains("-three"));
+        fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn leaves_out_default_branch_commits_a_rebase_brought_in() {
+        let repo = std::env::temp_dir().join(format!("vjuu-turn-rebase-{}", std::process::id()));
+        let wt = repo.join(".work").join("branch");
+        fs::create_dir_all(&repo).unwrap();
+        // Author dates as Unix seconds: before the turn at 1e9, during the turn (started at 1.5e9) at 2e9.
+        let git = |dir: &std::path::Path, date: &str, args: &[&str]| {
+            let status = Command::new("git")
+                .current_dir(dir)
+                .env("GIT_AUTHOR_DATE", format!("@{date} +0000"))
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&repo, "0", &["init", "-q", "-b", "main"]);
+        fs::write(repo.join(".gitignore"), ".work/\n").unwrap();
+        fs::write(repo.join("a.txt"), "one\n").unwrap();
+        git(&repo, "1000000000", &["add", "."]);
+        git(&repo, "1000000000", &["commit", "-qm", "init"]);
+        git(&repo, "0", &["worktree", "add", "-q", "-b", "branch", wt.to_str().unwrap()]);
+        fs::write(wt.join("a.txt"), "two\n").unwrap();
+        git(&wt, "2000000000", &["commit", "-qam", "this turn"]);
+        // Someone else's commit lands on the default branch during the turn, and the turn rebases onto it.
+        fs::write(repo.join("other.txt"), "theirs\n").unwrap();
+        git(&repo, "2000000000", &["add", "."]);
+        git(&repo, "2000000000", &["commit", "-qm", "others' merge"]);
+        git(&repo, "0", &["update-ref", "refs/remotes/origin/main", "main"]);
+        git(&repo, "0", &["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+        git(&wt, "0", &["rebase", "-q", "origin/main"]);
+        let files: Vec<String> =
+            ["a.txt", "other.txt"].iter().map(|f| wt.join(f).to_string_lossy().into_owned()).collect();
+        let diff = turn_diff(&repo, &files, Some(1_500_000_000));
+        assert!(diff.contains("-one") && diff.contains("+two"), "{diff}");
+        assert!(!diff.contains("theirs"), "{diff}");
         fs::remove_dir_all(&repo).unwrap();
     }
 
