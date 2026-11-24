@@ -15,14 +15,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Two jobs: a deploy in the job that uploaded often finds no artifact yet (actions/deploy-pages#451), and re-running
+  # that one job then finds two. A failed deploy job re-runs on its own against the one upload.
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
     steps:
       - uses: actions/checkout@v5
       - id: check
@@ -42,6 +40,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
       - uses: actions/deploy-pages@v4
         env:
           # deploy-pages names the deployment after GITHUB_SHA, and Pages keeps the first deployment of a name.
